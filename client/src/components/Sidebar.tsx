@@ -61,10 +61,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <div className="brand-icon">PBL</div>
+        <div className="brand-icon">★</div>
         <div>
-          <div className="brand-title">Plataforma PBL</div>
-          <div className="brand-subtitle">Gestão de Aprendizagem</div>
+          <div className="brand-title">UNIVC</div>
+          <div className="brand-subtitle">Vale do Cricaré • PBL</div>
         </div>
       </div>
 
