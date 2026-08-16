@@ -9,7 +9,7 @@ export async function apiRequest<T = any>(
 ): Promise<T> {
   const token = localStorage.getItem('pbl_auth_token');
 
-  // Roteamento para o manipulador Supabase / Demo em qualquer ambiente client web
+  // 1. Tenta tratar com o manipulador Supabase / Serviços em Nuvem
   try {
     const res = await handleSupabaseRequest<T>(endpoint, options);
     if (res !== undefined) return res;
@@ -17,63 +17,68 @@ export async function apiRequest<T = any>(
     console.warn(`Handler error on ${endpoint}:`, err?.message || err);
   }
 
-  const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string>)
-  };
+  // 2. Se estiver no GitHub Pages ou hospedagem remota, NÃO tenta chamar localhost:4000 para evitar timeout de rede (delay de 5s)
+  const isLocalHost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-  if (!(options.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
-  }
+  if (isLocalHost) {
+    const headers: Record<string, string> = {
+      ...(options.headers as Record<string, string>)
+    };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+    if (!(options.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
 
-  try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers
-    });
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
-    if (response.status === 401) {
-      localStorage.removeItem('pbl_auth_token');
-      localStorage.removeItem('pbl_user_data');
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers
+      });
+
+      if (response.status === 401) {
+        localStorage.removeItem('pbl_auth_token');
+        localStorage.removeItem('pbl_user_data');
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
       }
-    }
 
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Erro ao processar requisição.');
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.message || 'Erro ao processar requisição.');
+        }
+        return data as T;
       }
-      return data as T;
-    }
 
-    if (response.ok) {
-      return (await response.text()) as unknown as T;
+      if (response.ok) {
+        return (await response.text()) as unknown as T;
+      }
+    } catch (fetchErr) {
+      // Ignora erro de fetch no servidor local
     }
-  } catch (fetchErr) {
-    console.warn(`Fetch error for ${endpoint}, using fallback:`, fetchErr);
   }
 
-  // Resposta fallback genérica para garantir que nenhuma requisição crashe a UI
+  // 3. Resposta instantânea em memória (0ms latency) para produção em nuvem/GitHub Pages
   return getFallbackResponseForEndpoint<T>(endpoint, options);
 }
 
-// Roteador Inteligente de Endpoints
+// Roteador Inteligente de Endpoints em Nuvem
 async function handleSupabaseRequest<T>(endpoint: string, options: RequestInit): Promise<T | undefined> {
   const method = (options.method || 'GET').toUpperCase();
   const body = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : {};
 
-  // Auth Login
+  // Auth Login (Instantâneo)
   if (endpoint === '/auth/login' && method === 'POST') {
     return (await supabaseService.login(body.email, body.senha)) as unknown as T;
   }
 
-  // Auth Profile
+  // Auth Profile (Instantâneo)
   if (endpoint === '/auth/profile' && method === 'GET') {
     const saved = localStorage.getItem('pbl_user_data');
     const parsed = saved ? JSON.parse(saved) : null;
@@ -134,7 +139,7 @@ async function handleSupabaseRequest<T>(endpoint: string, options: RequestInit):
   return undefined;
 }
 
-// Fallbacks de Dados para Recursos Acadêmicos e Configurações
+// Fallbacks de Dados com Retorno em 0ms (Zero Latency)
 function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestInit): T {
   if (endpoint.includes('/academic/courses')) {
     return [
@@ -180,8 +185,8 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
     return [
       { id: 1, nome: 'Coordenadoria Geral de PBL', email: 'admin@pbl.edu.br', perfilId: 1, perfilNome: 'ADMIN', ativo: 1 },
       { id: 2, nome: 'Profa. Jussara Matos', email: 'prof.jussara@pbl.edu.br', perfilId: 2, perfilNome: 'PROFESSOR', ativo: 1 },
-      { id: 3, nome: 'Prof. Luciano Santos', email: 'prof.luciano@pbl.edu.br', perfilId: 2, perfilNome: 'PROFESSOR', ativo: 1 },
-      { id: 4, nome: 'Prof. Nilvans Silva', email: 'prof.nilvans@pbl.edu.br', perfilId: 2, perfilNome: 'PROFESSOR', ativo: 1 },
+      { id: 3, nome: 'Prof. Luciano Santos', email: 'prof.luciano@pbl.edu.br', perfilId: 3, perfilNome: 'PROFESSOR', ativo: 1 },
+      { id: 4, nome: 'Prof. Nilvans Silva', email: 'prof.nilvans@pbl.edu.br', perfilId: 4, perfilNome: 'PROFESSOR', ativo: 1 },
       { id: 5, nome: 'Ketlly Beatriz Souza Rodrigues', email: 'aluno.ketlly@pbl.edu.br', perfilId: 3, perfilNome: 'ALUNO', ativo: 1 },
       { id: 6, nome: 'Kaila Cristina da Silva Lima', email: 'aluno.kaila@pbl.edu.br', perfilId: 3, perfilNome: 'ALUNO', ativo: 1 },
       { id: 15, nome: 'André Alves Oliveira', email: 'aluno.andre@pbl.edu.br', perfilId: 3, perfilNome: 'ALUNO', ativo: 1 }
