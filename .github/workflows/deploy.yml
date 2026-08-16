@@ -1,0 +1,44 @@
+name: Deploy para GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Instalar Dependências do Client
+        run: |
+          cd client
+          npm ci
+
+      - name: Compilar Frontend React
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          cd client
+          npm run build
+
+      - name: Deploy no GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: client/dist
+          branch: gh-pages
