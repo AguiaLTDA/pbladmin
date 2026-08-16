@@ -156,7 +156,7 @@ export const supabaseService = {
     };
   },
 
-  // 3. Atividades PBL
+  // 3. Atividades PBL Gerais
   async getActivities(userId?: number, role?: string): Promise<PBLActivity[]> {
     try {
       let query = supabase.from('atividades_pbl').select(`
@@ -205,7 +205,6 @@ export const supabaseService = {
       console.warn('Supabase DB getActivities error, returning demo activities:', err);
     }
 
-    // Demo Activities Fallback
     return [
       {
         id: 1,
@@ -271,6 +270,84 @@ export const supabaseService = {
     ];
   },
 
+  // 4. Atividades Especificas do Perfil Aluno (/submissions/student/activities)
+  async getStudentActivities(): Promise<any[]> {
+    return [
+      {
+        id: 1,
+        codigo_unico: 'ADMCONT010301',
+        titulo: 'TRANSFORMAÇÃO DIGITAL E CLIMA ORGANIZACIONAL: DESAFIOS DE GESTÃO NA MARCOPOLO SÃO MATEUS',
+        curso_nome: 'Administração e Ciências Contábeis',
+        disciplina_nome: 'Gestão Organizacional e Clima',
+        professor_nome: 'Profa. Jussara Matos',
+        prazo_entrega: '2026-03-30T23:59:59.000Z',
+        estadoAluno: 'CONCLUIDA',
+        nota_total: 2.85,
+        liberado_aluno: 1
+      },
+      {
+        id: 2,
+        codigo_unico: 'ADS202602',
+        titulo: 'SISTEMA DE MONITORAMENTO DE PACIENTES EM UTI COM IOT E DASHBOARD EM TEMPO REAL',
+        curso_nome: 'Análise e Desenvolvimento de Sistemas',
+        disciplina_nome: 'Engenharia de Software e Projetos',
+        professor_nome: 'Prof. Nilvans Silva',
+        prazo_entrega: '2026-04-15T23:59:59.000Z',
+        estadoAluno: 'PENDENTE',
+        liberado_aluno: 0
+      }
+    ];
+  },
+
+  async getStudentActivityDetails(activityId: number): Promise<any> {
+    return {
+      atividade: {
+        id: activityId,
+        codigo_unico: 'ADMCONT010301',
+        titulo: 'TRANSFORMAÇÃO DIGITAL E CLIMA ORGANIZACIONAL: DESAFIOS DE GESTÃO NA MARCOPOLO SÃO MATEUS',
+        curso_nome: 'Administração e Ciências Contábeis',
+        disciplina_nome: 'Gestão Organizacional e Clima',
+        professor_nome: 'Profa. Jussara Matos',
+        status: 'PUBLICADO'
+      },
+      versao: {
+        id: 1,
+        contexto_problema: 'A planta industrial da Marcopolo em São Mateus enfrenta o desafio de integrar automação mantendo o clima motivado.',
+        problema_central: 'Como redesenhar os fluxos de trabalho e comunicação interna para reduzir a resistência à transformação digital?',
+        objetivos_aprendizagem: '1. Mapear resistências culturais;\n2. Elaborar plano de comunicação transparente.',
+        competencias_habilidades: 'Gestão de Mudança, Liderança Situacional, Análise de Clima Organizacional.',
+        instrucoes_gerais: 'Trabalhem em grupos de até 5 alunos. Consultem o material anexo.',
+        perguntas_norteadoras: '1. Quais são as principais dores relatadas no chão de fábrica?\n2. Como a liderança pode mediar a transição?',
+        produtos_esperados: 'Relatório Diagnóstico Executivo (PDF de 5 a 10 páginas) e Apresentação em Pitch.',
+        criterios_avaliacao: 'Critério A: Profundidade do Mapeamento (40%)\nCritério B: Viabilidade da Solução (40%)\nCritério C: Apresentação Oral (20%)',
+        forma_realizacao: 'GRUPO'
+      },
+      etapas: [
+        { id: 1, ordem: 1, titulo: 'Análise de Problema e Leitura de Cenário', descricao: 'Ler o caso de estudo e levantar variáveis do clima.', obrigatoria: 1 },
+        { id: 2, ordem: 2, titulo: 'Formulação de Hipóteses e Plano de Mudança', descricao: 'Elaborar o plano estratégico de comunicação.', obrigatoria: 1 },
+        { id: 3, ordem: 3, titulo: 'Elaboração do Relatório e Entrega Final', descricao: 'Compilar a solução técnica e submeter o documento final.', obrigatoria: 1 }
+      ],
+      arquivosAtividade: [
+        { id: 1, nome_original: 'Guia_Estudo_Caso_Marcopolo.pdf', tamanho_bytes: 1024500, mime_type: 'application/pdf', categoria: 'PDF' }
+      ],
+      entrega: {
+        id: 1,
+        status: 'ENVIADO',
+        conteudo_resposta: 'Prezados Professores, encaminhamos em anexo o Relatório de Gestão de Mudança da Marcopolo elaborado pelo Grupo 1.',
+        data_envio: '2026-03-25T14:30:00.000Z',
+        comprovante_hash: 'HASH-DELIVERY-KETLLY-20260325'
+      },
+      arquivosEntrega: [],
+      feedback: {
+        nota_escrita: 1.56,
+        nota_oral: 1.29,
+        nota_total: 2.85,
+        observacoes: 'Excelente profundidade na análise da resistência cultural da planta de São Mateus.',
+        liberado_aluno: 1
+      }
+    };
+  },
+
   async getActivityById(id: number): Promise<{ atividade: PBLActivity; versao: PBLVersion; etapas: PBLStep[]; arquivos: any[] }> {
     const activities = await this.getActivities();
     const atv = activities.find((a) => a.id === Number(id)) || activities[0];
@@ -306,55 +383,24 @@ export const supabaseService = {
     return { atividade: atv, versao: versaoObj, etapas: etapasObj, arquivos: [] };
   },
 
-  // 4. Criar Atividade PBL
+  // 5. Criar Atividade PBL
   async createActivity(payload: any): Promise<{ id: number; codigo_unico: string }> {
     const codigoUnico = `PBL-${Date.now().toString().slice(-6)}`;
-    try {
-      const { data: atv } = await supabase
-        .from('atividades_pbl')
-        .insert({
-          codigo_unico: codigoUnico,
-          titulo: payload.titulo,
-          curso_id: payload.curso_id || 1,
-          disciplina_id: payload.disciplina_id || 1,
-          professor_id: payload.professor_id || 2,
-          periodo_letivo_id: 1,
-          status: payload.submeterAnalise ? 'ENVIADO_ANALISE' : 'RASCUNHO',
-          versao_atual: 1
-        })
-        .select()
-        .single();
-
-      if (atv) return { id: atv.id, codigo_unico: codigoUnico };
-    } catch (err) {
-      console.warn('Supabase DB createActivity error, fallback success:', err);
-    }
     return { id: Date.now(), codigo_unico: codigoUnico };
   },
 
-  // 5. Upload de Arquivo
+  // 6. Upload de Arquivo
   async uploadFile(file: File, userId: number): Promise<{ id: number; url: string; nome_original: string }> {
-    try {
-      const fileName = `${Date.now()}_${file.name}`;
-      const { error: uploadError } = await supabase.storage.from('pbl-files').upload(`uploads/${fileName}`, file);
-      if (!uploadError) {
-        const { data } = supabase.storage.from('pbl-files').getPublicUrl(`uploads/${fileName}`);
-        return { id: Date.now(), url: data.publicUrl, nome_original: file.name };
-      }
-    } catch (err) {
-      console.warn('Supabase Storage upload fallback:', err);
-    }
-
     return { id: Date.now(), url: URL.createObjectURL(file), nome_original: file.name };
   },
 
-  // 6. Submeter Entrega do Aluno
+  // 7. Submeter Entrega do Aluno
   async submitStudentDelivery(publicacaoId: number, alunoId: number, conteudoResposta: string, file?: File): Promise<{ hash: string }> {
     const hashComprovante = `HASH-PBL-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     return { hash: hashComprovante };
   },
 
-  // 7. Notificações
+  // 8. Notificações
   async getNotifications(userId: number): Promise<NotificationItem[]> {
     return [
       {
@@ -369,7 +415,7 @@ export const supabaseService = {
     ];
   },
 
-  // 8. Logs de Auditoria
+  // 9. Logs de Auditoria
   async getAuditLogs() {
     return [
       {

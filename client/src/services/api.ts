@@ -17,7 +17,7 @@ export async function apiRequest<T = any>(
     console.warn(`Handler error on ${endpoint}:`, err?.message || err);
   }
 
-  // 2. Se estiver no GitHub Pages ou hospedagem remota, NÃO tenta chamar localhost:4000 para evitar timeout de rede (delay de 5s)
+  // 2. Se estiver no localHost, tenta chamar a API local
   const isLocalHost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
   if (isLocalHost) {
@@ -60,7 +60,7 @@ export async function apiRequest<T = any>(
         return (await response.text()) as unknown as T;
       }
     } catch (fetchErr) {
-      // Ignora erro de fetch no servidor local
+      // Fallback gracioso
     }
   }
 
@@ -68,17 +68,17 @@ export async function apiRequest<T = any>(
   return getFallbackResponseForEndpoint<T>(endpoint, options);
 }
 
-// Roteador Inteligente de Endpoints em Nuvem
+// Roteador Inteligente de Endpoints em Nuvem & Demonstrador
 async function handleSupabaseRequest<T>(endpoint: string, options: RequestInit): Promise<T | undefined> {
   const method = (options.method || 'GET').toUpperCase();
   const body = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : {};
 
-  // Auth Login (Instantâneo)
+  // Auth Login
   if (endpoint === '/auth/login' && method === 'POST') {
     return (await supabaseService.login(body.email, body.senha)) as unknown as T;
   }
 
-  // Auth Profile (Instantâneo)
+  // Auth Profile
   if (endpoint === '/auth/profile' && method === 'GET') {
     const saved = localStorage.getItem('pbl_user_data');
     const parsed = saved ? JSON.parse(saved) : null;
@@ -93,9 +93,31 @@ async function handleSupabaseRequest<T>(endpoint: string, options: RequestInit):
     return (await supabaseService.getDashboardStats(user.id, user.perfilNome)) as unknown as T;
   }
 
-  // List Activities
+  // Submissões e Atividades do Aluno (/submissions/student/activities)
+  if (endpoint.startsWith('/submissions/student/activities')) {
+    const parts = endpoint.split('?')[0].split('/').filter(Boolean); // ['submissions', 'student', 'activities', '1']
+    
+    // Detalhes da Atividade do Aluno
+    if (parts.length === 4) {
+      const id = parseInt(parts[3], 10);
+      return (await supabaseService.getStudentActivityDetails(id)) as unknown as T;
+    }
+
+    // Lista de Atividades do Aluno
+    return (await supabaseService.getStudentActivities()) as unknown as T;
+  }
+
+  // Submeter Entrega / Salvar Rascunho do Aluno
+  if (endpoint.startsWith('/submissions/student/submit') || endpoint.startsWith('/submissions/student/draft')) {
+    const saved = localStorage.getItem('pbl_user_data');
+    const user = saved ? JSON.parse(saved) : { id: 5 };
+    const res = await supabaseService.submitStudentDelivery(body.publicacao_id || 1, user.id, body.conteudo_resposta || '');
+    return { status: 'ENVIADO', comprovante_hash: res.hash } as unknown as T;
+  }
+
+  // Atividades Gerais do Professor/Admin
   if (endpoint.startsWith('/pbl/activities') && method === 'GET') {
-    const parts = endpoint.split('/').filter(Boolean); // ['pbl', 'activities', '1']
+    const parts = endpoint.split('/').filter(Boolean);
     if (parts.length === 3) {
       const id = parseInt(parts[2], 10);
       return (await supabaseService.getActivityById(id)) as unknown as T;
@@ -105,33 +127,19 @@ async function handleSupabaseRequest<T>(endpoint: string, options: RequestInit):
     return (await supabaseService.getActivities(user.id, user.perfilNome)) as unknown as T;
   }
 
-  // Create Activity
+  // Criar Atividade
   if (endpoint === '/pbl/activities' && method === 'POST') {
     return (await supabaseService.createActivity(body)) as unknown as T;
   }
 
-  // Student Submissions / Activities
-  if (endpoint.startsWith('/publication/student-activities') && method === 'GET') {
-    const activities = await supabaseService.getActivities();
-    return activities.filter((a) => a.status === 'PUBLICADO') as unknown as T;
-  }
-
-  // Submit Solution
-  if (endpoint === '/publication/submit-solution' && method === 'POST') {
-    const saved = localStorage.getItem('pbl_user_data');
-    const user = saved ? JSON.parse(saved) : { id: 5 };
-    const res = await supabaseService.submitStudentDelivery(body.publicacao_id || 1, user.id, body.conteudo_resposta || '');
-    return { status: 'ENVIADO', comprovante_hash: res.hash } as unknown as T;
-  }
-
-  // Notifications
+  // Notificações
   if (endpoint === '/notifications' && method === 'GET') {
     const saved = localStorage.getItem('pbl_user_data');
     const user = saved ? JSON.parse(saved) : { id: 1 };
     return (await supabaseService.getNotifications(user.id)) as unknown as T;
   }
 
-  // Audit Logs
+  // Auditoria
   if (endpoint.startsWith('/audit') && method === 'GET') {
     return (await supabaseService.getAuditLogs()) as unknown as T;
   }
@@ -139,8 +147,87 @@ async function handleSupabaseRequest<T>(endpoint: string, options: RequestInit):
   return undefined;
 }
 
-// Fallbacks de Dados com Retorno em 0ms (Zero Latency)
+// Fallbacks de Dados Garantidos com Retorno em 0ms
 function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestInit): T {
+  // Lista de Atividades do Aluno
+  if (endpoint.includes('/submissions/student/activities')) {
+    if (endpoint.match(/\/submissions\/student\/activities\/\d+/)) {
+      return {
+        atividade: {
+          id: 1,
+          codigo_unico: 'ADMCONT010301',
+          titulo: 'TRANSFORMAÇÃO DIGITAL E CLIMA ORGANIZACIONAL: DESAFIOS DE GESTÃO NA MARCOPOLO SÃO MATEUS',
+          curso_nome: 'Administração e Ciências Contábeis',
+          disciplina_nome: 'Gestão Organizacional e Clima',
+          professor_nome: 'Profa. Jussara Matos',
+          status: 'PUBLICADO'
+        },
+        versao: {
+          id: 1,
+          contexto_problema: 'A planta industrial da Marcopolo em São Mateus enfrenta o desafio de integrar automação de linha de montagem mantendo o clima organizacional motivado.',
+          problema_central: 'Como redesenhar os fluxos de trabalho e comunicação interna para reduzir a resistência à transformação digital em 30% no prazo de 60 dias?',
+          objetivos_aprendizagem: '1. Mapear resistências culturais;\n2. Elaborar plano de comunicação transparente;\n3. Propor estrutura de sustentação.',
+          competencias_habilidades: 'Gestão de Mudança, Liderança Situacional, Análise de Clima Organizacional, Métricas de Desempenho.',
+          conhecimentos_previos: 'Teoria das Relações Humanas, Conceitos de Indústria 4.0, Metodologias Ágeis de Gestão.',
+          instrucoes_gerais: 'Trabalhem em grupos de até 5 alunos. Consultem o material anexo.',
+          perguntas_norteadoras: '1. Quais são as principais dores no chão de fábrica?\n2. De que maneira a liderança pode mediar a transição?',
+          produtos_esperados: 'Relatório Diagnóstico Executivo (PDF de 5 a 10 páginas) e Apresentação em Pitch (Máximo 10 minutos).',
+          criterios_avaliacao: 'Critério A: Profundidade do Mapeamento (40%)\nCritério B: Viabilidade da Solução (40%)\nCritério C: Qualidade da Apresentação (20%)',
+          forma_realizacao: 'GRUPO'
+        },
+        etapas: [
+          { id: 1, ordem: 1, titulo: 'Análise de Problema e Leitura de Cenário', descricao: 'Ler o caso de estudo e levantar as variáveis críticas do clima organizacional.', obrigatoria: 1 },
+          { id: 2, ordem: 2, titulo: 'Formulação de Hipóteses e Plano de Mudança', descricao: 'Elaborar o plano estratégico de comunicação e treinamento.', obrigatoria: 1 },
+          { id: 3, ordem: 3, titulo: 'Elaboração do Relatório e Entrega Final', descricao: 'Compilar a solução técnica e submeter o documento final no portal.', obrigatoria: 1 }
+        ],
+        arquivosAtividade: [
+          { id: 1, nome_original: 'Guia_Estudo_Caso_Marcopolo.pdf', tamanho_bytes: 1024500, mime_type: 'application/pdf', categoria: 'PDF' }
+        ],
+        entrega: {
+          id: 1,
+          status: 'ENVIADO',
+          conteudo_resposta: 'Prezados Professores, encaminhamos o Relatório de Gestão de Mudança da Marcopolo com a proposta de comitês transversais e indicadores semanais de engajamento.',
+          data_envio: '2026-03-25T14:30:00.000Z',
+          comprovante_hash: 'HASH-DELIVERY-KETLLY-20260325'
+        },
+        arquivosEntrega: [],
+        feedback: {
+          nota_escrita: 1.56,
+          nota_oral: 1.29,
+          nota_total: 2.85,
+          observacoes: 'Excelente profundidade na análise da resistência cultural da planta de São Mateus.',
+          liberado_aluno: 1
+        }
+      } as unknown as T;
+    }
+
+    return [
+      {
+        id: 1,
+        codigo_unico: 'ADMCONT010301',
+        titulo: 'TRANSFORMAÇÃO DIGITAL E CLIMA ORGANIZACIONAL: DESAFIOS DE GESTÃO NA MARCOPOLO SÃO MATEUS',
+        curso_nome: 'Administração e Ciências Contábeis',
+        disciplina_nome: 'Gestão Organizacional e Clima',
+        professor_nome: 'Profa. Jussara Matos',
+        prazo_entrega: '2026-03-30T23:59:59.000Z',
+        estadoAluno: 'CONCLUIDA',
+        nota_total: 2.85,
+        liberado_aluno: 1
+      },
+      {
+        id: 2,
+        codigo_unico: 'ADS202602',
+        titulo: 'SISTEMA DE MONITORAMENTO DE PACIENTES EM UTI COM IOT E DASHBOARD EM TEMPO REAL',
+        curso_nome: 'Análise e Desenvolvimento de Sistemas',
+        disciplina_nome: 'Engenharia de Software e Projetos',
+        professor_nome: 'Prof. Nilvans Silva',
+        prazo_entrega: '2026-04-15T23:59:59.000Z',
+        estadoAluno: 'PENDENTE',
+        liberado_aluno: 0
+      }
+    ] as unknown as T;
+  }
+
   if (endpoint.includes('/academic/courses')) {
     return [
       { id: 1, codigo: 'ADMCONT', nome: 'Administração e Ciências Contábeis', descricao: 'Bacharelado Interdisciplinar em Gestão' },
