@@ -296,6 +296,41 @@ CREATE TABLE IF NOT EXISTS logs_auditoria (
 );
 
 -- ==============================================================================
+-- PERMISSÕES E DESATIVAÇÃO DE RLS PARA FUNCIONAMENTO FLUIDO NO FRONTEND
+-- ==============================================================================
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+
+-- Desativar RLS em todas as tabelas para garantir acesso sem bloqueios pelo SDK anon
+ALTER TABLE perfis DISABLE ROW LEVEL SECURITY;
+ALTER TABLE usuarios DISABLE ROW LEVEL SECURITY;
+ALTER TABLE cursos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE disciplinas DISABLE ROW LEVEL SECURITY;
+ALTER TABLE periodos_letivos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE turmas DISABLE ROW LEVEL SECURITY;
+ALTER TABLE grupos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE matriculas DISABLE ROW LEVEL SECURITY;
+ALTER TABLE vinculos_professores DISABLE ROW LEVEL SECURITY;
+ALTER TABLE atividades_pbl DISABLE ROW LEVEL SECURITY;
+ALTER TABLE versoes_atividades DISABLE ROW LEVEL SECURITY;
+ALTER TABLE etapas_pbl DISABLE ROW LEVEL SECURITY;
+ALTER TABLE arquivos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE arquivos_atividades DISABLE ROW LEVEL SECURITY;
+ALTER TABLE config_campos_obrigatorios DISABLE ROW LEVEL SECURITY;
+ALTER TABLE segmentacoes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE segmentacao_regras DISABLE ROW LEVEL SECURITY;
+ALTER TABLE alunos_segmentados DISABLE ROW LEVEL SECURITY;
+ALTER TABLE analises_administrativas DISABLE ROW LEVEL SECURITY;
+ALTER TABLE comentarios_revisao DISABLE ROW LEVEL SECURITY;
+ALTER TABLE publicacoes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE entregas DISABLE ROW LEVEL SECURITY;
+ALTER TABLE arquivos_entregas DISABLE ROW LEVEL SECURITY;
+ALTER TABLE feedbacks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE notificacoes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE logs_auditoria DISABLE ROW LEVEL SECURITY;
+
+-- ==============================================================================
 -- CRIAR BUCKET DE STORAGE NO SUPABASE (pbl-files)
 -- ==============================================================================
 INSERT INTO storage.buckets (id, name, public) 
