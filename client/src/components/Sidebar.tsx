@@ -34,6 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
     { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/admin/caixa-entrada', label: 'Caixa de Entrada PBL', icon: Inbox },
     { path: '/admin/usuarios', label: 'Gestão de Usuários', icon: Users },
+    { path: '/admin/estudantes', label: 'Cadastro de Estudantes', icon: GraduationCap },
     { path: '/admin/academic', label: 'Cursos, Turmas & Grupos', icon: BookOpen },
     { path: '/admin/arquivos', label: 'Gerenciador de Arquivos', icon: FolderOpen },
     { path: '/admin/relatorios', label: 'Relatórios & Exportação', icon: BarChart3 },

@@ -33,6 +33,8 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GOOGLE_SHEETS_URL: ${{ secrets.VITE_GOOGLE_SHEETS_URL }}
+          VITE_GOOGLE_SHEETS_TOKEN: ${{ secrets.VITE_GOOGLE_SHEETS_TOKEN }}
         run: |
           cd client
           npm run build

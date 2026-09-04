@@ -44,6 +44,64 @@ npm run dev
 
 ---
 
+## 🎓 Cadastro de Estudantes com Google Sheets
+
+Os estudantes são cadastrados em uma **planilha do Google Sheets** através de um
+Web App do Google Apps Script (código em [`google-apps-script/Codigo.gs`](google-apps-script/Codigo.gs)).
+
+### Onde cadastrar
+
+| Caminho | Quem usa | Descrição |
+| :--- | :--- | :--- |
+| `#/cadastro` | Público (sem login) | Autocadastro do estudante, acessível pelo link **"Cadastre-se como estudante"** na tela de login. |
+| `#/admin/estudantes` | Administrador | Cadastro manual, listagem, busca por curso/turma, exportação em CSV e reenvio de pendências. |
+
+### Campos gravados na planilha
+
+`ID` · `Data do Cadastro` · `Nome Completo` · `E-mail` · `Matrícula` · `CPF` ·
+`Telefone` · `Curso` · `Turma` · `Período` · `Origem` · `Status`
+
+O Web App valida os campos obrigatórios (nome, e-mail, matrícula e curso) e
+recusa e-mails ou matrículas duplicados. Todo cadastro entra com status
+`PENDENTE` para validação da secretaria.
+
+### Configuração
+
+Siga o passo a passo em
+[`google-apps-script/README_APPS_SCRIPT.md`](google-apps-script/README_APPS_SCRIPT.md)
+e defina as variáveis:
+
+```env
+VITE_GOOGLE_SHEETS_URL=https://script.google.com/macros/s/SEU_ID/exec
+VITE_GOOGLE_SHEETS_TOKEN=seu-token
+```
+
+Localmente em `client/.env`; em produção, como **Secrets do repositório**
+(Settings → Secrets and variables → Actions). Sem essas variáveis o formulário
+continua funcionando, porém os cadastros ficam apenas em uma fila local do
+navegador, sinalizada na interface, e podem ser sincronizados depois pelo botão
+**"Sincronizar agora"**.
+
+---
+
+## 🔄 Publicação Automática no GitHub
+
+O workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) compila
+o frontend e publica no GitHub Pages a cada `push` em `main`/`master`.
+
+Para enviar as alterações locais:
+
+```bash
+git add -A
+git commit -m "Descrição da alteração"
+git push
+```
+
+O GitHub Actions cuida do build e do deploy — acompanhe em **Actions** no
+repositório.
+
+---
+
 ## 📋 Demonstração dos Fluxos Críticos (Critérios de Aceite)
 
 1. **Criação pelo Professor**: O professor entra no sistema (`prof.jussara@pbl.edu.br`), cria uma atividade PBL, cadastra etapas, anexa arquivos e submete para análise.

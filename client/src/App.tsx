@@ -4,6 +4,7 @@ import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { LoginView } from './views/auth/Login';
 import { PerfilView } from './views/auth/Perfil';
+import { CadastroEstudanteView } from './views/auth/CadastroEstudante';
 
 // Admin Views
 import { DashboardAdminView } from './views/admin/DashboardAdmin';
@@ -12,6 +13,7 @@ import { RevisaoPBLView } from './views/admin/RevisaoPBL';
 import { SegmentacaoPBLView } from './views/admin/SegmentacaoPBL';
 import { AgendamentoPublicacaoView } from './views/admin/AgendamentoPublicacao';
 import { UsuariosAdminView } from './views/admin/UsuariosAdmin';
+import { EstudantesAdminView } from './views/admin/EstudantesAdmin';
 import { AcademicAdminView } from './views/admin/AcademicAdmin';
 import { GerenciadorArquivosView } from './views/admin/GerenciadorArquivos';
 import { RelatoriosAdminView } from './views/admin/RelatoriosAdmin';
@@ -69,6 +71,11 @@ export const App: React.FC = () => {
     );
   }
 
+  // Rota pública de autocadastro de estudantes (não exige autenticação)
+  if (currentRoute === '/cadastro') {
+    return <CadastroEstudanteView navigate={navigate} />;
+  }
+
   if (!isAuthenticated || currentRoute === '/login') {
     return <LoginView navigate={navigate} />;
   }
@@ -96,6 +103,7 @@ export const App: React.FC = () => {
         return <AgendamentoPublicacaoView activityId={id} navigate={navigate} />;
       }
       if (currentRoute === '/admin/usuarios') return <UsuariosAdminView />;
+      if (currentRoute === '/admin/estudantes') return <EstudantesAdminView />;
       if (currentRoute === '/admin/academic') return <AcademicAdminView />;
       if (currentRoute === '/admin/arquivos') return <GerenciadorArquivosView />;
       if (currentRoute === '/admin/relatorios') return <RelatoriosAdminView />;

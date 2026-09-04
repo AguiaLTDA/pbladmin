@@ -136,3 +136,21 @@ export interface RuleInput {
   entidadeId: number;
   acao: 'INCLUIR' | 'EXCLUIR';
 }
+
+export interface StudentRegistrationInput {
+  nome: string;
+  email: string;
+  matricula: string;
+  cpf?: string;
+  telefone?: string;
+  curso: string;
+  turma?: string;
+  periodo?: string;
+  origem?: string;
+}
+
+export interface StudentRegistration extends StudentRegistrationInput {
+  id: string;
+  criadoEm?: string;
+  status?: string;
+}

@@ -270,7 +270,30 @@ export const LoginView: React.FC<LoginProps> = ({ navigate }) => {
             </button>
           </form>
 
-          <div style={{ marginTop: '2.5rem', textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+          <div
+            style={{
+              marginTop: '1.5rem',
+              paddingTop: '1.25rem',
+              borderTop: '1px solid var(--border, #e5e7eb)',
+              textAlign: 'center',
+              fontSize: '0.875rem',
+              color: 'var(--text-muted)'
+            }}
+          >
+            Ainda não tem cadastro?{' '}
+            <a
+              href="#/cadastro"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate('/cadastro');
+              }}
+              style={{ color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}
+            >
+              Cadastre-se como estudante
+            </a>
+          </div>
+
+          <div style={{ marginTop: '1.75rem', textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             © UNIVC — Centro Universitário Vale do Cricaré. Todos os direitos reservados.
           </div>
         </div>
