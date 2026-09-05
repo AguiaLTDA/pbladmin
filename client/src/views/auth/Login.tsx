@@ -1,11 +1,30 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { ShieldCheck, GraduationCap, UserCheck, KeyRound, Mail, ArrowRight, BookOpen, Award, Layers } from 'lucide-react';
+import { KeyRound, Mail, ArrowRight, Eye, EyeOff, Layers, Users, Target } from 'lucide-react';
+import { BrandLogo } from '../../components/BrandLogo';
 
 interface LoginProps {
   navigate: (path: string) => void;
 }
+
+const PILARES = [
+  {
+    icon: Target,
+    titulo: 'Problema real',
+    texto: 'Casos vindos de organizações da região, não exercícios de laboratório.'
+  },
+  {
+    icon: Users,
+    titulo: 'Trabalho em equipe',
+    texto: 'Grupos acompanhados pelo docente da disciplina, do diagnóstico à entrega.'
+  },
+  {
+    icon: Layers,
+    titulo: 'Percurso avaliado',
+    texto: 'Etapas, critérios e devolutiva registrados de ponta a ponta.'
+  }
+];
 
 export const LoginView: React.FC<LoginProps> = ({ navigate }) => {
   const { login } = useAuth();
@@ -13,6 +32,7 @@ export const LoginView: React.FC<LoginProps> = ({ navigate }) => {
 
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [mostrarSenha, setMostrarSenha] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -25,8 +45,8 @@ export const LoginView: React.FC<LoginProps> = ({ navigate }) => {
     setLoading(true);
     try {
       await login(email, senha);
-      showToast('Autenticação realizada com sucesso!', 'success');
-      
+      showToast('Autenticação realizada com sucesso.', 'success');
+
       const userSaved = JSON.parse(localStorage.getItem('pbl_user_data') || '{}');
       if (userSaved.perfilNome === 'ADMIN') navigate('/admin/dashboard');
       else if (userSaved.perfilNome === 'PROFESSOR') navigate('/professor/dashboard');
@@ -38,204 +58,68 @@ export const LoginView: React.FC<LoginProps> = ({ navigate }) => {
     }
   };
 
-  const fillCredentials = (userEmail: string, userPass: string) => {
-    setEmail(userEmail);
-    setSenha(userPass);
-  };
-
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #092f1e 0%, #061e13 100%)',
-        padding: '1.5rem',
-        color: '#f8f9f5'
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: '1000px',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
-          background: '#ffffff',
-          borderRadius: '24px',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
-          overflow: 'hidden',
-          color: 'var(--text-main)'
-        }}
-      >
-        {/* Lado Esquerdo - Boas-Vindas Institucionais UNIVC */}
-        <div
-          style={{
-            padding: '3rem 2.5rem',
-            background: 'linear-gradient(135deg, #092f1e 0%, #0c422b 100%)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            color: 'white'
-          }}
-        >
-          <div>
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '0.35rem 0.85rem',
-                borderRadius: '9999px',
-                background: '#fdeee9',
-                color: '#d94a34',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                letterSpacing: '0.05em',
-                marginBottom: '1.75rem'
-              }}
-            >
-              <ShieldCheck size={14} color="#d94a34" />
-              <span>ENTREGA DE PBL • UNIVC</span>
-            </div>
+    <div className="login-page">
+      <div className="login-shell">
+        {/* ---------------- Painel institucional ---------------- */}
+        <aside className="login-institucional">
+          <div className="login-institucional-topo">
+            <BrandLogo variante="escura" tamanho="lg" />
+          </div>
 
-            <h1
-              style={{
-                fontFamily: "'DM Serif Display', Georgia, serif",
-                fontSize: '2.4rem',
-                fontWeight: 400,
-                marginBottom: '1rem',
-                lineHeight: 1.2,
-                color: '#ffffff'
-              }}
-            >
-              Submissão de Trabalhos do <span style={{ color: '#d94a34' }}>PBL</span>.
+          <div className="login-institucional-corpo">
+            <span className="login-eyebrow">Aprendizagem Baseada em Problemas</span>
+
+            <h1 className="login-titulo">
+              Portal de Atividades <span className="login-titulo-destaque">PBL</span>
             </h1>
 
-            <p style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.925rem', lineHeight: 1.6, marginBottom: '2rem' }}>
-              Toda entrega referente a um projeto de atividade baseado na metodologia de <strong>Aprendizagem Baseada em Problemas</strong> — uma prática real, moderna do mercado, conduzida pelo Centro Universitário <strong>UNIVC</strong>.
+            <p className="login-descricao">
+              Ambiente institucional para elaboração, revisão pedagógica, publicação e
+              avaliação das atividades de Aprendizagem Baseada em Problemas do Centro
+              Universitário Vale do Cricaré.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '2rem' }}>
-              <div style={{ background: 'rgba(255,255,255,0.08)', padding: '0.75rem', borderRadius: '10px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ffffff' }}>Prática</div>
-                <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.7)' }}>Estudos Reais</div>
-              </div>
-              <div style={{ background: 'rgba(255,255,255,0.08)', padding: '0.75rem', borderRadius: '10px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ffffff' }}>Mercado</div>
-                <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.7)' }}>Desafios</div>
-              </div>
-              <div style={{ background: 'rgba(255,255,255,0.08)', padding: '0.75rem', borderRadius: '10px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ffffff' }}>Colaborativo</div>
-                <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.7)' }}>Equipes</div>
-              </div>
-            </div>
+            <ul className="login-pilares">
+              {PILARES.map(({ icon: Icone, titulo, texto }) => (
+                <li key={titulo} className="login-pilar">
+                  <span className="login-pilar-icone">
+                    <Icone size={17} strokeWidth={2.2} />
+                  </span>
+                  <div>
+                    <strong>{titulo}</strong>
+                    <span>{texto}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <div>
-            <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255, 255, 255, 0.6)', marginBottom: '0.85rem' }}>
-              Credenciais Rápidas de Acesso (Clique para preencher)
-            </div>
+          <p className="login-institucional-rodape">
+            Coordenadoria Acadêmica · Centro Universitário Vale do Cricaré
+          </p>
+        </aside>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-              <button
-                type="button"
-                onClick={() => fillCredentials('admin@pbl.edu.br', 'admin123')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.65rem 1rem',
-                  borderRadius: '12px',
-                  background: 'rgba(217, 74, 52, 0.2)',
-                  border: '1px solid rgba(217, 74, 52, 0.4)',
-                  color: '#ffffff',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  fontSize: '0.85rem',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <ShieldCheck size={18} color="#d94a34" />
-                <div>
-                  <div style={{ fontWeight: 700 }}>Entrar como Administrador</div>
-                  <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>admin@pbl.edu.br</div>
-                </div>
-              </button>
+        {/* ---------------- Formulário de acesso ---------------- */}
+        <section className="login-acesso">
+          <header className="login-acesso-cabecalho">
+            <h2>Acessar o portal</h2>
+            <p>Use as credenciais institucionais fornecidas pela coordenação.</p>
+          </header>
 
-              <button
-                type="button"
-                onClick={() => fillCredentials('prof.jussara@pbl.edu.br', 'prof123')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.65rem 1rem',
-                  borderRadius: '12px',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
-                  color: '#ffffff',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  fontSize: '0.85rem'
-                }}
-              >
-                <UserCheck size={18} color="#ffffff" />
-                <div>
-                  <div style={{ fontWeight: 700 }}>Entrar como Professor</div>
-                  <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>prof.jussara@pbl.edu.br</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillCredentials('aluno.ketlly@pbl.edu.br', 'aluno123')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.65rem 1rem',
-                  borderRadius: '12px',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
-                  color: '#ffffff',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  fontSize: '0.85rem'
-                }}
-              >
-                <GraduationCap size={18} color="#ffffff" />
-                <div>
-                  <div style={{ fontWeight: 700 }}>Entrar como Aluno (Ketlly Beatriz)</div>
-                  <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>aluno.ketlly@pbl.edu.br</div>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Lado Direito - Formulário de Login */}
-        <div style={{ padding: '3rem 2.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', background: '#ffffff' }}>
-          <div className="mb-4">
-            <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '1.8rem', fontWeight: 400, color: 'var(--primary)', marginBottom: '0.35rem' }}>
-              Acessar o Portal
-            </h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-              Digite suas credenciais do Centro Universitário UNIVC.
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} noValidate>
             <div className="form-group">
-              <label className="form-label required">E-mail Institucional</label>
-              <div style={{ position: 'relative' }}>
-                <Mail size={18} style={{ position: 'absolute', left: '12px', top: '12px', color: '#809088' }} />
+              <label className="form-label required" htmlFor="login-email">
+                E-mail institucional
+              </label>
+              <div className="login-campo">
+                <Mail size={17} className="login-campo-icone" aria-hidden="true" />
                 <input
+                  id="login-email"
                   type="email"
+                  autoComplete="username"
                   className="form-control"
-                  style={{ paddingLeft: '40px' }}
-                  placeholder="seu.email@pbl.edu.br"
+                  placeholder="seu.nome@pbl.edu.br"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -244,42 +128,40 @@ export const LoginView: React.FC<LoginProps> = ({ navigate }) => {
             </div>
 
             <div className="form-group">
-              <label className="form-label required">Senha de Acesso</label>
-              <div style={{ position: 'relative' }}>
-                <KeyRound size={18} style={{ position: 'absolute', left: '12px', top: '12px', color: '#809088' }} />
+              <label className="form-label required" htmlFor="login-senha">
+                Senha de acesso
+              </label>
+              <div className="login-campo">
+                <KeyRound size={17} className="login-campo-icone" aria-hidden="true" />
                 <input
-                  type="password"
-                  className="form-control"
-                  style={{ paddingLeft: '40px' }}
+                  id="login-senha"
+                  type={mostrarSenha ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  className="form-control login-campo-senha"
                   placeholder="••••••••"
                   value={senha}
                   onChange={(e) => setSenha(e.target.value)}
                   required
                 />
+                <button
+                  type="button"
+                  className="login-toggle-senha"
+                  onClick={() => setMostrarSenha((v) => !v)}
+                  aria-label={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
+                  title={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
+                >
+                  {mostrarSenha ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn btn-primary"
-              style={{ width: '100%', padding: '0.85rem', fontSize: '1rem', marginTop: '1rem' }}
-            >
-              {loading ? 'Autenticando...' : 'Acessar Formulário'}
+            <button type="submit" disabled={loading} className="btn btn-primary login-submit">
+              {loading ? 'Autenticando…' : 'Entrar no portal'}
               {!loading && <ArrowRight size={18} />}
             </button>
           </form>
 
-          <div
-            style={{
-              marginTop: '1.5rem',
-              paddingTop: '1.25rem',
-              borderTop: '1px solid var(--border, #e5e7eb)',
-              textAlign: 'center',
-              fontSize: '0.875rem',
-              color: 'var(--text-muted)'
-            }}
-          >
+          <div className="login-secundario">
             Ainda não tem cadastro?{' '}
             <a
               href="#/cadastro"
@@ -287,16 +169,17 @@ export const LoginView: React.FC<LoginProps> = ({ navigate }) => {
                 e.preventDefault();
                 navigate('/cadastro');
               }}
-              style={{ color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }}
             >
               Cadastre-se como estudante
             </a>
           </div>
 
-          <div style={{ marginTop: '1.75rem', textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            © UNIVC — Centro Universitário Vale do Cricaré. Todos os direitos reservados.
-          </div>
-        </div>
+          <p className="login-copyright">
+            © {new Date().getFullYear()} UNIVC — Centro Universitário Vale do Cricaré.
+            <br />
+            Todos os direitos reservados.
+          </p>
+        </section>
       </div>
     </div>
   );

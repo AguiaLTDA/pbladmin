@@ -13,11 +13,13 @@ import {
   FileCheck2,
   GraduationCap,
   Calendar,
+  CalendarDays,
   LogOut,
   Layers,
   Award
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { BrandLogo } from './BrandLogo';
 
 interface SidebarProps {
   currentRoute: string;
@@ -48,6 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
 
   const getProfessorItems = () => [
     { path: '/professor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/professor/turmas', label: 'Minhas Turmas & Horário', icon: CalendarDays },
     { path: '/professor/atividades', label: 'Minhas Atividades PBL', icon: Layers },
     { path: '/professor/criar-pbl', label: 'Criar Atividade PBL', icon: PlusCircle },
     { path: '/professor/entregas', label: 'Acompanhamento & Entregas', icon: Award }
@@ -66,11 +69,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <div className="brand-icon">★</div>
-        <div>
-          <div className="brand-title">UNIVC</div>
-          <div className="brand-subtitle">Vale do Cricaré • PBL</div>
-        </div>
+        <BrandLogo variante="escura" tamanho="sm" />
+        <span className="sidebar-header-modulo">Portal PBL</span>
       </div>
 
       <nav className="sidebar-menu">

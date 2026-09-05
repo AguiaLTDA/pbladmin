@@ -129,11 +129,24 @@ a:hover {
 }
 
 .sidebar-header {
-  padding: 1.5rem 1.25rem;
+  padding: 1.5rem 1.25rem 1.25rem;
   display: flex;
-  align-items: center;
-  gap: 0.85rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.7rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Nomeia o módulo sem competir com a marca institucional acima */
+.sidebar-header-modulo {
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(197, 160, 89, 0.32);
+  width: 100%;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--accent-gold);
 }
 
 .brand-icon {
@@ -707,4 +720,266 @@ textarea.form-control {
   .main-wrapper {
     margin-left: 0;
   }
+}
+
+/* ==========================================================================
+   TELA DE ACESSO — IDENTIDADE INSTITUCIONAL UNIVC
+   ========================================================================== */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 4vw, 2.5rem);
+  background:
+    radial-gradient(1100px 620px at 12% -10%, rgba(197, 160, 89, 0.16), transparent 60%),
+    radial-gradient(900px 520px at 100% 108%, rgba(217, 74, 52, 0.16), transparent 62%),
+    linear-gradient(150deg, #092f1e 0%, #06210f 58%, #041710 100%);
+}
+
+.login-shell {
+  width: 100%;
+  max-width: 1080px;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 32px 64px -18px rgba(2, 12, 7, 0.62);
+  overflow: hidden;
+}
+
+/* ---------- Painel institucional (fundo escuro) ---------- */
+
+.login-institucional {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  padding: clamp(2rem, 4vw, 3.25rem);
+  color: #ffffff;
+  background: linear-gradient(158deg, #0a3822 0%, #092f1e 48%, #05200f 100%);
+}
+
+/* Marca d'água do brasão, discreta o bastante para não competir com o texto */
+.login-institucional::after {
+  content: '';
+  position: absolute;
+  right: -120px;
+  bottom: -110px;
+  width: 380px;
+  height: 380px;
+  border-radius: 50%;
+  border: 1px solid rgba(197, 160, 89, 0.22);
+  box-shadow: inset 0 0 0 34px rgba(255, 255, 255, 0.028);
+  z-index: -1;
+}
+
+.login-institucional-topo {
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.login-institucional-corpo { flex: 1; }
+
+.login-eyebrow {
+  display: inline-block;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 2px solid var(--accent-gold);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-gold);
+}
+
+.login-titulo {
+  margin-bottom: 0.9rem;
+  font-family: var(--font-heading);
+  font-size: clamp(1.9rem, 3.4vw, 2.5rem);
+  font-weight: 400;
+  line-height: 1.15;
+  color: #ffffff;
+}
+
+/* Terracota institucional clareado para manter contraste AA sobre o verde */
+.login-titulo-destaque { color: #ef7a63; }
+
+.login-descricao {
+  max-width: 46ch;
+  margin-bottom: 2rem;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.login-pilares {
+  display: flex;
+  flex-direction: column;
+  gap: 1.05rem;
+  list-style: none;
+}
+
+.login-pilar {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.login-pilar-icone {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(197, 160, 89, 0.15);
+  border: 1px solid rgba(197, 160, 89, 0.34);
+  color: var(--accent-gold);
+}
+
+.login-pilar strong {
+  display: block;
+  margin-bottom: 0.12rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.login-pilar span {
+  font-size: 0.79rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.login-institucional-rodape {
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+/* ---------- Formulário de acesso (fundo claro) ---------- */
+
+.login-acesso {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(2rem, 4vw, 3.25rem);
+  background: var(--bg-surface);
+}
+
+.login-acesso-cabecalho { margin-bottom: 1.75rem; }
+
+.login-acesso-cabecalho h2 {
+  margin-bottom: 0.3rem;
+  font-family: var(--font-heading);
+  font-size: 1.75rem;
+  font-weight: 400;
+  color: var(--primary);
+}
+
+.login-acesso-cabecalho p {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.login-campo { position: relative; }
+
+.login-campo-icone {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-light);
+  pointer-events: none;
+}
+
+.login-campo .form-control {
+  padding-left: 40px;
+}
+
+.login-campo-senha { padding-right: 44px; }
+
+.login-toggle-senha {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-light);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.login-toggle-senha:hover {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.login-submit {
+  width: 100%;
+  margin-top: 1.35rem;
+  padding: 0.85rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+}
+
+.login-secundario {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-color);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.login-secundario a {
+  font-weight: 700;
+  color: var(--primary);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--transition-fast);
+}
+
+.login-secundario a:hover { border-bottom-color: var(--primary); }
+
+.login-copyright {
+  margin-top: 1.75rem;
+  text-align: center;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-light);
+}
+
+/* ---------- Responsivo ---------- */
+
+@media (max-width: 860px) {
+  .login-page { padding: 1rem; }
+  .login-shell { grid-template-columns: 1fr; }
+
+  /* O painel institucional vira um cabeçalho enxuto: a marca e o título
+     permanecem (é a identidade da página), o texto de apoio sai de cena. */
+  .login-institucional {
+    gap: 1.25rem;
+    padding: 1.75rem 1.5rem;
+  }
+  .login-institucional::after { display: none; }
+  .login-institucional-topo {
+    padding-bottom: 1.15rem;
+  }
+  .login-descricao,
+  .login-pilares,
+  .login-institucional-rodape {
+    display: none;
+  }
+  .login-titulo { margin-bottom: 0; }
+  .login-acesso { padding: 1.75rem 1.5rem; }
 }

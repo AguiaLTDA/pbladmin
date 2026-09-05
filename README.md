@@ -34,20 +34,27 @@ Os passos 2 e 3 só entram em cena quando o passo anterior está indisponível
 Credenciais inválidas sempre chegam ao usuário como erro.
 
 > ⚠️ Para operar com dados reais de alunos, use o backend Express ou o Supabase.
-> O modo de demonstração existe só para a vitrine pública e suas senhas são
-> públicas (estão na tabela abaixo).
+> O modo de demonstração existe apenas para a vitrine pública.
 
 ---
 
-## 🔑 Credenciais de Demonstração (Click-to-Fill no Login)
+## 🔑 Acesso à Demonstração
 
-| Perfil | E-mail Institucional | Senha | Descrição |
-| :--- | :--- | :--- | :--- |
-| **Administrador** | `admin@pbl.edu.br` | `admin123` | Acesso total: revisão, segmentação, publicação, gestão acadêmica, arquivos e auditoria. |
-| **Professor** | `prof.jussara@pbl.edu.br` | `prof123` | Docente: criação de PBLs, envio para análise, ajustes de versão e avaliação das entregas dos alunos. |
-| **Professor 2** | `prof.luciano@pbl.edu.br` | `prof123` | Docente das turmas de Engenharia e Tecnologia. |
-| **Aluno (Demonstração)** | `aluno.ketlly@pbl.edu.br` | `aluno123` | Aluna matriculada na Turma ADMCONT-01 com acesso às atividades publicadas, comprovante hash e notas. |
-| **Aluno (Excluído Exemplo)** | `aluno.andre@pbl.edu.br` | `aluno123` | Aluno com exclusão manual configurada no motor de segmentação para testes de segurança (Erro 403). |
+As credenciais dos perfis de demonstração (Administrador, Professor e Aluno)
+**não são publicadas neste repositório nem exibidas na tela de login** — são
+fornecidas pela Coordenadoria Acadêmica a quem precisa avaliar a plataforma.
+
+Os perfis disponíveis para avaliação são:
+
+| Perfil | O que demonstra |
+| :--- | :--- |
+| **Administrador** | Revisão pedagógica, segmentação, publicação, gestão acadêmica, arquivos e auditoria. |
+| **Professor** | Criação de PBLs, envio para análise, ajuste de versão e avaliação das entregas. |
+| **Aluno** | Atividades publicadas direcionadas a ele, entrega com comprovante hash e consulta de notas. |
+| **Aluno excluído** | Exclusão manual no motor de segmentação, para validar o bloqueio de acesso (403/404). |
+
+Ao semear o banco local, o console do servidor imprime as credenciais geradas —
+é a forma recomendada de obtê-las em ambiente de desenvolvimento.
 
 ---
 
@@ -66,6 +73,46 @@ cd client
 npm run dev
 ```
 * Acesse a aplicação no navegador em: `http://localhost:3000`
+
+---
+
+## 📅 Horário Acadêmico e Vínculo do Professor
+
+O vínculo **Professor → Turma → Disciplina** é derivado automaticamente da grade
+de aulas noturna, declarada em
+[`server/src/db/horarioAcademico.ts`](server/src/db/horarioAcademico.ts) (76 aulas,
+7 cursos, 21 turmas, 20 docentes).
+
+A cada boot do servidor, [`services/horarioImport.ts`](server/src/services/horarioImport.ts):
+
+1. cria/atualiza cursos, disciplinas, turmas e usuários docentes;
+2. grava a grade em `horarios_academicos` + `horarios_turmas` (aulas em junção
+   atendem várias turmas);
+3. recalcula `vinculos_professores` com `origem = 'HORARIO'` — vínculos manuais
+   feitos pelo admin (`origem = 'MANUAL'`) são preservados.
+
+Para reprocessar a grade sem reiniciar: `POST /api/academic/schedule/import` (ADMIN).
+
+### O que o professor passa a enxergar
+
+| Recurso | Regra aplicada |
+| :--- | :--- |
+| `GET /academic/classes` · `/groups` | Apenas turmas e grupos em que ele leciona |
+| `GET /academic/schedule` | Apenas as próprias aulas (admin vê a grade completa) |
+| `GET /academic/my-bindings` | Suas turmas + disciplinas + total de alunos |
+| `GET /pbl/activities` | Atividades que criou **ou** das disciplinas/turmas que leciona |
+| `GET /submissions/activity/:id` | Entregas dos alunos matriculados nas suas turmas, **com os PDFs anexados** |
+| `POST /submissions/:id/evaluate` | Bloqueado (403) fora das suas turmas |
+| `GET /files/download/:id` | Só arquivos próprios, material das suas atividades e entregas das suas turmas |
+
+Telas do docente: **Minhas Turmas & Horário** (`#/professor/turmas`) e
+**Acompanhamento & Entregas** (`#/professor/entregas`), que abre o material
+orientativo e os PDFs dos grupos dentro da plataforma, sem download prévio.
+
+O e-mail dos docentes importados segue o padrão
+`prof.<primeironome>.<sobrenome>@pbl.edu.br` (ex.: `prof.jussara.pereira@pbl.edu.br`).
+A senha inicial é definida no importador e impressa no console do servidor
+durante a semeadura — não é publicada aqui.
 
 ---
 
