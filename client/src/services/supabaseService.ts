@@ -1,7 +1,15 @@
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
 import { User, PBLActivity, PBLVersion, PBLStep, StudentSubmission, NotificationItem, MandatoryFieldConfig } from '../types';
 
-// Mock Users para Garantia de Acesso Instantâneo em qualquer situação
+/**
+ * Usuários da demonstração pública (GitHub Pages), usados apenas quando não há
+ * backend Express local nem Supabase configurado.
+ *
+ * ATENÇÃO: são credenciais de vitrine, com senhas conhecidas e publicadas no
+ * README. A autenticação de verdade acontece no backend Express
+ * (`server/src/controllers/authController.ts`), que compara o bcrypt do banco.
+ * Nunca use este caminho para dados reais de alunos.
+ */
 const DEMO_USERS: Record<string, User> = {
   'admin@pbl.edu.br': {
     id: 1,
@@ -61,45 +69,78 @@ const DEMO_USERS: Record<string, User> = {
   }
 };
 
+/** Senhas da demonstração pública. Mesmas do README. */
+const DEMO_PASSWORDS: Record<string, string> = {
+  'admin@pbl.edu.br': 'admin123',
+  'prof.jussara@pbl.edu.br': 'prof123',
+  'prof.luciano@pbl.edu.br': 'prof123',
+  'prof.nilvans@pbl.edu.br': 'prof123',
+  'aluno.ketlly@pbl.edu.br': 'aluno123',
+  'aluno.kaila@pbl.edu.br': 'aluno123',
+  'aluno.andre@pbl.edu.br': 'aluno123'
+};
+
+const CREDENCIAIS_INVALIDAS = 'E-mail ou senha incorretos.';
+
 export const supabaseService = {
   // 1. Autenticação & Usuários
   async login(email: string, senha: string): Promise<{ token: string; usuario: User }> {
-    try {
-      const { data: usuario, error } = await supabase
+    const emailNormalizado = email.trim().toLowerCase();
+
+    // Caminho real: Supabase Auth valida a senha no servidor. Um SELECT na
+    // tabela `usuarios` NÃO autentica ninguém — só diz que o e-mail existe.
+    if (isSupabaseConfigured) {
+      const { data: sessao, error: authError } = await supabase.auth.signInWithPassword({
+        email: emailNormalizado,
+        password: senha
+      });
+
+      if (authError || !sessao?.session) {
+        throw new Error(CREDENCIAIS_INVALIDAS);
+      }
+
+      const { data: usuario } = await supabase
         .from('usuarios')
         .select('*, perfis(id, nome)')
-        .eq('email', email)
+        .eq('email', emailNormalizado)
         .eq('ativo', 1)
         .single();
 
-      if (!error && usuario) {
-        const perfilNome = usuario.perfis?.nome || (usuario.perfil_id === 1 ? 'ADMIN' : usuario.perfil_id === 2 ? 'PROFESSOR' : 'ALUNO');
-        const userObj: User = {
+      if (!usuario) {
+        throw new Error('Usuário autenticado, mas sem cadastro acadêmico ativo na plataforma.');
+      }
+
+      const perfilNome =
+        usuario.perfis?.nome ||
+        (usuario.perfil_id === 1 ? 'ADMIN' : usuario.perfil_id === 2 ? 'PROFESSOR' : 'ALUNO');
+
+      return {
+        token: sessao.session.access_token,
+        usuario: {
           id: usuario.id,
           nome: usuario.nome,
           email: usuario.email,
           perfilId: usuario.perfil_id,
           perfilNome: perfilNome as any,
           ativo: usuario.ativo
-        };
-        const token = `supabase-session-${usuario.id}-${Date.now()}`;
-        return { token, usuario: userObj };
-      }
-    } catch (err) {
-      console.warn('Supabase DB login error, using fallback demo credentials:', err);
+        }
+      };
     }
 
-    const demoUser = DEMO_USERS[email.toLowerCase()];
-    if (demoUser) {
+    // Caminho de demonstração: senha conferida, ainda que contra uma constante.
+    const demoUser = DEMO_USERS[emailNormalizado];
+    if (demoUser && DEMO_PASSWORDS[emailNormalizado] === senha) {
       const token = `demo-session-${demoUser.id}-${Date.now()}`;
       return { token, usuario: demoUser };
     }
 
-    throw new Error('E-mail ou senha incorretos.');
+    throw new Error(CREDENCIAIS_INVALIDAS);
   },
 
   async getUserProfile(userId: number): Promise<User> {
     try {
+      if (!isSupabaseConfigured) throw new Error('Supabase não configurado.');
+
       const { data: usuario, error } = await supabase
         .from('usuarios')
         .select('*, perfis(id, nome)')
@@ -159,6 +200,8 @@ export const supabaseService = {
   // 3. Atividades PBL Gerais
   async getActivities(userId?: number, role?: string): Promise<PBLActivity[]> {
     try {
+      if (!isSupabaseConfigured) throw new Error('Supabase não configurado.');
+
       let query = supabase.from('atividades_pbl').select(`
         *,
         cursos(id, nome),

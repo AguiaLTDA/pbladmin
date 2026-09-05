@@ -28,7 +28,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
   const { user, logout } = useAuth();
   if (!user) return null;
 
+  // Sem error boundary na árvore, qualquer campo ausente aqui derruba a
+  // aplicação inteira em tela branca. Daí os valores de segurança.
   const role = user.perfilNome;
+  const nomeExibicao = user.nome || 'Usuário';
+  const perfilExibicao = role || 'INDEFINIDO';
 
   const getAdminItems = () => [
     { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -93,11 +97,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
 
       <div className="sidebar-footer">
         <div className="user-profile-summary">
-          <div className="avatar">{user.nome.charAt(0).toUpperCase()}</div>
+          <div className="avatar">{nomeExibicao.charAt(0).toUpperCase()}</div>
           <div className="user-info">
-            <span className="user-name" title={user.nome}>{user.nome}</span>
-            <span className={`user-role-badge role-${user.perfilNome.toLowerCase()}`}>
-              {user.perfilNome}
+            <span className="user-name" title={nomeExibicao}>{nomeExibicao}</span>
+            <span className={`user-role-badge role-${perfilExibicao.toLowerCase()}`}>
+              {perfilExibicao}
             </span>
           </div>
         </div>

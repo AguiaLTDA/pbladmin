@@ -3,23 +3,30 @@ import { supabaseService } from './supabaseService';
 
 const API_BASE_URL = 'http://localhost:4000/api';
 
+/**
+ * Ordem de resolução de uma chamada de API, da fonte mais confiável para a
+ * menos confiável:
+ *
+ *   1. Backend Express local (localhost:4000) — banco SQLite real, JWT, bcrypt,
+ *      RBAC e auditoria. É a AUTORIDADE: se ele responder qualquer HTTP status,
+ *      essa resposta vale, inclusive os erros (401/403/404/422).
+ *   2. Supabase, quando VITE_SUPABASE_URL/ANON_KEY estiverem configuradas.
+ *   3. Dados de demonstração em memória, só para a vitrine no GitHub Pages.
+ *
+ * Os passos 2 e 3 só entram em cena quando o passo anterior está indisponível
+ * (falha de rede / não configurado) — nunca para mascarar um erro de negócio.
+ */
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
   const token = localStorage.getItem('pbl_auth_token');
 
-  // 1. Tenta tratar com o manipulador Supabase / Serviços em Nuvem
-  try {
-    const res = await handleSupabaseRequest<T>(endpoint, options);
-    if (res !== undefined) return res;
-  } catch (err: any) {
-    console.warn(`Handler error on ${endpoint}:`, err?.message || err);
-  }
+  const isLocalHost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-  // 2. Se estiver no localHost, tenta chamar a API local
-  const isLocalHost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-
+  // 1. Backend Express real — prioridade máxima quando alcançável.
   if (isLocalHost) {
     const headers: Record<string, string> = {
       ...(options.headers as Record<string, string>)
@@ -33,21 +40,28 @@ export async function apiRequest<T = any>(
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers
-      });
+    let response: Response | null = null;
 
-      if (response.status === 401) {
+    try {
+      response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
+    } catch (fetchErr) {
+      // Só uma falha de REDE (servidor desligado) autoriza os fallbacks abaixo.
+      console.warn(
+        `Backend local indisponível em ${API_BASE_URL}${endpoint}. Usando dados de demonstração.`
+      );
+    }
+
+    if (response) {
+      if (response.status === 401 && endpoint !== '/auth/login') {
         localStorage.removeItem('pbl_auth_token');
         localStorage.removeItem('pbl_user_data');
-        if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login';
+        if (!window.location.hash.includes('/login')) {
+          window.location.hash = '/login';
         }
       }
 
       const contentType = response.headers.get('content-type');
+
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         if (!response.ok) {
@@ -59,12 +73,24 @@ export async function apiRequest<T = any>(
       if (response.ok) {
         return (await response.text()) as unknown as T;
       }
-    } catch (fetchErr) {
-      // Fallback gracioso
+
+      // Resposta de erro sem JSON: propaga em vez de fingir sucesso.
+      throw new Error(`Erro ${response.status} ao processar requisição.`);
     }
   }
 
-  // 3. Resposta instantânea em memória (0ms latency) para produção em nuvem/GitHub Pages
+  // 2. Supabase / serviços em nuvem.
+  try {
+    const res = await handleSupabaseRequest<T>(endpoint, options);
+    if (res !== undefined) return res;
+  } catch (err: any) {
+    // Credenciais inválidas são resposta legítima e devem chegar ao usuário.
+    // Nunca cair no fallback de demonstração em cima de uma falha de login.
+    if (endpoint.startsWith('/auth/')) throw err;
+    console.warn(`Handler error on ${endpoint}:`, err?.message || err);
+  }
+
+  // 3. Vitrine estática (GitHub Pages), sem persistência.
   return getFallbackResponseForEndpoint<T>(endpoint, options);
 }
 
@@ -325,12 +351,26 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
     } as unknown as T;
   }
 
-  return { message: 'Operação realizada com sucesso.' } as unknown as T;
+  // Escritas sem backend não persistem. A mensagem diz isso em voz alta em vez
+  // de devolver um "sucesso" que induz o usuário ao erro.
+  const method = (options.method || 'GET').toUpperCase();
+  if (method !== 'GET') {
+    return {
+      message:
+        'Modo demonstração: a ação foi simulada e NÃO foi salva. Inicie o backend (server/npm run dev) ou configure o Supabase para persistir os dados.',
+      demo: true,
+      persistido: false
+    } as unknown as T;
+  }
+
+  return { message: 'Operação realizada com sucesso.', demo: true } as unknown as T;
 }
 
 export function getDownloadUrl(fileId: number): string {
-  if (isSupabaseConfigured) {
-    return `https://yjljrgitwivffaluigxd.supabase.co/storage/v1/object/public/pbl-files/${fileId}`;
+  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+
+  if (isSupabaseConfigured && supabaseUrl) {
+    return `${supabaseUrl}/storage/v1/object/public/pbl-files/${fileId}`;
   }
   return `${API_BASE_URL}/files/download/${fileId}`;
 }

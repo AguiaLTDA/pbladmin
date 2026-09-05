@@ -14,6 +14,31 @@ Uma aplicação Full-Stack responsiva, segura e persistente para gestão de cont
 
 ---
 
+## 🔌 Como o frontend resolve as chamadas de API
+
+Toda requisição passa por `apiRequest` em [`client/src/services/api.ts`](client/src/services/api.ts)
+e é resolvida na seguinte ordem, da fonte mais confiável para a menos confiável:
+
+1. **Backend Express local** (`http://localhost:4000`) — banco SQLite real, JWT,
+   bcrypt, RBAC e auditoria. É a **autoridade**: se ele responder qualquer HTTP
+   status, essa resposta vale, inclusive os erros (401/403/404/422).
+2. **Supabase** — usado apenas quando `VITE_SUPABASE_URL` e
+   `VITE_SUPABASE_ANON_KEY` estão configuradas. A senha é validada pelo
+   Supabase Auth (`signInWithPassword`), no servidor.
+3. **Dados de demonstração em memória** — vitrine estática do GitHub Pages.
+   **Não persiste nada.** Operações de escrita nesse modo retornam uma mensagem
+   explícita de que a ação foi simulada e não foi salva.
+
+Os passos 2 e 3 só entram em cena quando o passo anterior está indisponível
+(falha de rede ou não configurado) — nunca para mascarar um erro de negócio.
+Credenciais inválidas sempre chegam ao usuário como erro.
+
+> ⚠️ Para operar com dados reais de alunos, use o backend Express ou o Supabase.
+> O modo de demonstração existe só para a vitrine pública e suas senhas são
+> públicas (estão na tabela abaixo).
+
+---
+
 ## 🔑 Credenciais de Demonstração (Click-to-Fill no Login)
 
 | Perfil | E-mail Institucional | Senha | Descrição |

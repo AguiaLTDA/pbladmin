@@ -79,18 +79,31 @@ export async function getProfile(req: AuthenticatedRequest, res: Response) {
       id: number;
       nome: string;
       email: string;
-      perfil_nome: string;
+      perfil_id: number;
+      perfil_nome: 'ADMIN' | 'PROFESSOR' | 'ALUNO';
       ativo: number;
       criado_em: string;
     }>(
-      `SELECT u.id, u.nome, u.email, p.nome as perfil_nome, u.ativo, u.criado_em 
-       FROM usuarios u 
-       JOIN perfis p ON u.perfil_id = p.id 
-       WHERE u.id = ?`,
+      `SELECT u.id, u.nome, u.email, u.perfil_id, p.nome as perfil_nome, u.ativo, u.criado_em
+       FROM usuarios u
+       JOIN perfis p ON u.perfil_id = p.id
+       WHERE u.id = ? AND u.deletado_em IS NULL`,
       [req.user.id]
     );
 
-    return res.json(user);
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado.' });
+
+    // Mesmo contrato camelCase devolvido por POST /auth/login: o frontend lê
+    // `perfilNome` para decidir as rotas de cada portal.
+    return res.json({
+      id: user.id,
+      nome: user.nome,
+      email: user.email,
+      perfilId: user.perfil_id,
+      perfilNome: user.perfil_nome,
+      ativo: user.ativo,
+      criado_em: user.criado_em
+    });
   } catch (err) {
     return res.status(500).json({ message: 'Erro ao obter dados do perfil.' });
   }
