@@ -374,3 +374,31 @@ export function getDownloadUrl(fileId: number): string {
   }
   return `${API_BASE_URL}/files/download/${fileId}`;
 }
+
+/**
+ * Baixa o arquivo autenticado e devolve uma object URL utilizável em <iframe>,
+ * <embed> ou download. O endpoint /files/download exige o JWT no cabeçalho,
+ * portanto um href direto não passa pela autorização do backend.
+ *
+ * Quem chama é responsável por revogar a URL com URL.revokeObjectURL().
+ */
+export async function fetchFileObjectUrl(fileId: number): Promise<string> {
+  const token = localStorage.getItem('pbl_auth_token');
+
+  const response = await fetch(`${API_BASE_URL}/files/download/${fileId}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
+
+  if (!response.ok) {
+    let mensagem = 'Não foi possível abrir o arquivo.';
+    try {
+      const erro = await response.json();
+      mensagem = erro.message || mensagem;
+    } catch {
+      /* resposta sem corpo JSON */
+    }
+    throw new Error(mensagem);
+  }
+
+  return URL.createObjectURL(await response.blob());
+}

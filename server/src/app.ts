@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import path from 'path';
 import apiRouter from './routes/api';
 import { initAndSeedDb } from './db/seed';
+import { runMigrations } from './db/migrate';
+import { importarHorarioAcademico } from './services/horarioImport';
 
 dotenv.config();
 
@@ -36,6 +38,15 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 async function startServer() {
   try {
     await initAndSeedDb();
+    await runMigrations();
+
+    // A grade acadêmica é a fonte da verdade do vínculo Professor <-> Turma <-> Disciplina.
+    const grade = await importarHorarioAcademico();
+    console.log(
+      `📅 Horário acadêmico importado: ${grade.aulas} aulas, ${grade.turmas} turmas novas, ` +
+        `${grade.professores} docentes (${grade.professoresCriados} criados), ${grade.vinculos} vínculos.`
+    );
+
     app.listen(PORT, () => {
       console.log(`=======================================================`);
       console.log(`🚀 SERVIDOR PBL BACKEND RODANDO NA PORTA ${PORT}`);

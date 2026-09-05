@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { queryAsync, runAsync, getAsync } from '../config/db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
+import { professorAlcancaAtividade } from '../services/horarioImport';
 
 // --- CONFIGURAÇÃO DE CAMPOS OBRIGATÓRIOS ---
 export async function getMandatoryFields(req: AuthenticatedRequest, res: Response) {
@@ -351,10 +352,23 @@ export async function listPBLActivities(req: AuthenticatedRequest, res: Response
     const params: any[] = [];
 
     // Role filtering:
-    // PROFESSOR: Sees only activities created by them
+    // PROFESSOR: atividades que ele criou OU das disciplinas/turmas que leciona
+    // conforme o horário acadêmico.
     if (user?.perfilNome === 'PROFESSOR') {
-      sql += ` AND a.professor_id = ?`;
-      params.push(user.id);
+      sql += ` AND (
+        a.professor_id = ?
+        OR EXISTS (
+          SELECT 1 FROM vinculos_professores vp
+          WHERE vp.usuario_id = ? AND vp.ativo = 1 AND vp.disciplina_id = a.disciplina_id
+        )
+        OR EXISTS (
+          SELECT 1 FROM alunos_segmentados als
+          JOIN matriculas m ON m.usuario_id = als.aluno_id AND m.deletado_em IS NULL
+          JOIN vinculos_professores vp ON vp.turma_id = m.turma_id
+          WHERE als.atividade_id = a.id AND vp.usuario_id = ? AND vp.ativo = 1
+        )
+      )`;
+      params.push(user.id, user.id, user.id);
     }
 
     // ALUNO: Handled separately via student endpoint, but if called here, restrict to PUBLICADO
@@ -406,9 +420,11 @@ export async function getPBLDetails(req: AuthenticatedRequest, res: Response) {
 
     if (!act) return res.status(404).json({ message: 'Atividade não encontrada.' });
 
-    // Permissions check
-    if (user?.perfilNome === 'PROFESSOR' && act.professor_id !== user.id) {
-      return res.status(403).json({ message: 'Acesso negado. Esta atividade pertence a outro docente.' });
+    // Permissions check: autor da atividade ou docente das turmas/disciplinas alcançadas.
+    if (user?.perfilNome === 'PROFESSOR' && !(await professorAlcancaAtividade(user.id, String(id)))) {
+      return res.status(403).json({
+        message: 'Acesso negado. Esta atividade não pertence a você nem às turmas que você leciona.'
+      });
     }
 
     // Fetch all versions

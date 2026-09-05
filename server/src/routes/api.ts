@@ -36,6 +36,13 @@ router.get('/academic/groups', authenticateToken, academicCtrl.listGroups);
 router.post('/academic/groups', authenticateToken, requireRole('ADMIN'), academicCtrl.createGroup);
 
 router.get('/academic/periods', authenticateToken, academicCtrl.listPeriods);
+
+// --- HORÁRIO ACADÊMICO & VÍNCULOS DO DOCENTE ---
+// Professor recebe apenas a própria grade; admin recebe a grade completa.
+router.get('/academic/schedule', authenticateToken, academicCtrl.listSchedule);
+router.get('/academic/my-bindings', authenticateToken, academicCtrl.listMyBindings);
+router.post('/academic/schedule/import', authenticateToken, requireRole('ADMIN'), academicCtrl.reimportSchedule);
+
 router.post('/academic/bind-professor', authenticateToken, requireRole('ADMIN'), academicCtrl.bindProfessor);
 router.post('/academic/enroll-student', authenticateToken, requireRole('ADMIN'), academicCtrl.enrollStudent);
 

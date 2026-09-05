@@ -156,7 +156,9 @@ export async function saveSegmentationAndTargetStudents(
   // Resolve target audience and save to resolved table
   const audience = await calculateAudiencePreview(regras);
   for (const al of audience.alunosIncluidos) {
-    await runAsync(`INSERT OR IGNORE INTO alunos_segmentados (atividade_id, aluno_id) VALUES (?, ?)`, [
+    await runAsync(
+      `INSERT INTO alunos_segmentados (atividade_id, aluno_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
+      [
       atividadeId,
       al.id
     ]);

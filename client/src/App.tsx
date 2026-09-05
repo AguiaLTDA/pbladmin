@@ -25,6 +25,7 @@ import { DashboardProfessorView } from './views/professor/DashboardProfessor';
 import { MinhasAtividadesProfessorView } from './views/professor/MinhasAtividadesProfessor';
 import { EditorPBLProfessorView } from './views/professor/EditorPBLProfessor';
 import { EntregasProfessorView } from './views/professor/EntregasProfessor';
+import { MinhasTurmasProfessorView } from './views/professor/MinhasTurmasProfessor';
 
 // Aluno Views
 import { DashboardAlunoView } from './views/aluno/DashboardAluno';
@@ -125,6 +126,7 @@ export const App: React.FC = () => {
         return <RevisaoPBLView activityId={id} navigate={navigate} />;
       }
       if (currentRoute === '/professor/entregas') return <EntregasProfessorView />;
+      if (currentRoute === '/professor/turmas') return <MinhasTurmasProfessorView />;
     }
 
     // ALUNO ROUTES

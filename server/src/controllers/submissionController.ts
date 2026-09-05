@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { queryAsync, runAsync, getAsync } from '../config/db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
+import { professorAlcancaAtividade } from '../services/horarioImport';
 
 // --- STUDENT PORTAL ENDPOINTS ---
 
@@ -183,7 +184,7 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
     if (!access) return res.status(403).json({ message: 'Acesso negado.' });
 
     const pub = await getAsync<{ id: number; prazo_entrega: string }>(
-      'SELECT id, prazo_entrega FROM publicacoes WHERE atividade_id = ? AND status_publicacao = "PUBLICADO"',
+      "SELECT id, prazo_entrega FROM publicacoes WHERE atividade_id = ? AND status_publicacao = 'PUBLICADO'",
       [atividadeId]
     );
 
@@ -268,27 +269,66 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
 
     if (!act) return res.status(404).json({ message: 'Atividade não encontrada.' });
 
-    if (user?.perfilNome === 'PROFESSOR' && act.professor_id !== user.id) {
-      return res.status(403).json({ message: 'Acesso negado. Esta atividade pertence a outro docente.' });
+    const isTeacher = user?.perfilNome === 'PROFESSOR';
+
+    if (isTeacher && !(await professorAlcancaAtividade(user!.id, String(atividadeId)))) {
+      return res.status(403).json({
+        message: 'Acesso negado. Esta atividade não pertence a você nem às turmas que você leciona.'
+      });
     }
 
     const pub = await getAsync<{ id: number }>('SELECT id FROM publicacoes WHERE atividade_id = ?', [atividadeId]);
     if (!pub) return res.json([]);
 
-    const submissions = await queryAsync(
-      `SELECT e.*, u.nome as aluno_nome, u.email as aluno_email,
-              g.nome as grupo_nome, fb.nota_escrita, fb.nota_oral, fb.nota_total, fb.observacoes, fb.liberado_aluno
-       FROM entregas e
-       JOIN usuarios u ON e.aluno_id = u.id
-       LEFT JOIN grupos g ON e.grupo_id = g.id
-       LEFT JOIN feedbacks fb ON e.id = fb.entrega_id
-       WHERE e.publicacao_id = ?
-       ORDER BY e.data_envio DESC`,
-      [pub.id]
-    );
+    // Um aluno pode ter mais de uma matrícula ativa, então o LEFT JOIN em matriculas/turmas
+    // pode multiplicar linhas por entrega; DISTINCT ON (e.id) mantém uma linha por entrega,
+    // igual ao efeito do GROUP BY e.id "relaxado" que o SQLite permitia.
+    let sql = `
+      SELECT DISTINCT ON (e.id)
+             e.*, u.nome as aluno_nome, u.email as aluno_email,
+             g.id as grupo_id, g.nome as grupo_nome,
+             t.id as turma_id, t.nome as turma_nome, t.codigo as turma_codigo,
+             fb.nota_escrita, fb.nota_oral, fb.nota_total, fb.observacoes, fb.liberado_aluno
+      FROM entregas e
+      JOIN usuarios u ON e.aluno_id = u.id
+      LEFT JOIN grupos g ON e.grupo_id = g.id
+      LEFT JOIN matriculas m ON m.usuario_id = e.aluno_id AND m.deletado_em IS NULL
+      LEFT JOIN turmas t ON m.turma_id = t.id
+      LEFT JOIN feedbacks fb ON e.id = fb.entrega_id
+      WHERE e.publicacao_id = ?
+    `;
+    const params: any[] = [pub.id];
+
+    // O docente só recebe as entregas de alunos matriculados nas turmas que leciona.
+    if (isTeacher) {
+      sql += ` AND EXISTS (
+        SELECT 1 FROM matriculas m2
+        JOIN vinculos_professores vp ON vp.turma_id = m2.turma_id
+        WHERE m2.usuario_id = e.aluno_id AND m2.deletado_em IS NULL
+          AND vp.usuario_id = ? AND vp.ativo = 1
+      )`;
+      params.push(user!.id);
+    }
+
+    sql = `SELECT * FROM (${sql} ORDER BY e.id) sub ORDER BY grupo_nome ASC, data_envio DESC`;
+
+    const submissions = await queryAsync<any>(sql, params);
+
+    // Anexa os PDFs/arquivos de cada entrega — é o material que o docente precisa avaliar.
+    for (const sub of submissions) {
+      sub.arquivos = await queryAsync(
+        `SELECT ar.id, ar.nome_original, ar.tamanho_bytes, ar.mime_type, ar.categoria, ar.hash_md5, ar.criado_em
+         FROM arquivos_entregas ae
+         JOIN arquivos ar ON ae.arquivo_id = ar.id
+         WHERE ae.entrega_id = ? AND ar.deletado_em IS NULL
+         ORDER BY ar.criado_em ASC`,
+        [sub.id]
+      );
+    }
 
     return res.json(submissions);
   } catch (err) {
+    console.error('Erro ao listar entregas:', err);
     return res.status(500).json({ message: 'Erro ao listar entregas.' });
   }
 }
@@ -302,12 +342,25 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
 
     if (!evaluatorId) return res.status(401).json({ message: 'Não autenticado.' });
 
-    const entrega = await getAsync<{ id: number; aluno_id: number }>(
-      'SELECT id, aluno_id FROM entregas WHERE id = ?',
+    const entrega = await getAsync<{ id: number; aluno_id: number; atividade_id: number }>(
+      `SELECT e.id, e.aluno_id, p.atividade_id
+       FROM entregas e
+       JOIN publicacoes p ON e.publicacao_id = p.id
+       WHERE e.id = ?`,
       [entregaId]
     );
 
     if (!entrega) return res.status(404).json({ message: 'Entrega não encontrada.' });
+
+    // O docente só avalia entregas de atividades/turmas sob sua responsabilidade.
+    if (req.user?.perfilNome === 'PROFESSOR') {
+      const podeAvaliar = await professorAlcancaAtividade(evaluatorId, entrega.atividade_id);
+      if (!podeAvaliar) {
+        return res.status(403).json({
+          message: 'Acesso negado. Esta entrega não pertence às turmas que você leciona.'
+        });
+      }
+    }
 
     const nEscrita = Number(notaEscrita || 0);
     const nOral = Number(notaOral || 0);

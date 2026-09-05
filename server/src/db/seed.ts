@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
-import { db, execAsync, runAsync, getAsync } from '../config/db';
+import { execAsync, runAsync, getAsync } from '../config/db';
 
 export async function initAndSeedDb() {
   console.log('--- Starting Database Initialization & Seeding ---');
@@ -25,10 +25,12 @@ export async function initAndSeedDb() {
   }
 
   // 1. Seed Perfis
-  await runAsync(`INSERT INTO perfis (id, nome, descricao) VALUES 
+  await runAsync(`INSERT INTO perfis (id, nome, descricao) VALUES
     (1, 'ADMIN', 'Administrador Geral do Sistema'),
     (2, 'PROFESSOR', 'Docente Criador de Conteúdo PBL'),
     (3, 'ALUNO', 'Discente Usuário das Atividades PBL')`);
+  // Explicit ids above don't advance the identity sequence, so resync it before any future auto-generated insert.
+  await runAsync(`SELECT setval(pg_get_serial_sequence('perfis', 'id'), (SELECT MAX(id) FROM perfis))`);
 
   const passwordHashAdmin = await bcrypt.hash('admin123', 10);
   const passwordHashProf = await bcrypt.hash('prof123', 10);

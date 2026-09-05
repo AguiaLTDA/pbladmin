@@ -95,6 +95,16 @@ export interface FileItem {
   criado_em?: string;
 }
 
+export interface SubmissionFile {
+  id: number;
+  nome_original: string;
+  tamanho_bytes: number;
+  mime_type: string;
+  categoria?: string;
+  hash_md5?: string;
+  criado_em?: string;
+}
+
 export interface StudentSubmission {
   id: number;
   publicacao_id: number;
@@ -103,6 +113,10 @@ export interface StudentSubmission {
   aluno_email?: string;
   grupo_id?: number;
   grupo_nome?: string;
+  turma_id?: number;
+  turma_nome?: string;
+  turma_codigo?: string;
+  arquivos?: SubmissionFile[];
   status: 'RASCUNHO' | 'ENVIADO' | 'ATRASADO';
   conteudo_resposta?: string;
   data_envio?: string;
@@ -153,4 +167,46 @@ export interface StudentRegistration extends StudentRegistrationInput {
   id: string;
   criadoEm?: string;
   status?: string;
+}
+
+// --- HORÁRIO ACADÊMICO & VÍNCULOS DO DOCENTE ---
+
+export type DiaSemana = 'SEGUNDA' | 'TERCA' | 'QUARTA' | 'QUINTA' | 'SEXTA' | 'CALENDARIO';
+
+export interface ScheduleEntry {
+  id: number;
+  dia_semana: DiaSemana;
+  hora_inicio: string;
+  hora_fim: string;
+  turno: string;
+  modalidade: 'PRESENCIAL' | 'EAD';
+  modulo?: string;
+  local?: string | null;
+  juncao?: string | null;
+  curso_id: number;
+  curso_nome: string;
+  disciplina_id: number;
+  disciplina_nome: string;
+  professor_id: number;
+  professor_nome: string;
+  periodo_nome?: string;
+  turmas_nomes?: string | null;
+}
+
+export interface ProfessorClassBinding {
+  id: number;
+  codigo: string;
+  nome: string;
+  periodo_curso?: number | null;
+  turno?: string;
+  curso_nome?: string;
+  periodo_nome?: string;
+  total_alunos: number;
+  disciplinas_nomes?: string | null;
+}
+
+export interface ProfessorBindings {
+  professorId: number;
+  turmas: ProfessorClassBinding[];
+  disciplinas: Array<{ id: number; nome: string; codigo: string; curso_nome: string }>;
 }

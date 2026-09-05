@@ -136,6 +136,39 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response) {
       }
     }
 
+    // Se PROFESSOR: só o que ele enviou, o material das próprias atividades PBL
+    // e os anexos das entregas de alunos das turmas que ele leciona.
+    if (user.perfilNome === 'PROFESSOR') {
+      const isOwner = fileRow.enviado_por === user.id;
+
+      const isMaterialProprio = await getAsync<{ id: number }>(
+        `SELECT aa.id
+         FROM arquivos_atividades aa
+         JOIN versoes_atividades va ON aa.versao_atividade_id = va.id
+         JOIN atividades_pbl a ON va.atividade_id = a.id
+         LEFT JOIN vinculos_professores vp
+                ON vp.disciplina_id = a.disciplina_id AND vp.usuario_id = ? AND vp.ativo = 1
+         WHERE aa.arquivo_id = ? AND (a.professor_id = ? OR vp.id IS NOT NULL)`,
+        [user.id, id, user.id]
+      );
+
+      const isEntregaDaMinhaTurma = await getAsync<{ id: number }>(
+        `SELECT ae.id
+         FROM arquivos_entregas ae
+         JOIN entregas e ON ae.entrega_id = e.id
+         JOIN matriculas m ON m.usuario_id = e.aluno_id AND m.deletado_em IS NULL
+         JOIN vinculos_professores vp ON vp.turma_id = m.turma_id
+         WHERE ae.arquivo_id = ? AND vp.usuario_id = ? AND vp.ativo = 1`,
+        [id, user.id]
+      );
+
+      if (!isOwner && !isMaterialProprio && !isEntregaDaMinhaTurma) {
+        return res.status(403).json({
+          message: 'Acesso negado. Este arquivo não pertence às suas atividades nem às turmas que você leciona.'
+        });
+      }
+    }
+
     const fullPath = path.resolve(uploadsDir, fileRow.caminho_armazenado);
 
     if (!fs.existsSync(fullPath)) {
@@ -158,6 +191,17 @@ export async function deleteFile(req: AuthenticatedRequest, res: Response) {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
+
+    // O docente só remove arquivos que ele mesmo enviou; o admin remove qualquer um.
+    if (req.user?.perfilNome === 'PROFESSOR') {
+      const own = await getAsync<{ id: number }>('SELECT id FROM arquivos WHERE id = ? AND enviado_por = ?', [
+        String(id),
+        userId
+      ]);
+      if (!own) {
+        return res.status(403).json({ message: 'Acesso negado. Você só pode excluir arquivos enviados por você.' });
+      }
+    }
 
     await runAsync('UPDATE arquivos SET deletado_em = CURRENT_TIMESTAMP WHERE id = ?', [String(id)]);
     await logAudit(userId || null, 'EXCLUSAO_LOGICA_ARQUIVO', 'arquivos', String(id));
