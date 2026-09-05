@@ -69,7 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <BrandLogo variante="escura" tamanho="sm" />
+        <BrandLogo variante="escura" tamanho="md" />
         <span className="sidebar-header-modulo">Portal PBL</span>
       </div>
 

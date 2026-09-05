@@ -137,7 +137,7 @@ export const DashboardAdminView: React.FC<Props> = ({ navigate }) => {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            {data?.porCurso.map((c, i) => (
+            {data?.porCurso?.map((c, i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                 <div className="flex justify-between text-sm">
                   <span className="font-bold">{c.curso}</span>

@@ -4,6 +4,7 @@ import { FormularioEstudante } from '../../components/FormularioEstudante';
 import { registerStudent, isGoogleSheetsConfigured } from '../../services/googleSheets';
 import { StudentRegistrationInput } from '../../types';
 import { GraduationCap, ArrowLeft, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { BrandLogo } from '../../components/BrandLogo';
 
 interface CadastroEstudanteProps {
   navigate: (path: string) => void;
@@ -52,6 +53,17 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
         }}
       >
         <div style={{ padding: '2rem 2.5rem', background: 'linear-gradient(135deg, #092f1e 0%, #0c422b 100%)', color: 'white' }}>
+          {/* Porta de entrada pública: a marca institucional vem primeiro. */}
+          <div
+            style={{
+              paddingBottom: '1.25rem',
+              marginBottom: '1.25rem',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.14)'
+            }}
+          >
+            <BrandLogo variante="escura" tamanho="md" />
+          </div>
+
           <div
             style={{
               display: 'inline-flex',
@@ -68,7 +80,7 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
             }}
           >
             <GraduationCap size={14} color="#d94a34" />
-            <span>CADASTRO DE ESTUDANTE • UNIVC</span>
+            <span>CADASTRO DE ESTUDANTE</span>
           </div>
 
           <h1

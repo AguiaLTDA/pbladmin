@@ -168,8 +168,31 @@ export const supabaseService = {
   },
 
   // 2. Dashboard Stats
+  //
+  // O formato precisa ser o MESMO devolvido por GET /dashboard no backend
+  // (`kpis` + `porCurso`). As telas leem `data.kpis` e `data.porCurso`; um
+  // objeto com outro formato derruba o dashboard em tela branca.
   async getDashboardStats(userId: number, role: string) {
     return {
+      kpis: {
+        aguardandoAnalise: 1,
+        ajustessolicitados: 1,
+        emAnalise: 1,
+        aprovadas: 1,
+        agendadas: 0,
+        publicadas: 1,
+        suspensas: 0,
+        alunosAlcancados: 10,
+        totalEntregas: 1,
+        entregasNoPrazo: 1,
+        entregasComAtraso: 0
+      },
+      porCurso: [
+        { curso: 'Administração e Ciências Contábeis', total_atividades: 1 },
+        { curso: 'Análise e Desenvolvimento de Sistemas', total_atividades: 1 },
+        { curso: 'Engenharia de Produção', total_atividades: 1 }
+      ],
+      // Campos usados pelos painéis de professor e aluno
       totalPbls: 3,
       emAnalise: 1,
       publicados: 1,
