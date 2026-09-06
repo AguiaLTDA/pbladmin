@@ -33,17 +33,20 @@ export async function updateMandatoryFields(req: AuthenticatedRequest, res: Resp
   }
 }
 
-// --- CRIAR E EDITAR ATIVIDADE PBL (PROFESSOR) ---
+// --- CRIAR E EDITAR ATIVIDADE PBL (ADMIN) ---
+// O Admin autora a atividade e a atribui a um professor já cadastrado
+// (professor_id), que passa a enxergá-la e a avaliar as entregas dela.
 export async function createPBLActivity(req: AuthenticatedRequest, res: Response) {
   try {
-    const professorId = req.user?.id;
-    if (!professorId) return res.status(401).json({ message: 'Não autenticado.' });
+    const autorId = req.user?.id;
+    if (!autorId) return res.status(401).json({ message: 'Não autenticado.' });
 
     const {
       titulo,
       cursoId,
       disciplinaId,
       periodoLetivoId,
+      professorId: professorIdBody,
       contextoProblema,
       problemaCentral,
       objetivosAprendizagem,
@@ -60,9 +63,20 @@ export async function createPBLActivity(req: AuthenticatedRequest, res: Response
       etapas // Array of { ordem, titulo, descricao, obrigatoria }
     } = req.body;
 
-    if (!titulo || !cursoId || !disciplinaId || !periodoLetivoId) {
-      return res.status(400).json({ message: 'Título, curso, disciplina e período letivo são obrigatórios.' });
+    if (!titulo || !cursoId || !disciplinaId || !periodoLetivoId || !professorIdBody) {
+      return res.status(400).json({
+        message: 'Título, curso, disciplina, período letivo e professor responsável são obrigatórios.'
+      });
     }
+
+    const professor = await getAsync<{ id: number }>(
+      'SELECT id FROM usuarios WHERE id = ? AND perfil_id = 2 AND deletado_em IS NULL',
+      [professorIdBody]
+    );
+    if (!professor) {
+      return res.status(400).json({ message: 'Professor responsável inválido ou não encontrado.' });
+    }
+    const professorId = professor.id;
 
     // Generate Unique Code
     const codigoUnico = `PBL-${Date.now().toString(36).toUpperCase()}`;
@@ -99,7 +113,7 @@ export async function createPBLActivity(req: AuthenticatedRequest, res: Response
         rubricaJson ? JSON.stringify(rubricaJson) : null,
         cargaHorariaEstimada || 10,
         observacoesProfessor || '',
-        professorId
+        autorId
       ]
     );
 
@@ -113,7 +127,7 @@ export async function createPBLActivity(req: AuthenticatedRequest, res: Response
       }
     }
 
-    await logAudit(professorId, 'CRIAR_RASCUNHO_PBL', 'atividades_pbl', atividadeId, { codigoUnico, titulo });
+    await logAudit(autorId, 'CRIAR_RASCUNHO_PBL', 'atividades_pbl', atividadeId, { codigoUnico, titulo, professorId });
     return res.status(201).json({ id: atividadeId, codigoUnico, message: 'Rascunho de atividade PBL criado com sucesso.' });
   } catch (err: any) {
     console.error('Error creating PBL:', err);
@@ -506,8 +520,8 @@ export async function reviewPBLActivity(req: AuthenticatedRequest, res: Response
       return res.status(400).json({ message: 'A justificativa é OBRIGATÓRIA ao solicitar ajustes ao professor.' });
     }
 
-    const act = await getAsync<{ id: number; professor_id: number; versao_atual: number; status: string }>(
-      'SELECT id, professor_id, versao_atual, status FROM atividades_pbl WHERE id = ?',
+    const act = await getAsync<{ id: number; titulo: string; professor_id: number; versao_atual: number; status: string }>(
+      'SELECT id, titulo, professor_id, versao_atual, status FROM atividades_pbl WHERE id = ?',
       [id]
     );
 
@@ -539,18 +553,34 @@ export async function reviewPBLActivity(req: AuthenticatedRequest, res: Response
       );
     }
 
-    // 4. Notify Professor
+    // 4. Notify the assigned professor (informativo — quem edita agora é o Admin)
     await runAsync(
       `INSERT INTO notificacoes (usuario_id, titulo, mensagem, link) VALUES (?, ?, ?, ?)`,
       [
         act.professor_id,
         `Resultado da Análise PBL: ${decisao.replace('_', ' ')}`,
         decisao === 'AJUSTES_SOLICITADOS'
-          ? `A administração solicitou ajustes na sua atividade. Motivo: ${justificativa}`
-          : `Sua atividade foi ${decisao.toLowerCase()} pela administração.`,
-        `/professor/atividades`
+          ? `A administração solicitou ajustes na atividade vinculada a você. Motivo: ${justificativa}`
+          : `A atividade vinculada a você foi ${decisao.toLowerCase()} pela administração.`,
+        `/professor/dashboard`
       ]
     );
+
+    // 5. Se precisa de ajustes, avisa os admins — são eles que agora editam o conteúdo
+    if (decisao === 'AJUSTES_SOLICITADOS') {
+      const admins = await queryAsync<{ id: number }>('SELECT id FROM usuarios WHERE perfil_id = 1 AND ativo = 1');
+      for (const admin of admins) {
+        await runAsync(
+          `INSERT INTO notificacoes (usuario_id, titulo, mensagem, link) VALUES (?, ?, ?, ?)`,
+          [
+            admin.id,
+            'Atividade PBL Aguardando Ajustes',
+            `A atividade "${act.titulo}" precisa de ajustes antes de seguir para publicação.`,
+            `/admin/pbl/editar/${id}`
+          ]
+        );
+      }
+    }
 
     await logAudit(adminId, `REVISAO_${decisao}`, 'atividades_pbl', String(id), { decisao, justificativa });
     return res.json({ message: `Atividade atualizada para '${newStatus}'.`, status: newStatus });

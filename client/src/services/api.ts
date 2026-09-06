@@ -280,12 +280,20 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
     ] as unknown as T;
   }
 
+  if (endpoint.match(/\/academic\/groups\/\d+\/membros/)) {
+    return [] as unknown as T;
+  }
+
   if (endpoint.includes('/academic/groups')) {
     return [
-      { id: 1, nome: 'Grupo Marcopolo', turma_id: 1 },
-      { id: 2, nome: 'Grupo Sicoob Credivar', turma_id: 1 },
-      { id: 3, nome: 'Grupo Hospital São Mateus', turma_id: 2 }
+      { id: 1, nome: 'Grupo Marcopolo', turma_id: 1, total_integrantes: 2 },
+      { id: 2, nome: 'Grupo Sicoob Credivar', turma_id: 1, total_integrantes: 1 },
+      { id: 3, nome: 'Grupo Hospital São Mateus', turma_id: 2, total_integrantes: 3 }
     ] as unknown as T;
+  }
+
+  if (endpoint.includes('/academic/my-enrollment')) {
+    return [] as unknown as T;
   }
 
   if (endpoint.includes('/academic/periods')) {

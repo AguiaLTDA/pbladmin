@@ -58,29 +58,51 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
     }
 
     if (user.perfilNome === 'PROFESSOR') {
-      const statusCounts = await queryAsync<{ status: string; count: number }>(
-        `SELECT status, COUNT(*) as count FROM atividades_pbl WHERE professor_id = ? AND deletado_em IS NULL GROUP BY status`,
-        [user.id]
+      // O professor não autora mais atividades PBL (isso é do Admin) — o painel dele
+      // reflete só o que lhe cabe: entregas para avaliar e o arquivo orientador.
+      const alcanceCondicao = `(
+        a.professor_id = ?
+        OR EXISTS (
+          SELECT 1 FROM vinculos_professores vp
+          WHERE vp.usuario_id = ? AND vp.ativo = 1 AND vp.disciplina_id = a.disciplina_id
+        )
+      )`;
+
+      const publicadas = await getAsync<{ count: number }>(
+        `SELECT COUNT(*) as count FROM atividades_pbl a
+         WHERE a.deletado_em IS NULL AND a.status = 'PUBLICADO' AND ${alcanceCondicao}`,
+        [user.id, user.id]
       );
 
-      const statusMap: Record<string, number> = {};
-      statusCounts.forEach((r) => (statusMap[r.status] = r.count));
-
       const totalAlunosProf = await getAsync<{ count: number }>(
-        `SELECT COUNT(DISTINCT als.aluno_id) as count 
+        `SELECT COUNT(DISTINCT als.aluno_id) as count
          FROM alunos_segmentados als
          JOIN atividades_pbl a ON als.atividade_id = a.id
-         WHERE a.professor_id = ?`,
+         WHERE a.status = 'PUBLICADO' AND ${alcanceCondicao}`,
+        [user.id, user.id]
+      );
+
+      const entregasPendentes = await getAsync<{ count: number }>(
+        `SELECT COUNT(*) as count
+         FROM entregas e
+         JOIN publicacoes pub ON e.publicacao_id = pub.id
+         JOIN atividades_pbl a ON pub.atividade_id = a.id
+         LEFT JOIN feedbacks fb ON fb.entrega_id = e.id AND fb.liberado_aluno = 1
+         WHERE e.status IN ('ENVIADO', 'ATRASADO') AND fb.id IS NULL AND ${alcanceCondicao}`,
+        [user.id, user.id]
+      );
+
+      const orientador = await getAsync<{ id: number }>(
+        `SELECT id FROM arquivos_orientadores WHERE professor_id = ? AND ativo = 1`,
         [user.id]
       );
 
       return res.json({
         kpis: {
-          rascunhos: statusMap['RASCUNHO'] || 0,
-          emAnalise: (statusMap['ENVIADO_ANALISE'] || 0) + (statusMap['EM_ANALISE'] || 0) + (statusMap['REENVIADO'] || 0),
-          ajustesPendentes: statusMap['AJUSTES_SOLICITADOS'] || 0,
-          publicadas: statusMap['PUBLICADO'] || 0,
-          alunosAlcancados: totalAlunosProf?.count || 0
+          publicadas: publicadas?.count || 0,
+          alunosAlcancados: totalAlunosProf?.count || 0,
+          entregasPendentes: entregasPendentes?.count || 0,
+          temArquivoOrientador: !!orientador
         }
       });
     }

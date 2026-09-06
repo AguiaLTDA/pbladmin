@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useToast } from '../../context/ToastContext';
 import { FormularioEstudante } from '../../components/FormularioEstudante';
-import { registerStudent, isGoogleSheetsConfigured } from '../../services/googleSheets';
+import { apiRequest } from '../../services/api';
 import { StudentRegistrationInput } from '../../types';
 import { GraduationCap, ArrowLeft, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
@@ -13,14 +13,17 @@ interface CadastroEstudanteProps {
 export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ navigate }) => {
   const { showToast } = useToast();
   const [submitting, setSubmitting] = useState(false);
-  const [concluido, setConcluido] = useState<{ id: string; sincronizado: boolean } | null>(null);
+  const [concluido, setConcluido] = useState<{ id: number } | null>(null);
 
   const handleSubmit = async (dados: StudentRegistrationInput) => {
     setSubmitting(true);
     try {
-      const res = await registerStudent(dados);
-      showToast(res.message, res.sincronizado ? 'success' : 'warning');
-      setConcluido({ id: res.id, sincronizado: res.sincronizado });
+      const res = await apiRequest<{ id: number; message: string }>('/public/pre-cadastro', {
+        method: 'POST',
+        body: JSON.stringify(dados)
+      });
+      showToast(res.message, 'success');
+      setConcluido({ id: res.id });
     } catch (err: any) {
       showToast(err.message || 'Não foi possível concluir o cadastro.', 'error');
       throw err;
@@ -107,10 +110,8 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
               <CheckCircle2 size={56} color="#16a34a" style={{ margin: '0 auto 1rem' }} />
               <h2 className="font-bold text-lg mb-2">Cadastro recebido!</h2>
               <p className="text-muted text-sm mb-4">
-                Protocolo <strong>{concluido.id}</strong>.{' '}
-                {concluido.sincronizado
-                  ? 'Seus dados já foram gravados na planilha da secretaria.'
-                  : 'Seus dados ficaram na fila local e serão sincronizados assim que a conexão com a planilha voltar.'}
+                Protocolo <strong>#{concluido.id}</strong>. Seu cadastro foi registrado e aguarda a
+                validação da secretaria para liberar seu acesso ao portal.
               </p>
 
               <div className="flex gap-2" style={{ justifyContent: 'center' }}>
@@ -124,24 +125,6 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
             </div>
           ) : (
             <>
-              {!isGoogleSheetsConfigured && (
-                <div
-                  className="mb-4"
-                  style={{
-                    padding: '0.75rem 1rem',
-                    borderRadius: '10px',
-                    background: '#fff7ed',
-                    border: '1px solid #fdba74',
-                    fontSize: '0.8rem',
-                    color: '#9a3412'
-                  }}
-                >
-                  <strong>Modo offline:</strong> a integração com o Google Sheets ainda não foi
-                  configurada (<code>VITE_GOOGLE_SHEETS_URL</code>). Os cadastros ficarão salvos
-                  apenas neste navegador.
-                </div>
-              )}
-
               <FormularioEstudante onSubmit={handleSubmit} submitting={submitting} origem="AUTOCADASTRO" />
 
               <div

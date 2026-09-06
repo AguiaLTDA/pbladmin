@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
-import { FileEdit, Clock, AlertTriangle, Send, Users, PlusCircle, ArrowRight } from 'lucide-react';
+import { Send, Users, Award, BookOpen, ArrowRight, AlertTriangle } from 'lucide-react';
 
 interface ProfessorDashboardData {
   kpis: {
-    rascunhos: number;
-    emAnalise: number;
-    ajustesPendentes: number;
     publicadas: number;
     alunosAlcancados: number;
+    entregasPendentes: number;
+    temArquivoOrientador: boolean;
   };
 }
 
@@ -33,50 +32,15 @@ export const DashboardProfessorView: React.FC<Props> = ({ navigate }) => {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 style={{ fontSize: '1.4rem' }}>Portal do Professor — Visão Geral</h2>
-          <p className="text-muted text-sm">Acompanhe a criação, submissão para análise e resultado das suas atividades PBL.</p>
-        </div>
-
-        <button onClick={() => navigate('/professor/criar-pbl')} className="btn btn-primary">
-          <PlusCircle size={18} />
-          Criar Nova Atividade PBL
-        </button>
+      <div className="mb-4">
+        <h2 style={{ fontSize: '1.4rem' }}>Portal do Professor — Visão Geral</h2>
+        <p className="text-muted text-sm">
+          Acompanhe as entregas das turmas que você leciona e o seu arquivo orientador.
+        </p>
       </div>
 
       {/* Grid de KPIs */}
       <div className="grid-kpi">
-        <div className="kpi-card" style={{ '--kpi-color': '#64748b', '--kpi-bg': '#f1f5f9' } as React.CSSProperties}>
-          <div className="kpi-icon-wrapper">
-            <FileEdit size={24} />
-          </div>
-          <div>
-            <div className="kpi-value">{k?.rascunhos || 0}</div>
-            <div className="kpi-label">Rascunhos em Edição</div>
-          </div>
-        </div>
-
-        <div className="kpi-card" style={{ '--kpi-color': '#0284c7', '--kpi-bg': '#e0f2fe' } as React.CSSProperties}>
-          <div className="kpi-icon-wrapper">
-            <Clock size={24} />
-          </div>
-          <div>
-            <div className="kpi-value">{k?.emAnalise || 0}</div>
-            <div className="kpi-label">Em Análise Administrativa</div>
-          </div>
-        </div>
-
-        <div className="kpi-card" style={{ '--kpi-color': '#d97706', '--kpi-bg': '#fef3c7' } as React.CSSProperties}>
-          <div className="kpi-icon-wrapper">
-            <AlertTriangle size={24} />
-          </div>
-          <div>
-            <div className="kpi-value">{k?.ajustesPendentes || 0}</div>
-            <div className="kpi-label">Ajustes Solicitados</div>
-          </div>
-        </div>
-
         <div className="kpi-card" style={{ '--kpi-color': '#059669', '--kpi-bg': '#d1fae5' } as React.CSSProperties}>
           <div className="kpi-icon-wrapper">
             <Send size={24} />
@@ -96,22 +60,49 @@ export const DashboardProfessorView: React.FC<Props> = ({ navigate }) => {
             <div className="kpi-label">Alunos Alcançados</div>
           </div>
         </div>
+
+        <div className="kpi-card" style={{ '--kpi-color': '#d97706', '--kpi-bg': '#fef3c7' } as React.CSSProperties}>
+          <div className="kpi-icon-wrapper">
+            <Award size={24} />
+          </div>
+          <div>
+            <div className="kpi-value">{k?.entregasPendentes || 0}</div>
+            <div className="kpi-label">Entregas Pendentes de Avaliação</div>
+          </div>
+        </div>
       </div>
 
-      {/* Ações e Alertas */}
-      {k?.ajustesPendentes! > 0 && (
+      {/* Alerta de entregas pendentes */}
+      {k?.entregasPendentes! > 0 && (
         <div className="card mb-4" style={{ background: '#fffbeb', border: '1px solid #fef3c7' }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertTriangle color="#d97706" size={20} />
               <div>
-                <strong style={{ color: '#b45309' }}>Você possui {k?.ajustesPendentes} atividade(s) com solicitação de ajuste!</strong>
-                <p className="text-sm text-muted">Acesse suas atividades para visualizar a justificativa do administrador e reenviar.</p>
+                <strong style={{ color: '#b45309' }}>
+                  Você possui {k?.entregasPendentes} entrega(s) aguardando avaliação!
+                </strong>
+                <p className="text-sm text-muted">Corrija e libere a nota para o aluno visualizar no portal.</p>
               </div>
             </div>
-            <button onClick={() => navigate('/professor/atividades')} className="btn btn-warning btn-sm">
-              Ver Ajustes Pendentes
+            <button onClick={() => navigate('/professor/entregas')} className="btn btn-warning btn-sm">
+              Avaliar Agora
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Alerta de arquivo orientador pendente */}
+      {!k?.temArquivoOrientador && (
+        <div className="card mb-4" style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BookOpen color="#1d4ed8" size={20} />
+              <div>
+                <strong style={{ color: '#1e40af' }}>Nenhum arquivo orientador vinculado ainda.</strong>
+                <p className="text-sm text-muted">A coordenação ainda não vinculou um material à sua conta.</p>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -120,18 +111,18 @@ export const DashboardProfessorView: React.FC<Props> = ({ navigate }) => {
         <div className="card">
           <h3 className="font-bold mb-3">Atalhos do Docente</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <button onClick={() => navigate('/professor/criar-pbl')} className="btn btn-secondary justify-between">
-              <span>Criar Nova Atividade PBL</span>
-              <ArrowRight size={16} />
-            </button>
-
-            <button onClick={() => navigate('/professor/atividades')} className="btn btn-secondary justify-between">
-              <span>Gerenciar Minhas Atividades</span>
-              <ArrowRight size={16} />
-            </button>
-
             <button onClick={() => navigate('/professor/entregas')} className="btn btn-secondary justify-between">
               <span>Acompanhar Entregas & Lançar Notas</span>
+              <ArrowRight size={16} />
+            </button>
+
+            <button onClick={() => navigate('/professor/arquivo-orientador')} className="btn btn-secondary justify-between">
+              <span>Revisar Arquivo Orientador</span>
+              <ArrowRight size={16} />
+            </button>
+
+            <button onClick={() => navigate('/professor/turmas')} className="btn btn-secondary justify-between">
+              <span>Minhas Turmas & Horário</span>
               <ArrowRight size={16} />
             </button>
           </div>

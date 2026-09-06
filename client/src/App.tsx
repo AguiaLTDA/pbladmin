@@ -19,19 +19,20 @@ import { GerenciadorArquivosView } from './views/admin/GerenciadorArquivos';
 import { RelatoriosAdminView } from './views/admin/RelatoriosAdmin';
 import { AuditoriaAdminView } from './views/admin/AuditoriaAdmin';
 import { ConfiguracoesAdminView } from './views/admin/ConfiguracoesAdmin';
+import { EditorPBLAdminView } from './views/admin/EditorPBLAdmin';
 
 // Professor Views
 import { DashboardProfessorView } from './views/professor/DashboardProfessor';
-import { MinhasAtividadesProfessorView } from './views/professor/MinhasAtividadesProfessor';
-import { EditorPBLProfessorView } from './views/professor/EditorPBLProfessor';
 import { EntregasProfessorView } from './views/professor/EntregasProfessor';
 import { MinhasTurmasProfessorView } from './views/professor/MinhasTurmasProfessor';
+import { ArquivoOrientadorProfessorView } from './views/professor/ArquivoOrientadorProfessor';
 
 // Aluno Views
 import { DashboardAlunoView } from './views/aluno/DashboardAluno';
 import { MinhasAtividadesAlunoView } from './views/aluno/MinhasAtividadesAluno';
 import { CalendarioPrazosAlunoView } from './views/aluno/CalendarioPrazosAluno';
 import { DetalhesPBLAlunoView } from './views/aluno/DetalhesPBLAluno';
+import { MeuGrupoAlunoView } from './views/aluno/MeuGrupoAluno';
 
 export const App: React.FC = () => {
   const { user, isAuthenticated, loading } = useAuth();
@@ -91,6 +92,11 @@ export const App: React.FC = () => {
     if (role === 'ADMIN') {
       if (currentRoute === '/admin/dashboard') return <DashboardAdminView navigate={navigate} />;
       if (currentRoute === '/admin/caixa-entrada') return <CaixaEntradaPBLView navigate={navigate} />;
+      if (currentRoute === '/admin/pbl/criar') return <EditorPBLAdminView navigate={navigate} />;
+      if (currentRoute.startsWith('/admin/pbl/editar/')) {
+        const id = currentRoute.split('/admin/pbl/editar/')[1];
+        return <EditorPBLAdminView activityId={id} navigate={navigate} />;
+      }
       if (currentRoute.startsWith('/admin/revisao/')) {
         const id = currentRoute.split('/admin/revisao/')[1];
         return <RevisaoPBLView activityId={id} navigate={navigate} />;
@@ -113,26 +119,20 @@ export const App: React.FC = () => {
     }
 
     // PROFESSOR ROUTES
+    // Criação/edição de PBL é exclusiva do Admin — o professor só revisa/avalia
+    // entregas e cuida do próprio arquivo orientador.
     if (role === 'PROFESSOR') {
       if (currentRoute === '/professor/dashboard') return <DashboardProfessorView navigate={navigate} />;
-      if (currentRoute === '/professor/atividades') return <MinhasAtividadesProfessorView navigate={navigate} />;
-      if (currentRoute === '/professor/criar-pbl') return <EditorPBLProfessorView navigate={navigate} />;
-      if (currentRoute.startsWith('/professor/editar-pbl/')) {
-        const id = currentRoute.split('/professor/editar-pbl/')[1];
-        return <EditorPBLProfessorView activityId={id} navigate={navigate} />;
-      }
-      if (currentRoute.startsWith('/professor/detalhes-pbl/')) {
-        const id = currentRoute.split('/professor/detalhes-pbl/')[1];
-        return <RevisaoPBLView activityId={id} navigate={navigate} />;
-      }
       if (currentRoute === '/professor/entregas') return <EntregasProfessorView />;
       if (currentRoute === '/professor/turmas') return <MinhasTurmasProfessorView />;
+      if (currentRoute === '/professor/arquivo-orientador') return <ArquivoOrientadorProfessorView />;
     }
 
     // ALUNO ROUTES
     if (role === 'ALUNO') {
       if (currentRoute === '/aluno/dashboard') return <DashboardAlunoView navigate={navigate} />;
       if (currentRoute === '/aluno/atividades') return <MinhasAtividadesAlunoView navigate={navigate} />;
+      if (currentRoute === '/aluno/grupo') return <MeuGrupoAlunoView />;
       if (currentRoute === '/aluno/calendario') return <CalendarioPrazosAlunoView navigate={navigate} />;
       if (currentRoute.startsWith('/aluno/atividade/')) {
         const id = currentRoute.split('/aluno/atividade/')[1];

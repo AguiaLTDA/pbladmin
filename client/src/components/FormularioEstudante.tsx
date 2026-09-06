@@ -161,7 +161,7 @@ export const FormularioEstudante: React.FC<FormularioEstudanteProps> = ({
           className="btn btn-primary"
           style={{ flex: 1, padding: '0.85rem', fontSize: '1rem' }}
         >
-          {submitting ? 'Enviando para a planilha...' : textoBotao}
+          {submitting ? 'Enviando...' : textoBotao}
         </button>
       </div>
     </form>

@@ -348,7 +348,7 @@ export async function initAndSeedDb() {
   );
 
   await runAsync(
-    `INSERT INTO notificacoes (usuario_id, titulo, mensagem, link) VALUES (?, 'Ajustes Solicitados em Atividade PBL', 'A administração solicitou ajustes na atividade ADS202602.', '/professor/atividades')`,
+    `INSERT INTO notificacoes (usuario_id, titulo, mensagem, link) VALUES (?, 'Ajustes Solicitados em Atividade PBL', 'A administração solicitou ajustes na atividade ADS202602.', '/professor/dashboard')`,
     [profNilvans.lastID]
   );
 

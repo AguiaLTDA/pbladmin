@@ -1,16 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useToast } from '../../context/ToastContext';
 import { FormularioEstudante } from '../../components/FormularioEstudante';
-import {
-  listStudents,
-  registerStudent,
-  syncPendingRegistrations,
-  getPendingRegistrations,
-  isGoogleSheetsConfigured
-} from '../../services/googleSheets';
+import { apiRequest } from '../../services/api';
 import { StudentRegistration, StudentRegistrationInput } from '../../types';
 import { CURSOS_DISPONIVEIS } from '../../constants/academico';
-import { UserPlus, Search, RefreshCw, Table2, CloudOff, Download } from 'lucide-react';
+import { UserPlus, Search, RefreshCw, Table2, Download, Check, X, KeyRound } from 'lucide-react';
 
 export const EstudantesAdminView: React.FC = () => {
   const { showToast } = useToast();
@@ -21,16 +15,18 @@ export const EstudantesAdminView: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [busca, setBusca] = useState('');
   const [cursoFiltro, setCursoFiltro] = useState('');
-  const [pendentes, setPendentes] = useState(0);
+  const [statusFiltro, setStatusFiltro] = useState('');
+  const [credenciaisGeradas, setCredenciaisGeradas] = useState<{ email: string; senhaTemporaria: string } | null>(
+    null
+  );
 
   const carregar = async () => {
     setLoading(true);
     try {
-      const lista = await listStudents();
+      const lista = await apiRequest<StudentRegistration[]>('/admin/pre-cadastros');
       setEstudantes(lista);
-      setPendentes(getPendingRegistrations().length);
     } catch (err: any) {
-      showToast(err.message || 'Erro ao ler a planilha.', 'error');
+      showToast(err.message || 'Erro ao listar pré-cadastros.', 'error');
     } finally {
       setLoading(false);
     }
@@ -43,8 +39,11 @@ export const EstudantesAdminView: React.FC = () => {
   const handleCadastrar = async (dados: StudentRegistrationInput) => {
     setSubmitting(true);
     try {
-      const res = await registerStudent(dados);
-      showToast(res.message, res.sincronizado ? 'success' : 'warning');
+      const res = await apiRequest<{ message: string }>('/public/pre-cadastro', {
+        method: 'POST',
+        body: JSON.stringify({ ...dados, origem: 'ADMIN' })
+      });
+      showToast(res.message, 'success');
       setShowModal(false);
       await carregar();
     } catch (err: any) {
@@ -55,27 +54,49 @@ export const EstudantesAdminView: React.FC = () => {
     }
   };
 
-  const handleSincronizar = async () => {
-    const res = await syncPendingRegistrations();
-    showToast(
-      res.enviados
-        ? `${res.enviados} cadastro(s) enviados para a planilha.`
-        : 'Nenhum cadastro pendente foi enviado.',
-      res.enviados ? 'success' : 'warning'
-    );
-    await carregar();
+  const handleAprovar = async (item: StudentRegistration) => {
+    if (!window.confirm(`Aprovar o cadastro de ${item.nome} e criar a conta de aluno dele?`)) return;
+
+    try {
+      const res = await apiRequest<{ email: string; senhaTemporaria: string; message: string }>(
+        `/admin/pre-cadastros/${item.id}/aprovar`,
+        { method: 'POST' }
+      );
+      showToast(res.message, 'success');
+      setCredenciaisGeradas({ email: res.email, senhaTemporaria: res.senhaTemporaria });
+      await carregar();
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível aprovar o cadastro.', 'error');
+    }
+  };
+
+  const handleRejeitar = async (item: StudentRegistration) => {
+    const justificativa = window.prompt(`Motivo da rejeição do cadastro de ${item.nome} (opcional):`);
+    if (justificativa === null) return; // cancelou o prompt
+
+    try {
+      const res = await apiRequest<{ message: string }>(`/admin/pre-cadastros/${item.id}/rejeitar`, {
+        method: 'POST',
+        body: JSON.stringify({ justificativa })
+      });
+      showToast(res.message, 'success');
+      await carregar();
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível rejeitar o cadastro.', 'error');
+    }
   };
 
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return estudantes.filter((e) => {
       if (cursoFiltro && e.curso !== cursoFiltro) return false;
+      if (statusFiltro && e.status !== statusFiltro) return false;
       if (!termo) return true;
       return [e.nome, e.email, e.matricula, e.turma].some((campo) =>
         String(campo || '').toLowerCase().includes(termo)
       );
     });
-  }, [estudantes, busca, cursoFiltro]);
+  }, [estudantes, busca, cursoFiltro, statusFiltro]);
 
   const exportarCsv = () => {
     const colunas = [
@@ -93,7 +114,7 @@ export const EstudantesAdminView: React.FC = () => {
     ];
 
     const linhas = filtrados.map((e) =>
-      [e.id, e.criadoEm, e.nome, e.email, e.matricula, e.cpf, e.telefone, e.curso, e.turma, e.periodo, e.status]
+      [e.id, e.criado_em, e.nome, e.email, e.matricula, e.cpf, e.telefone, e.curso, e.turma, e.periodo, e.status]
         .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
         .join(';')
     );
@@ -104,10 +125,12 @@ export const EstudantesAdminView: React.FC = () => {
 
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `estudantes-pbl-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `pre-cadastros-pbl-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
   };
+
+  const pendentesCount = estudantes.filter((e) => e.status === 'PENDENTE').length;
 
   return (
     <div>
@@ -115,7 +138,7 @@ export const EstudantesAdminView: React.FC = () => {
         <div>
           <h2 style={{ fontSize: '1.4rem' }}>Cadastro de Estudantes</h2>
           <p className="text-muted text-sm">
-            Registros gravados na planilha do Google Sheets da secretaria acadêmica.
+            Pré-cadastros recebidos pelo portal, aguardando aprovação para virarem contas reais de aluno.
           </p>
         </div>
 
@@ -130,45 +153,19 @@ export const EstudantesAdminView: React.FC = () => {
           </button>
           <button onClick={() => setShowModal(true)} className="btn btn-primary">
             <UserPlus size={18} />
-            Cadastrar Estudante
+            Novo Pré-Cadastro
           </button>
         </div>
       </div>
 
-      {!isGoogleSheetsConfigured && (
+      {pendentesCount > 0 && (
         <div
           className="card mb-4 flex items-center gap-2"
-          style={{
-            padding: '0.85rem 1rem',
-            background: '#fff7ed',
-            border: '1px solid #fdba74',
-            color: '#9a3412'
-          }}
-        >
-          <CloudOff size={18} />
-          <span className="text-sm">
-            Integração com o Google Sheets não configurada. Defina <code>VITE_GOOGLE_SHEETS_URL</code>{' '}
-            e <code>VITE_GOOGLE_SHEETS_TOKEN</code> no <code>.env</code> do client e nos Secrets do
-            GitHub.
-          </span>
-        </div>
-      )}
-
-      {pendentes > 0 && (
-        <div
-          className="card mb-4 flex items-center justify-between gap-2"
           style={{ padding: '0.85rem 1rem', background: '#fefce8', border: '1px solid #fde047' }}
         >
           <span className="text-sm">
-            <strong>{pendentes}</strong> cadastro(s) aguardando sincronização com a planilha.
+            <strong>{pendentesCount}</strong> pré-cadastro(s) aguardando aprovação.
           </span>
-          <button
-            onClick={handleSincronizar}
-            className="btn btn-sm btn-primary"
-            disabled={!isGoogleSheetsConfigured}
-          >
-            Sincronizar agora
-          </button>
         </div>
       )}
 
@@ -183,6 +180,19 @@ export const EstudantesAdminView: React.FC = () => {
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
             />
+          </div>
+
+          <div style={{ minWidth: '200px' }}>
+            <select
+              className="form-control"
+              value={statusFiltro}
+              onChange={(e) => setStatusFiltro(e.target.value)}
+            >
+              <option value="">Todos os Status</option>
+              <option value="PENDENTE">Pendente</option>
+              <option value="APROVADO">Aprovado</option>
+              <option value="REJEITADO">Rejeitado</option>
+            </select>
           </div>
 
           <div style={{ minWidth: '240px' }}>
@@ -203,13 +213,13 @@ export const EstudantesAdminView: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-muted">Lendo a planilha do Google Sheets...</div>
+        <div className="text-center py-8 text-muted">Carregando pré-cadastros...</div>
       ) : filtrados.length === 0 ? (
         <div className="card text-center py-8">
           <Table2 size={40} className="text-muted" style={{ margin: '0 auto 1rem' }} />
-          <h3 className="font-bold mb-2">Nenhum estudante cadastrado ainda</h3>
+          <h3 className="font-bold mb-2">Nenhum pré-cadastro encontrado</h3>
           <p className="text-muted text-sm">
-            Use o botão "Cadastrar Estudante" ou compartilhe o link público de autocadastro (
+            Use o botão "Novo Pré-Cadastro" ou compartilhe o link público de autocadastro (
             <code>#/cadastro</code>) com a turma.
           </p>
         </div>
@@ -225,6 +235,7 @@ export const EstudantesAdminView: React.FC = () => {
                 <th>Turma / Período</th>
                 <th>Cadastrado em</th>
                 <th>Status</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -235,15 +246,37 @@ export const EstudantesAdminView: React.FC = () => {
                   <td>{e.matricula}</td>
                   <td>{e.curso}</td>
                   <td>{[e.turma, e.periodo].filter(Boolean).join(' • ') || '-'}</td>
-                  <td>{e.criadoEm || '-'}</td>
+                  <td>{e.criado_em ? new Date(e.criado_em).toLocaleString('pt-BR') : '-'}</td>
                   <td>
                     <span
-                      className={`user-role-badge role-${
-                        e.status === 'PENDENTE' ? 'professor' : 'aluno'
-                      }`}
+                      className={`user-role-badge role-${e.status === 'PENDENTE' ? 'professor' : 'aluno'}`}
                     >
-                      {e.status || 'PENDENTE'}
+                      {e.status}
                     </span>
+                  </td>
+                  <td>
+                    {e.status === 'PENDENTE' ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleAprovar(e)}
+                          className="btn btn-sm btn-primary"
+                          title="Aprovar e criar conta de aluno"
+                        >
+                          <Check size={14} />
+                          Aprovar
+                        </button>
+                        <button
+                          onClick={() => handleRejeitar(e)}
+                          className="btn btn-sm btn-secondary"
+                          title="Rejeitar cadastro"
+                        >
+                          <X size={14} />
+                          Rejeitar
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-muted text-sm">-</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -251,7 +284,7 @@ export const EstudantesAdminView: React.FC = () => {
           </table>
 
           <div className="text-muted text-sm" style={{ marginTop: '0.75rem' }}>
-            Exibindo {filtrados.length} de {estudantes.length} estudante(s).
+            Exibindo {filtrados.length} de {estudantes.length} pré-cadastro(s).
           </div>
         </div>
       )}
@@ -262,7 +295,7 @@ export const EstudantesAdminView: React.FC = () => {
             <div className="modal-header">
               <h3 className="font-bold flex items-center gap-2">
                 <UserPlus size={20} color="var(--primary)" />
-                Cadastrar Estudante na Planilha
+                Novo Pré-Cadastro de Estudante
               </h3>
               <button onClick={() => setShowModal(false)} className="btn btn-sm btn-secondary">
                 X
@@ -274,9 +307,44 @@ export const EstudantesAdminView: React.FC = () => {
                 onSubmit={handleCadastrar}
                 submitting={submitting}
                 origem="ADMIN"
-                textoBotao="Salvar no Google Sheets"
+                textoBotao="Registrar Pré-Cadastro"
                 onCancel={() => setShowModal(false)}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {credenciaisGeradas && (
+        <div className="modal-overlay">
+          <div className="modal-container" style={{ maxWidth: '440px' }}>
+            <div className="modal-header">
+              <h3 className="font-bold flex items-center gap-2">
+                <KeyRound size={20} color="var(--primary)" />
+                Conta criada com sucesso
+              </h3>
+            </div>
+            <div className="modal-body">
+              <p className="text-sm mb-4">
+                Repasse estas credenciais ao estudante — a senha só é exibida esta vez, ela não fica
+                salva em nenhum outro lugar.
+              </p>
+              <div className="card" style={{ padding: '1rem', background: '#f8f9f5' }}>
+                <p className="text-sm mb-2">
+                  <strong>E-mail:</strong> {credenciaisGeradas.email}
+                </p>
+                <p className="text-sm">
+                  <strong>Senha temporária:</strong>{' '}
+                  <code style={{ fontSize: '1rem' }}>{credenciaisGeradas.senhaTemporaria}</code>
+                </p>
+              </div>
+              <button
+                onClick={() => setCredenciaisGeradas(null)}
+                className="btn btn-primary"
+                style={{ width: '100%', marginTop: '1.25rem' }}
+              >
+                Já anotei, fechar
+              </button>
             </div>
           </div>
         </div>

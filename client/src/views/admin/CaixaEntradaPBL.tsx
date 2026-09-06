@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { PBLActivity } from '../../types';
-import { Inbox, Eye, Search, Filter, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { Inbox, Eye, Search, Filter, CheckCircle2, Clock, AlertTriangle, Edit3, PlusCircle } from 'lucide-react';
 
 interface Props {
   navigate: (path: string) => void;
@@ -38,11 +38,15 @@ export const CaixaEntradaPBLView: React.FC<Props> = ({ navigate }) => {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 style={{ fontSize: '1.4rem' }}>Caixa de Entrada — Submissões PBL</h2>
+          <h2 style={{ fontSize: '1.4rem' }}>Atividades PBL — Criação, Revisão & Publicação</h2>
           <p className="text-muted text-sm">
-            Atividades submetidas pelos docentes aguardando revisão, validação e publicação.
+            Crie novas atividades, acompanhe rascunhos e revise, valide e publique as submissões.
           </p>
         </div>
+        <button onClick={() => navigate('/admin/pbl/criar')} className="btn btn-primary">
+          <PlusCircle size={18} />
+          Nova Atividade PBL
+        </button>
       </div>
 
       {/* Filtros e Busca */}
@@ -67,6 +71,7 @@ export const CaixaEntradaPBLView: React.FC<Props> = ({ navigate }) => {
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <option value="">Todos os Status</option>
+              <option value="RASCUNHO">Rascunho</option>
               <option value="ENVIADO_ANALISE">Aguardando Análise Inicial</option>
               <option value="REENVIADO">Reenviado após Ajustes</option>
               <option value="EM_ANALISE">Em Análise</option>
@@ -134,13 +139,22 @@ export const CaixaEntradaPBLView: React.FC<Props> = ({ navigate }) => {
                   </td>
                   <td>{new Date(act.atualizado_em).toLocaleString('pt-BR')}</td>
                   <td style={{ textAlign: 'right' }}>
-                    <button
-                      onClick={() => navigate(`/admin/revisao/${act.id}`)}
-                      className="btn btn-primary btn-sm"
-                    >
-                      <Eye size={16} />
-                      Revisar & Avaliar
-                    </button>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => navigate(`/admin/pbl/editar/${act.id}`)}
+                        className="btn btn-secondary btn-sm"
+                      >
+                        <Edit3 size={16} />
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => navigate(`/admin/revisao/${act.id}`)}
+                        className="btn btn-primary btn-sm"
+                      >
+                        <Eye size={16} />
+                        Revisar & Avaliar
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

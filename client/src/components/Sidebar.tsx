@@ -9,13 +9,11 @@ import {
   BarChart3,
   ShieldCheck,
   Settings,
-  PlusCircle,
   FileCheck2,
   GraduationCap,
   Calendar,
   CalendarDays,
   LogOut,
-  Layers,
   Award
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -51,14 +49,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
   const getProfessorItems = () => [
     { path: '/professor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/professor/turmas', label: 'Minhas Turmas & Horário', icon: CalendarDays },
-    { path: '/professor/atividades', label: 'Minhas Atividades PBL', icon: Layers },
-    { path: '/professor/criar-pbl', label: 'Criar Atividade PBL', icon: PlusCircle },
-    { path: '/professor/entregas', label: 'Acompanhamento & Entregas', icon: Award }
+    { path: '/professor/entregas', label: 'Acompanhamento & Entregas', icon: Award },
+    { path: '/professor/arquivo-orientador', label: 'Arquivo Orientador', icon: BookOpen }
   ];
 
   const getAlunoItems = () => [
     { path: '/aluno/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/aluno/atividades', label: 'Minhas Atividades', icon: GraduationCap },
+    { path: '/aluno/grupo', label: 'Meus Grupos PBL', icon: Users },
     { path: '/aluno/calendario', label: 'Calendário de Prazos', icon: Calendar }
   ];
 

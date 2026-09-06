@@ -114,6 +114,50 @@ CREATE TABLE IF NOT EXISTS vinculos_professores (
 
 -- O índice único de vínculos é criado em db/migrate.ts.
 
+-- 9.0 Arquivo Orientador vinculado à conta do professor
+-- Suprido pelo portal do Admin: liga um `arquivo` já enviado a um professor já
+-- cadastrado. Só um vínculo ativo por professor (índice parcial abaixo) —
+-- vincular um novo arquivo desativa o anterior, preservando o histórico.
+-- `rotulo` identifica o lote/rodada do kit (ex.: "Arquivos Orientadores 01"),
+-- usado para agrupar/exibir nas telas do professor e do admin. `replicado_em`
+-- marca quando o admin aprovou e replicou este kit em atividades PBL (uma por
+-- disciplina do professor, turmas pré-designadas via segmentação) — impede
+-- replicar duas vezes o mesmo vínculo.
+CREATE TABLE IF NOT EXISTS arquivos_orientadores (
+  id SERIAL PRIMARY KEY,
+  professor_id INTEGER NOT NULL,
+  arquivo_id INTEGER NOT NULL,
+  vinculado_por INTEGER NOT NULL,
+  rotulo TEXT DEFAULT 'Arquivos Orientadores 01',
+  ativo INTEGER DEFAULT 1,
+  replicado_em TIMESTAMPTZ DEFAULT NULL,
+  replicado_por INTEGER DEFAULT NULL,
+  criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (professor_id) REFERENCES usuarios(id),
+  FOREIGN KEY (arquivo_id) REFERENCES arquivos(id),
+  FOREIGN KEY (vinculado_por) REFERENCES usuarios(id),
+  FOREIGN KEY (replicado_por) REFERENCES usuarios(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orientador_ativo_unico
+  ON arquivos_orientadores (professor_id) WHERE ativo = 1;
+
+-- 9.0.1 Sugestões/comentários do professor sobre o arquivo orientador vigente.
+-- Registro de retorno (append-only): o professor relata revisões/sugestões
+-- amarradas a uma das disciplinas que leciona; o admin apenas consulta essa
+-- lista (aba "Revisão pelos Professores"), sem campo de edição própria.
+CREATE TABLE IF NOT EXISTS comentarios_orientador (
+  id SERIAL PRIMARY KEY,
+  arquivo_orientador_id INTEGER NOT NULL,
+  professor_id INTEGER NOT NULL,
+  disciplina_id INTEGER NOT NULL,
+  texto TEXT NOT NULL,
+  criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (arquivo_orientador_id) REFERENCES arquivos_orientadores(id),
+  FOREIGN KEY (professor_id) REFERENCES usuarios(id),
+  FOREIGN KEY (disciplina_id) REFERENCES disciplinas(id)
+);
+
 -- 9.1 Grade de Horário Acadêmico (fonte do vínculo Professor <-> Turma <-> Disciplina)
 CREATE TABLE IF NOT EXISTS horarios_academicos (
   id SERIAL PRIMARY KEY,
@@ -376,4 +420,26 @@ CREATE TABLE IF NOT EXISTS logs_auditoria (
   ip_address TEXT DEFAULT '127.0.0.1',
   criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+-- 27. Pré-Cadastros de Estudantes (autocadastro público, sujeito a aprovação do admin)
+CREATE TABLE IF NOT EXISTS pre_cadastros (
+  id SERIAL PRIMARY KEY,
+  nome TEXT NOT NULL,
+  email TEXT NOT NULL,
+  matricula TEXT,
+  cpf TEXT,
+  telefone TEXT,
+  curso TEXT,
+  turma TEXT,
+  periodo TEXT,
+  origem TEXT DEFAULT 'AUTOCADASTRO', -- 'AUTOCADASTRO' ou 'ADMIN'
+  status TEXT NOT NULL DEFAULT 'PENDENTE', -- 'PENDENTE', 'APROVADO', 'REJEITADO'
+  usuario_id INTEGER DEFAULT NULL, -- preenchido quando aprovado
+  aprovado_por INTEGER DEFAULT NULL,
+  justificativa_rejeicao TEXT,
+  criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+  FOREIGN KEY (aprovado_por) REFERENCES usuarios(id)
 );

@@ -2,27 +2,34 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { PBLStep } from '../../types';
-import { Save, Send, Plus, Trash2, ArrowLeft, Upload, FileText } from 'lucide-react';
+import { Save, Send, Plus, Trash2, ArrowLeft } from 'lucide-react';
 
 interface Props {
   activityId?: string;
   navigate: (path: string) => void;
 }
 
-export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }) => {
+/**
+ * Autoria de atividades PBL — exclusiva do Admin. O professor responsável é
+ * atribuído aqui e passa a enxergar a atividade (para avaliar as entregas)
+ * assim que ela for publicada; ele não cria nem edita o conteúdo.
+ */
+export const EditorPBLAdminView: React.FC<Props> = ({ activityId, navigate }) => {
   const { showToast } = useToast();
   const isEditing = !!activityId;
 
-  // Academic Entities
+  // Entidades Acadêmicas
   const [courses, setCourses] = useState<any[]>([]);
   const [disciplines, setDisciplines] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
+  const [professors, setProfessors] = useState<any[]>([]);
 
-  // Form Fields
+  // Campos do Formulário
   const [titulo, setTitulo] = useState('');
   const [cursoId, setCursoId] = useState<number | ''>('');
   const [disciplinaId, setDisciplinaId] = useState<number | ''>('');
   const [periodoLetivoId, setPeriodoLetivoId] = useState<number | ''>('');
+  const [professorId, setProfessorId] = useState<number | ''>('');
 
   const [contextoProblema, setContextoProblema] = useState('');
   const [problemaCentral, setProblemaCentral] = useState('');
@@ -37,24 +44,25 @@ export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }
   const [cargaHorariaEstimada, setCargaHorariaEstimada] = useState<number>(10);
   const [observacoesProfessor, setObservacoesProfessor] = useState('');
 
-  // Dynamic PBL Steps
+  // Etapas Dinâmicas do PBL
   const [etapas, setEtapas] = useState<PBLStep[]>([
     { ordem: 1, titulo: 'Análise de Problema e Leitura de Cenário', descricao: '', obrigatoria: true }
   ]);
 
   const [submitting, setSubmitting] = useState(false);
-  const [activityStatus, setActivityStatus] = useState<string>('RASCUNHO');
 
   useEffect(() => {
     Promise.all([
       apiRequest('/academic/courses'),
       apiRequest('/academic/disciplines'),
-      apiRequest('/academic/periods')
+      apiRequest('/academic/periods'),
+      apiRequest('/academic/users?perfil=PROFESSOR')
     ])
-      .then(([c, d, p]) => {
+      .then(([c, d, p, profs]) => {
         setCourses(c);
         setDisciplines(d);
         setPeriods(p);
+        setProfessors(profs);
         if (p.length > 0 && !periodoLetivoId) setPeriodoLetivoId(p[0].id);
       })
       .catch((err) => showToast(err.message, 'error'));
@@ -64,11 +72,11 @@ export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }
         .then((res) => {
           const act = res.atividade;
           const ver = res.versaoAtual;
-          setActivityStatus(act.status);
           setTitulo(act.titulo);
           setCursoId(act.curso_id);
           setDisciplinaId(act.disciplina_id);
           setPeriodoLetivoId(act.periodo_letivo_id);
+          setProfessorId(act.professor_id);
 
           if (ver) {
             setContextoProblema(ver.contexto_problema || '');
@@ -94,10 +102,7 @@ export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }
   }, [activityId]);
 
   const handleAddStep = () => {
-    setEtapas((prev) => [
-      ...prev,
-      { ordem: prev.length + 1, titulo: '', descricao: '', obrigatoria: true }
-    ]);
+    setEtapas((prev) => [...prev, { ordem: prev.length + 1, titulo: '', descricao: '', obrigatoria: true }]);
   };
 
   const handleRemoveStep = (index: number) => {
@@ -105,14 +110,12 @@ export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }
   };
 
   const handleStepChange = (index: number, field: string, value: any) => {
-    setEtapas((prev) =>
-      prev.map((e, i) => (i === index ? { ...e, [field]: value } : e))
-    );
+    setEtapas((prev) => prev.map((e, i) => (i === index ? { ...e, [field]: value } : e)));
   };
 
   const saveActivity = async (submitToAnalysis: boolean = false) => {
-    if (!titulo || !cursoId || !disciplinaId) {
-      showToast('Preencha os campos de Título, Curso e Disciplina.', 'warning');
+    if (!titulo || !cursoId || !disciplinaId || !professorId) {
+      showToast('Preencha os campos de Título, Curso, Disciplina e Professor Responsável.', 'warning');
       return;
     }
 
@@ -123,6 +126,7 @@ export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }
         cursoId: Number(cursoId),
         disciplinaId: Number(disciplinaId),
         periodoLetivoId: Number(periodoLetivoId),
+        professorId: Number(professorId),
         contextoProblema,
         problemaCentral,
         objetivosAprendizagem,
@@ -160,7 +164,7 @@ export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }
         showToast('Rascunho salvo com sucesso!', 'success');
       }
 
-      navigate('/professor/atividades');
+      navigate('/admin/caixa-entrada');
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar atividade.', 'error');
     } finally {
@@ -168,35 +172,23 @@ export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }
     }
   };
 
-  const filteredDisciplines = disciplines.filter(
-    (d) => !cursoId || d.curso_id === Number(cursoId)
-  );
+  const filteredDisciplines = disciplines.filter((d) => !cursoId || d.curso_id === Number(cursoId));
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <button onClick={() => navigate('/professor/atividades')} className="btn btn-secondary btn-sm">
+        <button onClick={() => navigate('/admin/caixa-entrada')} className="btn btn-secondary btn-sm">
           <ArrowLeft size={16} />
           Voltar
         </button>
 
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => saveActivity(false)}
-            disabled={submitting}
-            className="btn btn-secondary"
-          >
+          <button type="button" onClick={() => saveActivity(false)} disabled={submitting} className="btn btn-secondary">
             <Save size={18} />
             Salvar Rascunho
           </button>
 
-          <button
-            type="button"
-            onClick={() => saveActivity(true)}
-            disabled={submitting}
-            className="btn btn-primary"
-          >
+          <button type="button" onClick={() => saveActivity(true)} disabled={submitting} className="btn btn-primary">
             <Send size={18} />
             {submitting ? 'Enviando...' : 'Enviar para Análise'}
           </button>
@@ -208,7 +200,8 @@ export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }
           {isEditing ? 'Editar Atividade PBL' : 'Criar Nova Atividade PBL'}
         </h2>
         <p className="text-muted text-sm">
-          Preencha o cenário-problema, etapas e entregas. As instruções serão revisadas e validadas pela administração antes da disponibilização aos alunos.
+          Preencha o cenário-problema, etapas e entregas, e atribua o professor responsável pela
+          turma. Ele passará a avaliar as entregas assim que a atividade for publicada.
         </p>
       </div>
 
@@ -232,9 +225,21 @@ export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
             <div className="form-group">
               <label className="form-label required">Curso</label>
-              <select className="form-control" value={cursoId} onChange={(e: any) => { setCursoId(e.target.value); setDisciplinaId(''); }} required>
+              <select
+                className="form-control"
+                value={cursoId}
+                onChange={(e: any) => {
+                  setCursoId(e.target.value);
+                  setDisciplinaId('');
+                }}
+                required
+              >
                 <option value="">-- Selecione o curso --</option>
-                {courses.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -242,20 +247,40 @@ export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }
               <label className="form-label required">Disciplina</label>
               <select className="form-control" value={disciplinaId} onChange={(e: any) => setDisciplinaId(e.target.value)} required>
                 <option value="">-- Selecione a disciplina --</option>
-                {filteredDisciplines.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
+                {filteredDisciplines.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.nome}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div className="form-group">
               <label className="form-label required">Período Letivo</label>
               <select className="form-control" value={periodoLetivoId} onChange={(e: any) => setPeriodoLetivoId(e.target.value)} required>
-                {periods.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                {periods.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label required">Professor Responsável</label>
+              <select className="form-control" value={professorId} onChange={(e: any) => setProfessorId(e.target.value)} required>
+                <option value="">-- Selecione o docente --</option>
+                {professors.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome} ({p.email})
+                  </option>
+                ))}
               </select>
             </div>
           </div>
         </div>
 
-        {/* Seção 2: Problem-Based Learning Core */}
+        {/* Seção 2: Núcleo PBL */}
         <div className="card">
           <h3 className="font-bold mb-4">2. Núcleo PBL (Cenário, Problema & Objetivos)</h3>
 
@@ -324,7 +349,15 @@ export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }} className="mb-4">
             {etapas.map((e, idx) => (
-              <div key={idx} style={{ padding: '1rem', background: 'var(--bg-main)', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+              <div
+                key={idx}
+                style={{
+                  padding: '1rem',
+                  background: 'var(--bg-main)',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-color)'
+                }}
+              >
                 <div className="flex justify-between items-center mb-2">
                   <span className="font-bold text-sm">Etapa #{idx + 1}</span>
                   {etapas.length > 1 && (
@@ -406,7 +439,7 @@ export const EditorPBLProfessorView: React.FC<Props> = ({ activityId, navigate }
             <Save size={18} /> Salvar Rascunho
           </button>
           <button type="button" onClick={() => saveActivity(true)} disabled={submitting} className="btn btn-primary">
-            <Send size={18} /> {submitting ? 'Enviando...' : 'Enviar para Análise da Administração'}
+            <Send size={18} /> {submitting ? 'Enviando...' : 'Enviar para Análise'}
           </button>
         </div>
       </form>

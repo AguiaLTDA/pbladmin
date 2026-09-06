@@ -164,9 +164,45 @@ export interface StudentRegistrationInput {
 }
 
 export interface StudentRegistration extends StudentRegistrationInput {
-  id: string;
-  criadoEm?: string;
-  status?: string;
+  id: number;
+  criado_em: string;
+  status: 'PENDENTE' | 'APROVADO' | 'REJEITADO';
+  usuario_id?: number | null;
+  justificativa_rejeicao?: string | null;
+}
+
+// --- AUTO-MATRÍCULA E GRUPO PBL (PORTAL DO ALUNO) ---
+
+export interface TurmaOption {
+  id: number;
+  codigo: string;
+  nome: string;
+  disciplina_nome?: string;
+  curso_nome?: string;
+  periodo_nome?: string;
+}
+
+export interface GrupoOption {
+  id: number;
+  nome: string;
+  turma_id: number;
+  turma_nome?: string;
+  total_integrantes?: number;
+}
+
+export interface GrupoMembro {
+  id: number;
+  nome: string;
+  email: string;
+}
+
+export interface MinhaMatricula {
+  matricula_id: number;
+  turma_id: number;
+  turma_nome: string;
+  turma_codigo: string;
+  grupo_id: number | null;
+  grupo_nome: string | null;
 }
 
 // --- HORÁRIO ACADÊMICO & VÍNCULOS DO DOCENTE ---
@@ -209,4 +245,63 @@ export interface ProfessorBindings {
   professorId: number;
   turmas: ProfessorClassBinding[];
   disciplinas: Array<{ id: number; nome: string; codigo: string; curso_nome: string }>;
+}
+
+// --- ARQUIVO ORIENTADOR VINCULADO À CONTA DO PROFESSOR ---
+
+export interface OrientadorFile {
+  vinculo_id: number;
+  vinculado_em: string;
+  rotulo?: string;
+  arquivo_id: number;
+  nome_original: string;
+  tamanho_bytes: number;
+  mime_type: string;
+  categoria?: string;
+}
+
+export interface OrientadorFileAdminRow {
+  professor_id: number;
+  professor_nome: string;
+  professor_email: string;
+  vinculo_id: number | null;
+  vinculado_em: string | null;
+  rotulo: string | null;
+  replicado_em: string | null;
+  arquivo_id: number | null;
+  nome_original: string | null;
+  tamanho_bytes: number | null;
+  mime_type: string | null;
+  categoria: string | null;
+  vinculado_por_nome: string | null;
+}
+
+export interface OrientadorReplicacaoResultado {
+  message: string;
+  atividades: Array<{ id: number; disciplinaNome: string; totalTurmas: number }>;
+}
+
+// --- SUGESTÕES/REVISÃO DO PROFESSOR SOBRE O ARQUIVO ORIENTADOR ---
+
+export interface OrientadorComment {
+  id: number;
+  texto: string;
+  criado_em: string;
+  disciplina_nome: string;
+  disciplina_codigo?: string;
+}
+
+export interface OrientadorReviewRow {
+  id: number;
+  texto: string;
+  criado_em: string;
+  professor_id: number;
+  professor_nome: string;
+  professor_email: string;
+  disciplina_id: number;
+  disciplina_nome: string;
+  disciplina_codigo?: string;
+  curso_nome?: string;
+  arquivo_nome?: string;
+  rotulo?: string;
 }

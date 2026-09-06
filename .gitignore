@@ -18,6 +18,16 @@ server/uploads/*
 .env
 .env.local
 
+# Google service account key (nunca deve ser versionada)
+server/google-service-account.json
+
+# Pasta de entrada temporária para import em lote (PDFs reais de professores/alunos —
+# nunca deve ir para um repositório público; ver server/src/scripts/importOrientadorFiles.ts)
+pbl1prof/
+
+# Estado local de sessão do Claude Code (mantém launch.json, que é config de dev compartilhável)
+.claude/*.lock
+
 # OS & IDE
 .vscode/
 .idea/

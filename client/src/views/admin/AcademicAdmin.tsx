@@ -1,12 +1,45 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
-import { BookOpen, Layers, Users, Plus, UserCheck, GraduationCap } from 'lucide-react';
+import { OrientadorFileAdminRow, OrientadorReplicacaoResultado, OrientadorReviewRow } from '../../types';
+import { BookOpen, Layers, Users, Plus, UserCheck, GraduationCap, Upload, FileText, MessageSquare, CheckCircle2 } from 'lucide-react';
+
+function formatarTamanho(bytes: number): string {
+  if (!bytes) return '-';
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+interface RevisaoDisciplina {
+  cursoNome?: string;
+  itens: OrientadorReviewRow[];
+}
+
+interface RevisaoDocente {
+  email: string;
+  disciplinas: Record<string, RevisaoDisciplina>;
+}
+
+/** Agrupa as sugestões dos professores por docente e, dentro dele, por disciplina. */
+function agruparRevisoesPorDocente(reviews: OrientadorReviewRow[]): Record<string, RevisaoDocente> {
+  const grupos: Record<string, RevisaoDocente> = {};
+  for (const r of reviews) {
+    if (!grupos[r.professor_nome]) {
+      grupos[r.professor_nome] = { email: r.professor_email, disciplinas: {} };
+    }
+    const disciplinas = grupos[r.professor_nome].disciplinas;
+    if (!disciplinas[r.disciplina_nome]) {
+      disciplinas[r.disciplina_nome] = { cursoNome: r.curso_nome, itens: [] };
+    }
+    disciplinas[r.disciplina_nome].itens.push(r);
+  }
+  return grupos;
+}
 
 export const AcademicAdminView: React.FC = () => {
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'cursos' | 'disciplinas' | 'turmas' | 'grupos' | 'vinculos'>('turmas');
+  const [activeTab, setActiveTab] = useState<'cursos' | 'disciplinas' | 'turmas' | 'grupos' | 'orientador' | 'revisao'>('turmas');
 
   const [courses, setCourses] = useState<any[]>([]);
   const [disciplines, setDisciplines] = useState<any[]>([]);
@@ -15,6 +48,12 @@ export const AcademicAdminView: React.FC = () => {
   const [professors, setProfessors] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
+  const [orientadorFiles, setOrientadorFiles] = useState<OrientadorFileAdminRow[]>([]);
+  const [orientadorReviews, setOrientadorReviews] = useState<OrientadorReviewRow[]>([]);
+  const [orientadorAlvoId, setOrientadorAlvoId] = useState<number | null>(null);
+  const [enviandoOrientador, setEnviandoOrientador] = useState(false);
+  const orientadorInputRef = useRef<HTMLInputElement>(null);
+  const [replicandoProfessorId, setReplicandoProfessorId] = useState<number | null>(null);
 
   // Modais Forms
   const [showCourseModal, setShowCourseModal] = useState(false);
@@ -43,9 +82,11 @@ export const AcademicAdminView: React.FC = () => {
       apiRequest('/academic/groups'),
       apiRequest('/academic/users?perfil=PROFESSOR'),
       apiRequest('/academic/users?perfil=ALUNO'),
-      apiRequest('/academic/periods')
+      apiRequest('/academic/periods'),
+      apiRequest('/academic/orientador-files'),
+      apiRequest('/academic/orientador-reviews')
     ])
-      .then(([c, d, cl, g, p, s, per]) => {
+      .then(([c, d, cl, g, p, s, per, orient, reviews]) => {
         setCourses(c);
         setDisciplines(d);
         setClasses(cl);
@@ -53,6 +94,8 @@ export const AcademicAdminView: React.FC = () => {
         setProfessors(p);
         setStudents(s);
         setPeriods(per);
+        setOrientadorFiles(orient);
+        setOrientadorReviews(reviews);
       })
       .catch((err) => showToast(err.message, 'error'));
   };
@@ -117,6 +160,76 @@ export const AcademicAdminView: React.FC = () => {
     }
   };
 
+  const handlePickOrientadorFile = (professorId: number) => {
+    setOrientadorAlvoId(professorId);
+    orientadorInputRef.current?.click();
+  };
+
+  const handleUploadOrientadorFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !orientadorAlvoId) return;
+
+    setEnviandoOrientador(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const upload = await apiRequest<{ id: number }>('/files/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      await apiRequest('/academic/orientador-files', {
+        method: 'POST',
+        body: JSON.stringify({ professorId: orientadorAlvoId, arquivoId: upload.id })
+      });
+
+      showToast('Arquivo orientador vinculado com sucesso!', 'success');
+      reloadData();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao vincular arquivo orientador.', 'error');
+    } finally {
+      setEnviandoOrientador(false);
+      setOrientadorAlvoId(null);
+      if (orientadorInputRef.current) orientadorInputRef.current.value = '';
+    }
+  };
+
+  const handleAprovarEReplicar = async (professorId: number, nome: string) => {
+    if (
+      !window.confirm(
+        `Aprovar o arquivo orientador de ${nome} e replicá-lo em novas atividades PBL (uma por disciplina, com as turmas já designadas)? Esta ação não pode ser desfeita.`
+      )
+    ) {
+      return;
+    }
+
+    setReplicandoProfessorId(professorId);
+    try {
+      const resultado = await apiRequest<OrientadorReplicacaoResultado>(
+        `/academic/orientador-files/${professorId}/aprovar-replicar`,
+        { method: 'POST' }
+      );
+      showToast(resultado.message, 'success');
+      reloadData();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao aprovar e replicar o arquivo orientador.', 'error');
+    } finally {
+      setReplicandoProfessorId(null);
+    }
+  };
+
+  const handleUnlinkOrientadorFile = async (professorId: number, nome: string) => {
+    if (!window.confirm(`Desvincular o arquivo orientador de ${nome}?`)) return;
+    try {
+      await apiRequest(`/academic/orientador-files/${professorId}`, { method: 'DELETE' });
+      showToast('Arquivo orientador desvinculado.', 'info');
+      reloadData();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao desvincular arquivo orientador.', 'error');
+    }
+  };
+
   const handleEnrollStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!enrollStudentId || !enrollClassId) return;
@@ -177,7 +290,28 @@ export const AcademicAdminView: React.FC = () => {
         >
           Grupos PBL ({groups.length})
         </button>
+
+        <button
+          onClick={() => setActiveTab('orientador')}
+          className={`btn btn-sm ${activeTab === 'orientador' ? 'btn-primary' : 'btn-secondary'}`}
+        >
+          <FileText size={16} /> Arquivo Orientador ({professors.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('revisao')}
+          className={`btn btn-sm ${activeTab === 'revisao' ? 'btn-primary' : 'btn-secondary'}`}
+        >
+          <MessageSquare size={16} /> Revisão pelos Professores ({orientadorReviews.length})
+        </button>
       </div>
+
+      <input
+        ref={orientadorInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        onChange={handleUploadOrientadorFile}
+      />
 
       {/* Conteúdo da Aba Turmas */}
       {activeTab === 'turmas' && (
@@ -304,6 +438,138 @@ export const AcademicAdminView: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Conteúdo da Aba Arquivo Orientador */}
+      {activeTab === 'orientador' && (
+        <div>
+          <div className="flex justify-between items-center mb-4">
+            <span className="font-bold text-sm">
+              Vincule o material orientativo à conta de cada professor:
+            </span>
+          </div>
+
+          <div className="table-responsive">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Professor</th>
+                  <th>Arquivo Vinculado</th>
+                  <th>Lote</th>
+                  <th>Vinculado em</th>
+                  <th style={{ textAlign: 'right' }}>Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orientadorFiles.map((row) => (
+                  <tr key={row.professor_id}>
+                    <td>
+                      <div className="font-bold">{row.professor_nome}</div>
+                      <div className="text-muted text-sm">{row.professor_email}</div>
+                    </td>
+                    <td>
+                      {row.nome_original ? (
+                        <span className="flex items-center gap-2">
+                          <FileText size={14} className="text-muted" />
+                          {row.nome_original}
+                          <span className="text-muted text-sm">({formatarTamanho(row.tamanho_bytes || 0)})</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted text-sm">Nenhum arquivo vinculado</span>
+                      )}
+                    </td>
+                    <td>{row.rotulo ? <span className="pill-tag pill-tag-green">{row.rotulo}</span> : '-'}</td>
+                    <td>{row.vinculado_em ? new Date(row.vinculado_em).toLocaleString('pt-BR') : '-'}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div className="flex gap-2 justify-end">
+                        {row.nome_original && (
+                          row.replicado_em ? (
+                            <span className="flex items-center gap-1 text-sm" style={{ color: 'var(--primary)' }}>
+                              <CheckCircle2 size={14} /> Replicado em {new Date(row.replicado_em).toLocaleDateString('pt-BR')}
+                            </span>
+                          ) : (
+                            <button
+                              disabled={replicandoProfessorId === row.professor_id}
+                              onClick={() => handleAprovarEReplicar(row.professor_id, row.professor_nome)}
+                              className="btn btn-primary btn-sm"
+                            >
+                              <CheckCircle2 size={14} />{' '}
+                              {replicandoProfessorId === row.professor_id ? 'Replicando...' : 'Aprovar e Replicar'}
+                            </button>
+                          )
+                        )}
+                        <button
+                          disabled={enviandoOrientador}
+                          onClick={() => handlePickOrientadorFile(row.professor_id)}
+                          className="btn btn-secondary btn-sm"
+                        >
+                          <Upload size={14} /> {row.nome_original ? 'Substituir' : 'Vincular'}
+                        </button>
+                        {row.nome_original && (
+                          <button
+                            onClick={() => handleUnlinkOrientadorFile(row.professor_id, row.professor_nome)}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            Desvincular
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Conteúdo da Aba Revisão pelos Professores */}
+      {activeTab === 'revisao' && (
+        <div>
+          <div className="mb-4">
+            <span className="font-bold text-sm">
+              Sugestões e ajustes reportados pelos professores sobre o material orientativo,
+              organizados por docente e disciplina. A coordenação apenas consulta o retorno aqui —
+              a edição do material é feita substituindo o arquivo na aba "Arquivo Orientador".
+            </span>
+          </div>
+
+          {orientadorReviews.length === 0 ? (
+            <div className="card text-center py-8">
+              <MessageSquare size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
+              <h3 className="font-bold">Nenhuma sugestão recebida ainda</h3>
+              <p className="text-muted text-sm">
+                Quando um professor enviar uma sugestão sobre o arquivo orientador, ela aparecerá aqui.
+              </p>
+            </div>
+          ) : (
+            Object.entries(agruparRevisoesPorDocente(orientadorReviews)).map(([professorNome, grupo]) => (
+              <div key={professorNome} className="card mb-4" style={{ padding: '1.25rem' }}>
+                <div className="font-bold" style={{ fontSize: '1.05rem' }}>{professorNome}</div>
+                <div className="text-muted text-sm mb-3">{grupo.email}</div>
+
+                {Object.entries(grupo.disciplinas).map(([disciplinaNome, dados]) => (
+                  <div key={disciplinaNome} className="mb-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="pill-tag">{disciplinaNome}</span>
+                      {dados.cursoNome && <span className="text-muted text-sm">{dados.cursoNome}</span>}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {dados.itens.map((item) => (
+                        <div key={item.id} className="card" style={{ padding: '0.75rem 1rem' }}>
+                          <div className="text-sm">{item.texto}</div>
+                          <div className="text-muted text-sm mt-1">
+                            {new Date(item.criado_em).toLocaleString('pt-BR')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
         </div>
       )}
 

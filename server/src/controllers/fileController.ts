@@ -1,28 +1,14 @@
 import { Response } from 'express';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import crypto from 'crypto';
 import { queryAsync, runAsync, getAsync } from '../config/db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
+import { uploadToDrive, downloadFromDrive } from '../services/googleDrive';
 
-const uploadsDir = path.resolve(__dirname, '../../uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Multer Storage config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const uniqueName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
-    cb(null, uniqueName);
-  }
-});
+// Arquivos ficam em buffer só até serem enviados ao Google Drive — nada é gravado em disco local.
+const storage = multer.memoryStorage();
 
 // File filter check for allowed formats & executable blocking
 const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
@@ -64,18 +50,19 @@ export async function uploadFile(req: AuthenticatedRequest, res: Response) {
       return res.status(400).json({ message: 'Nenhum arquivo enviado.' });
     }
 
-    const { originalname, filename, size, mimetype, path: filePath } = req.file;
+    const { originalname, size, mimetype, buffer } = req.file;
 
-    // Calculate MD5 hash
-    const fileBuffer = fs.readFileSync(filePath);
-    const hashMd5 = crypto.createHash('md5').update(fileBuffer).digest('hex');
-
+    const hashMd5 = crypto.createHash('md5').update(buffer).digest('hex');
     const category = getCategoryFromMime(mimetype, originalname);
+
+    const ext = path.extname(originalname);
+    const driveFilename = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
+    const driveFileId = await uploadToDrive(buffer, driveFilename, mimetype);
 
     const resIns = await runAsync(
       `INSERT INTO arquivos (nome_original, caminho_armazenado, tamanho_bytes, mime_type, categoria, hash_md5, enviado_por)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [originalname, filename, size, mimetype, category, hashMd5, userId]
+      [originalname, driveFileId, size, mimetype, category, hashMd5, userId]
     );
 
     await logAudit(userId, 'UPLOAD_ARQUIVO', 'arquivos', resIns.lastID, { originalname, size, category });
@@ -162,24 +149,35 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response) {
         [id, user.id]
       );
 
-      if (!isOwner && !isMaterialProprio && !isEntregaDaMinhaTurma) {
+      const isMeuArquivoOrientador = await getAsync<{ id: number }>(
+        `SELECT id FROM arquivos_orientadores WHERE arquivo_id = ? AND professor_id = ? AND ativo = 1`,
+        [id, user.id]
+      );
+
+      if (!isOwner && !isMaterialProprio && !isEntregaDaMinhaTurma && !isMeuArquivoOrientador) {
         return res.status(403).json({
           message: 'Acesso negado. Este arquivo não pertence às suas atividades nem às turmas que você leciona.'
         });
       }
     }
 
-    const fullPath = path.resolve(uploadsDir, fileRow.caminho_armazenado);
-
-    if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ message: 'Arquivo físico não encontrado no servidor.' });
+    let driveStream: NodeJS.ReadableStream;
+    try {
+      driveStream = await downloadFromDrive(fileRow.caminho_armazenado);
+    } catch (err) {
+      console.error('Erro ao buscar arquivo no Google Drive:', err);
+      return res.status(404).json({ message: 'Arquivo não encontrado no Google Drive.' });
     }
 
     await logAudit(user.id, 'DOWNLOAD_ARQUIVO', 'arquivos', String(id));
 
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileRow.nome_original)}"`);
     res.setHeader('Content-Type', fileRow.mime_type);
-    return res.sendFile(fullPath);
+    driveStream.on('error', (err) => {
+      console.error('Erro ao transmitir arquivo do Google Drive:', err);
+      if (!res.headersSent) res.status(500).json({ message: 'Erro ao transferir arquivo.' });
+    });
+    return driveStream.pipe(res);
   } catch (err) {
     console.error('File download error:', err);
     return res.status(500).json({ message: 'Erro ao transferir arquivo.' });
