@@ -25,7 +25,20 @@ app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
 // Root Endpoint Status
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', system: 'Plataforma PBL Backend API', timestamp: new Date() });
+  res.json({
+    status: 'OK',
+    system: 'Plataforma PBL Backend API',
+    timestamp: new Date(),
+    // Diagnóstico temporário de deploy: só diz se cada variável crítica está
+    // presente no processo, nunca expõe o valor. Remover depois de confirmar.
+    config: {
+      dbHost: Boolean(process.env.DB_HOST),
+      googleDriveKeyJson: Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_JSON),
+      googleDriveKeyFile: Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE),
+      googleDriveFolderId: Boolean(process.env.GOOGLE_DRIVE_FOLDER_ID),
+      jwtSecretCustom: Boolean(process.env.JWT_SECRET)
+    }
+  });
 });
 
 // Global Error Handler

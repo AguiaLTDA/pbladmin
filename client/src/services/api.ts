@@ -1,15 +1,20 @@
 import { isSupabaseConfigured } from './supabase';
 import { supabaseService } from './supabaseService';
 
-const API_BASE_URL = 'http://localhost:4000/api';
+// Em produção (build do GitHub Pages), aponta para o backend publicado no Render,
+// injetado em tempo de build via VITE_API_BASE_URL. Em dev local, cai no padrão
+// localhost:4000 quando a variável não está definida.
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
+  'http://localhost:4000/api';
 
 /**
  * Ordem de resolução de uma chamada de API, da fonte mais confiável para a
  * menos confiável:
  *
- *   1. Backend Express local (localhost:4000) — banco SQLite real, JWT, bcrypt,
- *      RBAC e auditoria. É a AUTORIDADE: se ele responder qualquer HTTP status,
- *      essa resposta vale, inclusive os erros (401/403/404/422).
+ *   1. Backend Express real (local ou publicado, ver API_BASE_URL acima) — banco
+ *      Postgres real, JWT, bcrypt, RBAC e auditoria. É a AUTORIDADE: se ele
+ *      responder qualquer HTTP status, essa resposta vale, inclusive os erros
+ *      (401/403/404/422).
  *   2. Supabase, quando VITE_SUPABASE_URL/ANON_KEY estiverem configuradas.
  *   3. Dados de demonstração em memória, só para a vitrine no GitHub Pages.
  *
@@ -22,12 +27,8 @@ export async function apiRequest<T = any>(
 ): Promise<T> {
   const token = localStorage.getItem('pbl_auth_token');
 
-  const isLocalHost =
-    typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-
   // 1. Backend Express real — prioridade máxima quando alcançável.
-  if (isLocalHost) {
+  {
     const headers: Record<string, string> = {
       ...(options.headers as Record<string, string>)
     };
@@ -45,9 +46,9 @@ export async function apiRequest<T = any>(
     try {
       response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
     } catch (fetchErr) {
-      // Só uma falha de REDE (servidor desligado) autoriza os fallbacks abaixo.
+      // Só uma falha de REDE (backend fora do ar) autoriza os fallbacks abaixo.
       console.warn(
-        `Backend local indisponível em ${API_BASE_URL}${endpoint}. Usando dados de demonstração.`
+        `Backend indisponível em ${API_BASE_URL}${endpoint}. Usando dados de demonstração.`
       );
     }
 

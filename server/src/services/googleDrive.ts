@@ -2,6 +2,10 @@ import { google } from 'googleapis';
 import path from 'path';
 import { Readable } from 'stream';
 
+// Local/dev: aponta para o arquivo baixado do Google Cloud Console.
+// Produção (Render e afins, sem disco persistente para um arquivo): o conteúdo
+// inteiro do JSON da chave vai direto numa variável de ambiente.
+const KEY_JSON = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_JSON;
 const KEY_FILE = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE
   ? path.resolve(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE)
   : undefined;
@@ -9,7 +13,7 @@ const KEY_FILE = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE
 const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
 const auth = new google.auth.GoogleAuth({
-  keyFile: KEY_FILE,
+  ...(KEY_JSON ? { credentials: JSON.parse(KEY_JSON) } : { keyFile: KEY_FILE }),
   // drive.file: a conta de serviço só enxerga arquivos que ela mesma criou via API,
   // suficiente aqui porque todo upload passa por este módulo.
   scopes: ['https://www.googleapis.com/auth/drive.file']
