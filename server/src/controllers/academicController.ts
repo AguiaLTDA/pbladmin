@@ -27,8 +27,18 @@ export async function listUsers(req: AuthenticatedRequest, res: Response) {
     }
     sql += ` ORDER BY u.nome ASC`;
 
-    const users = await queryAsync(sql, params);
-    return res.json(users);
+    const users = await queryAsync<any>(sql, params);
+    // O frontend espera perfilId/perfilNome (camelCase); o SQL devolve snake_case.
+    const mapped = users.map((u) => ({
+      id: u.id,
+      nome: u.nome,
+      email: u.email,
+      perfilId: u.perfil_id,
+      perfilNome: u.perfil_nome,
+      ativo: u.ativo,
+      criado_em: u.criado_em
+    }));
+    return res.json(mapped);
   } catch (err) {
     return res.status(500).json({ message: 'Erro ao listar usuários.' });
   }
