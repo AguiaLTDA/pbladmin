@@ -13,10 +13,13 @@ function gerarSenhaTemporaria(): string {
 // PUBLIC: autocadastro de estudante (antes do login)
 export async function criarPreCadastro(req: Request, res: Response) {
   try {
-    const { nome, email, matricula, cpf, telefone, curso, turma, periodo, origem } = req.body;
+    const { nome, email, matricula, cpf, telefone, curso, turma, periodo, origem, senha } = req.body;
 
     if (!nome || !email || !matricula || !curso) {
       return res.status(400).json({ message: 'Nome, e-mail, matrícula e curso são obrigatórios.' });
+    }
+    if (senha && String(senha).length < 6) {
+      return res.status(400).json({ message: 'A senha deve ter no mínimo 6 caracteres.' });
     }
 
     const contaExistente = await getAsync<{ id: number }>('SELECT id FROM usuarios WHERE LOWER(email) = LOWER(?)', [
@@ -34,16 +37,34 @@ export async function criarPreCadastro(req: Request, res: Response) {
       return res.status(409).json({ message: 'Já existe um cadastro em análise para este e-mail.' });
     }
 
+    // O aluno já escolhe a própria senha no autocadastro — só guardamos o hash aqui.
+    // Se vier em branco (ex.: pré-cadastro criado pelo admin sem definir senha), a
+    // aprovação cai de volta no fluxo antigo de gerar uma senha temporária.
+    const senhaHash = senha ? await bcrypt.hash(String(senha), 10) : null;
+
     const resInsert = await runAsync(
-      `INSERT INTO pre_cadastros (nome, email, matricula, cpf, telefone, curso, turma, periodo, origem)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [nome, email, matricula, cpf || null, telefone || null, curso, turma || null, periodo || null, origem || 'AUTOCADASTRO']
+      `INSERT INTO pre_cadastros (nome, email, matricula, cpf, telefone, curso, turma, periodo, origem, senha_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        nome,
+        email,
+        matricula,
+        cpf || null,
+        telefone || null,
+        curso,
+        turma || null,
+        periodo || null,
+        origem || 'AUTOCADASTRO',
+        senhaHash
+      ]
     );
 
     return res.status(201).json({
       id: resInsert.lastID,
       status: 'PENDENTE',
-      message: 'Cadastro recebido. Aguarde a validação da secretaria para liberar seu acesso.'
+      message: senhaHash
+        ? 'Cadastro recebido. Após a validação da secretaria, você já poderá entrar com o e-mail e a senha que definiu.'
+        : 'Cadastro recebido. Aguarde a validação da secretaria para liberar seu acesso.'
     });
   } catch (err) {
     console.error('Erro ao criar pré-cadastro:', err);
@@ -55,7 +76,10 @@ export async function criarPreCadastro(req: Request, res: Response) {
 export async function listarPreCadastros(req: AuthenticatedRequest, res: Response) {
   try {
     const { status } = req.query;
-    let sql = `SELECT * FROM pre_cadastros`;
+    // Nunca expõe `senha_hash` para o frontend — mesmo hasheada, não tem por que sair do servidor.
+    let sql = `SELECT id, nome, email, matricula, cpf, telefone, curso, turma, periodo, origem, status,
+                      usuario_id, aprovado_por, justificativa_rejeicao, criado_em, atualizado_em
+               FROM pre_cadastros`;
     const params: any[] = [];
 
     if (status) {
@@ -81,6 +105,7 @@ export async function aprovarPreCadastro(req: AuthenticatedRequest, res: Respons
       nome: string;
       email: string;
       status: string;
+      senha_hash: string | null;
     }>('SELECT * FROM pre_cadastros WHERE id = ?', [id]);
 
     if (!preCadastro) return res.status(404).json({ message: 'Pré-cadastro não encontrado.' });
@@ -101,8 +126,11 @@ export async function aprovarPreCadastro(req: AuthenticatedRequest, res: Respons
       return res.status(500).json({ message: 'Perfil ALUNO não está configurado no sistema.' });
     }
 
-    const senhaTemporaria = gerarSenhaTemporaria();
-    const senhaHash = await bcrypt.hash(senhaTemporaria, 10);
+    // O aluno já escolheu a própria senha no autocadastro — só nesse caso não existe
+    // `senha_hash` (ex.: pré-cadastro antigo ou criado pelo admin sem senha) é que
+    // caímos de volta no fluxo de gerar uma senha temporária para repassar ao aluno.
+    const senhaTemporaria = preCadastro.senha_hash ? undefined : gerarSenhaTemporaria();
+    const senhaHash = preCadastro.senha_hash || (await bcrypt.hash(senhaTemporaria as string, 10));
 
     const novoUsuario = await runAsync(
       `INSERT INTO usuarios (nome, email, senha_hash, perfil_id, ativo) VALUES (?, ?, ?, ?, 1)`,
@@ -122,7 +150,9 @@ export async function aprovarPreCadastro(req: AuthenticatedRequest, res: Respons
     });
 
     return res.json({
-      message: 'Cadastro aprovado. Conta de aluno criada com sucesso.',
+      message: senhaTemporaria
+        ? 'Cadastro aprovado. Conta de aluno criada com sucesso.'
+        : 'Cadastro aprovado. O aluno já pode entrar com a senha que definiu no cadastro.',
       usuarioId: novoUsuario.lastID,
       email: preCadastro.email,
       senhaTemporaria

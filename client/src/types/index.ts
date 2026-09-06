@@ -161,6 +161,7 @@ export interface StudentRegistrationInput {
   turma?: string;
   periodo?: string;
   origem?: string;
+  senha?: string;
 }
 
 export interface StudentRegistration extends StudentRegistrationInput {

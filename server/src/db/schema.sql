@@ -434,6 +434,7 @@ CREATE TABLE IF NOT EXISTS pre_cadastros (
   turma TEXT,
   periodo TEXT,
   origem TEXT DEFAULT 'AUTOCADASTRO', -- 'AUTOCADASTRO' ou 'ADMIN'
+  senha_hash TEXT DEFAULT NULL, -- senha escolhida pelo próprio aluno no autocadastro; se nulo, a aprovação gera uma temporária
   status TEXT NOT NULL DEFAULT 'PENDENTE', -- 'PENDENTE', 'APROVADO', 'REJEITADO'
   usuario_id INTEGER DEFAULT NULL, -- preenchido quando aprovado
   aprovado_por INTEGER DEFAULT NULL,

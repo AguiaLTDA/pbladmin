@@ -41,4 +41,7 @@ export async function runMigrations() {
   } catch (err) {
     console.warn('Não foi possível criar idx_grupo_nome_turma_unico (prováveis duplicatas existentes):', err);
   }
+
+  // Bancos criados antes do autocadastro com senha própria não têm esta coluna em pre_cadastros.
+  await runAsync(`ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS senha_hash TEXT DEFAULT NULL`);
 }

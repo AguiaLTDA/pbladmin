@@ -99,8 +99,9 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
           </h1>
 
           <p style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.9rem', lineHeight: 1.6 }}>
-            Preencha seus dados acadêmicos. O registro é enviado para a secretaria e, após a
-            validação, seu acesso ao portal é liberado.
+            Preencha seus dados acadêmicos e já escolha a senha de acesso — seu login é o
+            e-mail informado abaixo. O registro é enviado para a secretaria e, após a
+            validação, você já entra no portal com essas mesmas credenciais.
           </p>
         </div>
 
@@ -111,7 +112,8 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
               <h2 className="font-bold text-lg mb-2">Cadastro recebido!</h2>
               <p className="text-muted text-sm mb-4">
                 Protocolo <strong>#{concluido.id}</strong>. Seu cadastro foi registrado e aguarda a
-                validação da secretaria para liberar seu acesso ao portal.
+                validação da secretaria. Assim que for aprovado, entre no portal com o e-mail e a
+                senha que você acabou de definir.
               </p>
 
               <div className="flex gap-2" style={{ justifyContent: 'center' }}>
@@ -125,7 +127,12 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
             </div>
           ) : (
             <>
-              <FormularioEstudante onSubmit={handleSubmit} submitting={submitting} origem="AUTOCADASTRO" />
+              <FormularioEstudante
+                onSubmit={handleSubmit}
+                submitting={submitting}
+                origem="AUTOCADASTRO"
+                senhaObrigatoria
+              />
 
               <div
                 className="flex items-center gap-2 text-muted"

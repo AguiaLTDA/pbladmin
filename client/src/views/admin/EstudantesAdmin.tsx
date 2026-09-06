@@ -58,12 +58,15 @@ export const EstudantesAdminView: React.FC = () => {
     if (!window.confirm(`Aprovar o cadastro de ${item.nome} e criar a conta de aluno dele?`)) return;
 
     try {
-      const res = await apiRequest<{ email: string; senhaTemporaria: string; message: string }>(
+      const res = await apiRequest<{ email: string; senhaTemporaria?: string; message: string }>(
         `/admin/pre-cadastros/${item.id}/aprovar`,
         { method: 'POST' }
       );
       showToast(res.message, 'success');
-      setCredenciaisGeradas({ email: res.email, senhaTemporaria: res.senhaTemporaria });
+      // Só existe senha temporária quando o aluno não definiu a própria no autocadastro.
+      if (res.senhaTemporaria) {
+        setCredenciaisGeradas({ email: res.email, senhaTemporaria: res.senhaTemporaria });
+      }
       await carregar();
     } catch (err: any) {
       showToast(err.message || 'Não foi possível aprovar o cadastro.', 'error');
