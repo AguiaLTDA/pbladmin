@@ -51,12 +51,14 @@ router.post('/academic/classes', authenticateToken, requireRole('ADMIN'), academ
 router.get('/academic/groups', authenticateToken, academicCtrl.listGroups);
 router.post('/academic/groups', authenticateToken, requireRole('ADMIN'), academicCtrl.createGroup);
 router.get('/academic/groups/:id/membros', authenticateToken, academicCtrl.listGroupMembers);
+router.post('/academic/groups/:id/membros', authenticateToken, requireRole('ALUNO'), academicCtrl.addGroupMember);
 
 router.get('/academic/periods', authenticateToken, academicCtrl.listPeriods);
 
 // --- AUTO-MATRÍCULA DO ALUNO (portal do aluno: escolhe a turma e informa o grupo) ---
 router.get('/academic/my-enrollment', authenticateToken, requireRole('ALUNO'), academicCtrl.listMyEnrollment);
 router.post('/academic/my-enrollment', authenticateToken, requireRole('ALUNO'), academicCtrl.selfEnroll);
+router.get('/academic/students/search', authenticateToken, requireRole('ALUNO'), academicCtrl.searchStudents);
 
 // --- HORÁRIO ACADÊMICO & VÍNCULOS DO DOCENTE ---
 // Professor recebe apenas a própria grade; admin recebe a grade completa.

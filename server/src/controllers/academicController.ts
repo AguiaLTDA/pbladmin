@@ -432,6 +432,116 @@ export async function listGroupMembers(req: AuthenticatedRequest, res: Response)
   }
 }
 
+/**
+ * ALUNO: busca colegas por nome ou e-mail para indicar diretamente para o
+ * próprio grupo (em vez de depender de os dois digitarem o mesmo nome de
+ * grupo). Exige pelo menos 3 caracteres e não lista o próprio requisitante,
+ * para não virar uma listagem geral do corpo discente.
+ */
+export async function searchStudents(req: AuthenticatedRequest, res: Response) {
+  try {
+    const alunoId = req.user?.id;
+    const termo = String(req.query.q || '').trim();
+    if (termo.length < 3) {
+      return res.status(400).json({ message: 'Digite ao menos 3 caracteres para buscar.' });
+    }
+
+    const resultados = await queryAsync(
+      `SELECT u.id, u.nome, u.email
+       FROM usuarios u
+       JOIN perfis p ON u.perfil_id = p.id
+       WHERE p.nome = 'ALUNO' AND u.ativo = 1 AND u.deletado_em IS NULL
+         AND u.id != ?
+         AND (LOWER(u.nome) LIKE LOWER(?) OR LOWER(u.email) LIKE LOWER(?))
+       ORDER BY u.nome ASC
+       LIMIT 8`,
+      [alunoId, `%${termo}%`, `%${termo}%`]
+    );
+    return res.json(resultados);
+  } catch (err) {
+    console.error('Erro ao buscar colegas:', err);
+    return res.status(500).json({ message: 'Erro ao buscar colegas.' });
+  }
+}
+
+/**
+ * ALUNO: indica um colega para o próprio grupo — matricula-o (se ainda não
+ * estiver) na turma do grupo e o vincula a este grupo. Só quem já pertence ao
+ * grupo pode chamar esta rota. Se o colega já estiver em OUTRO grupo ativo
+ * nesta turma, a indicação é recusada: mover alguém de grupo sem que ele
+ * mesmo peça evitaria que o próprio colega perceba/concorde com a troca.
+ */
+export async function addGroupMember(req: AuthenticatedRequest, res: Response) {
+  try {
+    const alunoId = req.user?.id;
+    if (!alunoId) return res.status(401).json({ message: 'Não autenticado.' });
+
+    const { id } = req.params;
+    const { usuarioId } = req.body;
+    if (!usuarioId) return res.status(400).json({ message: 'Selecione o colega que deseja indicar.' });
+
+    const grupo = await getAsync<{ id: number; turma_id: number }>(
+      `SELECT id, turma_id FROM grupos WHERE id = ? AND deletado_em IS NULL`,
+      [id]
+    );
+    if (!grupo) return res.status(404).json({ message: 'Grupo não encontrado.' });
+
+    const requisitanteNoGrupo = await getAsync<{ id: number }>(
+      `SELECT id FROM matriculas WHERE usuario_id = ? AND grupo_id = ? AND deletado_em IS NULL`,
+      [alunoId, grupo.id]
+    );
+    if (!requisitanteNoGrupo) {
+      return res.status(403).json({ message: 'Você só pode indicar colegas para um grupo ao qual já pertence.' });
+    }
+
+    const colega = await getAsync<{ id: number }>(
+      `SELECT u.id FROM usuarios u JOIN perfis p ON u.perfil_id = p.id
+       WHERE u.id = ? AND p.nome = 'ALUNO' AND u.ativo = 1 AND u.deletado_em IS NULL`,
+      [usuarioId]
+    );
+    if (!colega) return res.status(404).json({ message: 'Aluno não encontrado.' });
+
+    const matriculaColega = await getAsync<{ id: number; grupo_id: number | null }>(
+      `SELECT id, grupo_id FROM matriculas WHERE usuario_id = ? AND turma_id = ? AND deletado_em IS NULL`,
+      [usuarioId, grupo.turma_id]
+    );
+
+    if (matriculaColega) {
+      if (matriculaColega.grupo_id === grupo.id) {
+        return res.status(200).json({ message: 'Este colega já está no grupo.' });
+      }
+      if (matriculaColega.grupo_id) {
+        return res.status(409).json({
+          message: 'Este colega já pertence a outro grupo nesta turma. Peça para ele trocar de grupo pelo próprio portal dele.'
+        });
+      }
+      await runAsync(`UPDATE matriculas SET grupo_id = ? WHERE id = ?`, [grupo.id, matriculaColega.id]);
+    } else {
+      await runAsync(`INSERT INTO matriculas (usuario_id, turma_id, grupo_id) VALUES (?, ?, ?)`, [
+        usuarioId,
+        grupo.turma_id,
+        grupo.id
+      ]);
+    }
+
+    await logAudit(alunoId, 'INDICAR_COLEGA_GRUPO', 'matriculas', undefined, { grupoId: grupo.id, usuarioId });
+
+    const membros = await queryAsync(
+      `SELECT u.id, u.nome, u.email
+       FROM matriculas m
+       JOIN usuarios u ON m.usuario_id = u.id
+       WHERE m.grupo_id = ? AND m.deletado_em IS NULL
+       ORDER BY u.nome ASC`,
+      [grupo.id]
+    );
+
+    return res.status(200).json({ message: 'Colega adicionado ao grupo com sucesso.', membros });
+  } catch (err) {
+    console.error('Erro ao indicar colega para o grupo:', err);
+    return res.status(500).json({ message: 'Erro ao indicar o colega para o grupo.' });
+  }
+}
+
 export async function listPeriods(req: AuthenticatedRequest, res: Response) {
   try {
     const list = await queryAsync(`SELECT * FROM periodos_letivos ORDER BY nome DESC`);

@@ -281,7 +281,7 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
     ] as unknown as T;
   }
 
-  if (endpoint.match(/\/academic\/groups\/\d+\/membros/)) {
+  if (endpoint.match(/\/academic\/groups\/\d+\/membros/) && (options.method || 'GET').toUpperCase() === 'GET') {
     return [] as unknown as T;
   }
 
@@ -294,6 +294,10 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
   }
 
   if (endpoint.includes('/academic/my-enrollment')) {
+    return [] as unknown as T;
+  }
+
+  if (endpoint.includes('/academic/students/search')) {
     return [] as unknown as T;
   }
 
