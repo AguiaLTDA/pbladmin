@@ -196,9 +196,10 @@ const SeletorGrupo: React.FC<SeletorGrupoProps> = ({ turmaId, onConfirmado, onCa
           type="button"
           onClick={() => setModoGrupo('existente')}
           className={`btn btn-sm ${modoGrupo === 'existente' ? 'btn-primary' : 'btn-secondary'}`}
-          disabled={gruposDaTurma.length === 0}
+          // Enquanto a lista não chega, o botão não deve dizer que a turma tem zero grupos.
+          disabled={carregandoGrupos || gruposDaTurma.length === 0}
         >
-          <LogIn size={14} /> Entrar em um grupo existente ({gruposDaTurma.length})
+          <LogIn size={14} /> Entrar em um grupo existente ({carregandoGrupos ? '...' : gruposDaTurma.length})
         </button>
       </div>
 

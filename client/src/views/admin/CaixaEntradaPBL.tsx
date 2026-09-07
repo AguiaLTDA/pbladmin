@@ -1,17 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
-import { PBLActivity } from '../../types';
-import { Inbox, Eye, Search, Filter, CheckCircle2, Clock, AlertTriangle, Edit3, PlusCircle } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
+import { PBLActivity, AtividadeExcluida } from '../../types';
+import {
+  Inbox,
+  Eye,
+  Search,
+  Filter,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  Edit3,
+  PlusCircle,
+  Trash2,
+  RotateCcw
+} from 'lucide-react';
 
 interface Props {
   navigate: (path: string) => void;
 }
 
 export const CaixaEntradaPBLView: React.FC<Props> = ({ navigate }) => {
+  const { showToast } = useToast();
   const [activities, setActivities] = useState<PBLActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [excluidas, setExcluidas] = useState<AtividadeExcluida[]>([]);
+  const [mostrarLixeira, setMostrarLixeira] = useState(false);
 
   const fetchActivities = () => {
     setLoading(true);
@@ -25,9 +41,50 @@ export const CaixaEntradaPBLView: React.FC<Props> = ({ navigate }) => {
       .finally(() => setLoading(false));
   };
 
+  const fetchExcluidas = () => {
+    apiRequest<AtividadeExcluida[]>('/pbl/activities/excluidas')
+      .then(setExcluidas)
+      .catch(() => setExcluidas([]));
+  };
+
   useEffect(() => {
     fetchActivities();
   }, [statusFilter]);
+
+  useEffect(() => {
+    fetchExcluidas();
+  }, []);
+
+  const handleExcluir = async (act: PBLActivity) => {
+    if (
+      !window.confirm(
+        `Excluir a atividade "${act.titulo}"? Ela sai da Caixa de Entrada, dos relatórios e do portal ` +
+          `dos alunos. As entregas e notas ficam guardadas, e a atividade pode ser restaurada pela lixeira.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const res = await apiRequest<{ message: string }>(`/pbl/activities/${act.id}`, { method: 'DELETE' });
+      showToast(res.message, 'success');
+      fetchActivities();
+      fetchExcluidas();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao excluir a atividade.', 'error');
+    }
+  };
+
+  const handleRestaurar = async (act: AtividadeExcluida) => {
+    try {
+      const res = await apiRequest<{ message: string }>(`/pbl/activities/${act.id}/restaurar`, { method: 'POST' });
+      showToast(res.message, 'success');
+      fetchActivities();
+      fetchExcluidas();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao restaurar a atividade.', 'error');
+    }
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,6 +211,14 @@ export const CaixaEntradaPBLView: React.FC<Props> = ({ navigate }) => {
                         <Eye size={16} />
                         Revisar & Avaliar
                       </button>
+                      <button
+                        onClick={() => handleExcluir(act)}
+                        className="btn btn-secondary btn-sm"
+                        title="Excluir esta atividade (recuperável)"
+                      >
+                        <Trash2 size={16} />
+                        Excluir
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -162,6 +227,59 @@ export const CaixaEntradaPBLView: React.FC<Props> = ({ navigate }) => {
           </table>
         </div>
       )}
+
+      {/* Lixeira de atividades PBL excluídas */}
+      <div className="card" style={{ padding: '1rem', marginTop: '1rem' }}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold flex items-center gap-2">
+            <Trash2 size={18} color="var(--primary)" /> Lixeira de atividades ({excluidas.length})
+          </h3>
+          <button onClick={() => setMostrarLixeira((v) => !v)} className="btn btn-secondary btn-sm">
+            {mostrarLixeira ? 'Ocultar' : 'Ver excluídas'}
+          </button>
+        </div>
+
+        {mostrarLixeira && (
+          <div style={{ marginTop: '0.75rem' }}>
+            {excluidas.length === 0 ? (
+              <span className="text-muted text-sm">Nenhuma atividade excluída.</span>
+            ) : (
+              <div className="table-responsive">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Código</th>
+                      <th>Título</th>
+                      <th>Curso / Disciplina</th>
+                      <th>Excluída em</th>
+                      <th style={{ textAlign: 'right' }}>Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {excluidas.map((act) => (
+                      <tr key={act.id}>
+                        <td>
+                          <strong style={{ color: 'var(--primary)' }}>{act.codigo_unico}</strong>
+                        </td>
+                        <td>{act.titulo}</td>
+                        <td className="text-sm">
+                          {[act.curso_nome, act.disciplina_nome].filter(Boolean).join(' • ') || '-'}
+                        </td>
+                        <td>{act.deletado_em ? new Date(act.deletado_em).toLocaleString('pt-BR') : '-'}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button onClick={() => handleRestaurar(act)} className="btn btn-primary btn-sm">
+                            <RotateCcw size={14} /> Restaurar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

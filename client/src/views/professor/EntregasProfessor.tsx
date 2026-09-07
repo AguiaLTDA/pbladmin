@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
-import { PBLActivity, StudentSubmission, SubmissionFile } from '../../types';
+import { PBLActivity, StudentSubmission, SubmissionFile, EntregaExcluida } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { VisualizadorArquivo } from '../../components/VisualizadorArquivo';
-import { Award, Eye, FileText, Users, BookOpen } from 'lucide-react';
+import { Award, Eye, FileText, Users, BookOpen, Trash2, RotateCcw } from 'lucide-react';
 
 interface ArquivoOrientativo extends SubmissionFile {
   aprovado_pelo_admin?: number;
@@ -25,7 +26,12 @@ function formatarTamanho(bytes: number): string {
 
 export const EntregasProfessorView: React.FC = () => {
   const { showToast } = useToast();
+  const { user } = useAuth();
+  // A coordenadoria usa esta mesma tela, com poder adicional de excluir/restaurar entregas.
+  const isAdmin = user?.perfilNome === 'ADMIN';
   const [activities, setActivities] = useState<PBLActivity[]>([]);
+  const [excluidas, setExcluidas] = useState<EntregaExcluida[]>([]);
+  const [mostrarLixeira, setMostrarLixeira] = useState(false);
   const [selectedActivityId, setSelectedActivityId] = useState<number | ''>('');
   const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
   const [orientativos, setOrientativos] = useState<ArquivoOrientativo[]>([]);
@@ -76,6 +82,47 @@ export const EntregasProfessorView: React.FC = () => {
       carregarAtividade(Number(selectedActivityId));
     }
   }, [selectedActivityId]);
+
+  const carregarExcluidas = () => {
+    apiRequest<EntregaExcluida[]>('/submissions/excluidas')
+      .then(setExcluidas)
+      .catch(() => setExcluidas([]));
+  };
+
+  useEffect(() => {
+    if (isAdmin) carregarExcluidas();
+  }, [isAdmin]);
+
+  const handleExcluir = async (sub: StudentSubmission) => {
+    if (
+      !window.confirm(
+        `Excluir a entrega de ${sub.aluno_nome}? Ela sai das telas, dos relatórios e do portal do aluno, ` +
+          `mas fica na lixeira e pode ser restaurada.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const res = await apiRequest<{ message: string }>(`/submissions/${sub.id}`, { method: 'DELETE' });
+      showToast(res.message, 'success');
+      if (selectedActivityId) carregarAtividade(Number(selectedActivityId));
+      carregarExcluidas();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao excluir a entrega.', 'error');
+    }
+  };
+
+  const handleRestaurar = async (entrega: EntregaExcluida) => {
+    try {
+      const res = await apiRequest<{ message: string }>(`/submissions/${entrega.id}/restaurar`, { method: 'POST' });
+      showToast(res.message, 'success');
+      if (selectedActivityId) carregarAtividade(Number(selectedActivityId));
+      carregarExcluidas();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao restaurar a entrega.', 'error');
+    }
+  };
 
   /** Entregas agrupadas por turma e, dentro dela, por grupo PBL. */
   const porTurmaEGrupo = useMemo(() => {
@@ -153,9 +200,13 @@ export const EntregasProfessorView: React.FC = () => {
   return (
     <div>
       <div className="mb-4">
-        <h2 style={{ fontSize: '1.4rem' }}>Acompanhamento de Entregas & Lançamento de Notas</h2>
+        <h2 style={{ fontSize: '1.4rem' }}>
+          {isAdmin ? 'Entregas & Relatórios PBL' : 'Acompanhamento de Entregas & Lançamento de Notas'}
+        </h2>
         <p className="text-muted text-sm">
-          Revise o material orientativo do PBL e receba os PDFs dos grupos das turmas em que você leciona.
+          {isAdmin
+            ? 'Consulte, avalie e exclua as entregas recebidas. A exclusão é recuperável: o registro vai para a lixeira no fim da página.'
+            : 'Revise o material orientativo do PBL e receba os PDFs dos grupos das turmas em que você leciona.'}
         </p>
       </div>
 
@@ -250,7 +301,9 @@ export const EntregasProfessorView: React.FC = () => {
           <Award size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
           <h3 className="font-bold">Nenhuma entrega recebida ainda</h3>
           <p className="text-muted text-sm">
-            Os grupos das turmas em que você leciona ainda não finalizaram a submissão.
+            {isAdmin
+              ? 'Nenhum grupo finalizou a submissão desta atividade.'
+              : 'Os grupos das turmas em que você leciona ainda não finalizaram a submissão.'}
           </p>
         </div>
       ) : (
@@ -320,9 +373,20 @@ export const EntregasProfessorView: React.FC = () => {
                             <strong>{(sub.nota_total || 0).toFixed(2)} pts</strong>
                           </td>
                           <td style={{ textAlign: 'right' }}>
-                            <button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm">
-                              <Award size={14} /> Avaliar
-                            </button>
+                            <div className="flex gap-2 justify-end">
+                              <button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm">
+                                <Award size={14} /> Avaliar
+                              </button>
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleExcluir(sub)}
+                                  className="btn btn-secondary btn-sm"
+                                  title="Excluir esta entrega (recuperável)"
+                                >
+                                  <Trash2 size={14} /> Excluir
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -333,6 +397,63 @@ export const EntregasProfessorView: React.FC = () => {
             ))}
           </div>
         ))
+      )}
+
+      {/* 3. Lixeira de entregas — só a coordenadoria vê e restaura */}
+      {isAdmin && (
+        <div className="card mb-4" style={{ padding: '1rem' }}>
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold flex items-center gap-2">
+              <Trash2 size={18} color="var(--primary)" /> Lixeira de entregas ({excluidas.length})
+            </h3>
+            <button onClick={() => setMostrarLixeira((v) => !v)} className="btn btn-secondary btn-sm">
+              {mostrarLixeira ? 'Ocultar' : 'Ver excluídas'}
+            </button>
+          </div>
+
+          {mostrarLixeira && (
+            <div style={{ marginTop: '0.75rem' }}>
+              {excluidas.length === 0 ? (
+                <span className="text-muted text-sm">Nenhuma entrega excluída.</span>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Aluno</th>
+                        <th>Atividade</th>
+                        <th>Grupo</th>
+                        <th>Excluída em</th>
+                        <th style={{ textAlign: 'right' }}>Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {excluidas.map((e) => (
+                        <tr key={e.id}>
+                          <td>
+                            <div className="font-bold">{e.aluno_nome}</div>
+                            <div className="text-muted text-sm">{e.aluno_email}</div>
+                          </td>
+                          <td>
+                            <div className="text-sm">{e.atividade_titulo}</div>
+                            <div className="text-muted text-sm">{e.codigo_unico}</div>
+                          </td>
+                          <td>{e.grupo_nome || '-'}</td>
+                          <td>{e.deletado_em ? new Date(e.deletado_em).toLocaleString('pt-BR') : '-'}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button onClick={() => handleRestaurar(e)} className="btn btn-primary btn-sm">
+                              <RotateCcw size={14} /> Restaurar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {arquivoEmFoco && (

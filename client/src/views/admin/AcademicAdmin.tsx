@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { OrientadorFileAdminRow, OrientadorReplicacaoResultado, OrientadorReviewRow } from '../../types';
+import { GestaoGruposAdmin } from '../../components/GestaoGruposAdmin';
 import { BookOpen, Layers, Users, Plus, UserCheck, GraduationCap, Upload, FileText, MessageSquare, CheckCircle2 } from 'lucide-react';
 
 function formatarTamanho(bytes: number): string {
@@ -419,26 +420,7 @@ export const AcademicAdminView: React.FC = () => {
 
       {/* Conteúdo da Aba Grupos */}
       {activeTab === 'grupos' && (
-        <div className="table-responsive">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Nome do Grupo PBL</th>
-                <th>Turma Pertencente</th>
-                <th>Integrantes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map((g) => (
-                <tr key={g.id}>
-                  <td><div className="font-bold">{g.nome}</div></td>
-                  <td>{g.turma_nome}</td>
-                  <td>{g.total_integrantes} alunos</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <GestaoGruposAdmin grupos={groups} turmas={classes} onChanged={reloadData} />
       )}
 
       {/* Conteúdo da Aba Arquivo Orientador */}

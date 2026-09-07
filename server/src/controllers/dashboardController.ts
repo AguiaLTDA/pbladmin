@@ -20,15 +20,15 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
       );
 
       const totalEntregas = await getAsync<{ count: number }>(
-        `SELECT COUNT(*) as count FROM entregas WHERE status IN ('ENVIADO', 'ATRASADO')`
+        `SELECT COUNT(*) as count FROM entregas WHERE status IN ('ENVIADO', 'ATRASADO') AND deletado_em IS NULL`
       );
 
       const entregasPrazo = await getAsync<{ count: number }>(
-        `SELECT COUNT(*) as count FROM entregas WHERE status = 'ENVIADO'`
+        `SELECT COUNT(*) as count FROM entregas WHERE status = 'ENVIADO' AND deletado_em IS NULL`
       );
 
       const entregasAtraso = await getAsync<{ count: number }>(
-        `SELECT COUNT(*) as count FROM entregas WHERE status = 'ATRASADO'`
+        `SELECT COUNT(*) as count FROM entregas WHERE status = 'ATRASADO' AND deletado_em IS NULL`
       );
 
       const porCurso = await queryAsync(
@@ -78,7 +78,7 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
         `SELECT COUNT(DISTINCT als.aluno_id) as count
          FROM alunos_segmentados als
          JOIN atividades_pbl a ON als.atividade_id = a.id
-         WHERE a.status = 'PUBLICADO' AND ${alcanceCondicao}`,
+         WHERE a.status = 'PUBLICADO' AND a.deletado_em IS NULL AND ${alcanceCondicao}`,
         [user.id, user.id]
       );
 
@@ -88,7 +88,8 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
          JOIN publicacoes pub ON e.publicacao_id = pub.id
          JOIN atividades_pbl a ON pub.atividade_id = a.id
          LEFT JOIN feedbacks fb ON fb.entrega_id = e.id AND fb.liberado_aluno = 1
-         WHERE e.status IN ('ENVIADO', 'ATRASADO') AND fb.id IS NULL AND ${alcanceCondicao}`,
+         WHERE e.status IN ('ENVIADO', 'ATRASADO') AND e.deletado_em IS NULL
+           AND a.deletado_em IS NULL AND fb.id IS NULL AND ${alcanceCondicao}`,
         [user.id, user.id]
       );
 
@@ -113,7 +114,7 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
          FROM alunos_segmentados als
          JOIN atividades_pbl a ON als.atividade_id = a.id
          JOIN publicacoes pub ON a.id = pub.atividade_id
-         LEFT JOIN entregas ent ON pub.id = ent.publicacao_id AND ent.aluno_id = ?
+         LEFT JOIN entregas ent ON pub.id = ent.publicacao_id AND ent.aluno_id = ? AND ent.deletado_em IS NULL
          WHERE als.aluno_id = ? AND a.status = 'PUBLICADO' AND a.deletado_em IS NULL`,
         [user.id, user.id]
       );

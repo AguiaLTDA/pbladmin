@@ -43,7 +43,7 @@ export async function publishActivity(req: AuthenticatedRequest, res: Response) 
     }
 
     const act = await getAsync<{ id: number; status: string; titulo: string }>(
-      'SELECT id, status, titulo FROM atividades_pbl WHERE id = ?',
+      'SELECT id, status, titulo FROM atividades_pbl WHERE id = ? AND deletado_em IS NULL',
       [id]
     );
 

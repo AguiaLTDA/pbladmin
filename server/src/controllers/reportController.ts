@@ -11,7 +11,8 @@ export async function getGeneralReport(req: AuthenticatedRequest, res: Response)
              c.nome as curso_nome, d.nome as disciplina_nome,
              p.nome as professor_nome, a.criado_em,
              (SELECT COUNT(*) FROM alunos_segmentados als WHERE als.atividade_id = a.id) as total_alunos_alcancados,
-             (SELECT COUNT(*) FROM publicacoes pub JOIN entregas e ON pub.id = e.publicacao_id WHERE pub.atividade_id = a.id AND e.status = 'ENVIADO') as total_entregas
+             (SELECT COUNT(*) FROM publicacoes pub JOIN entregas e ON pub.id = e.publicacao_id
+               WHERE pub.atividade_id = a.id AND e.status = 'ENVIADO' AND e.deletado_em IS NULL) as total_entregas
       FROM atividades_pbl a
       JOIN cursos c ON a.curso_id = c.id
       JOIN disciplinas d ON a.disciplina_id = d.id
@@ -56,6 +57,7 @@ export async function exportReportCSV(req: AuthenticatedRequest, res: Response) 
          JOIN atividades_pbl a ON pub.atividade_id = a.id
          JOIN usuarios u ON e.aluno_id = u.id
          LEFT JOIN feedbacks fb ON e.id = fb.entrega_id
+         WHERE e.deletado_em IS NULL AND a.deletado_em IS NULL
          ORDER BY e.data_envio DESC`
       );
 

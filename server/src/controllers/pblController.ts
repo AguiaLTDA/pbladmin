@@ -521,7 +521,7 @@ export async function reviewPBLActivity(req: AuthenticatedRequest, res: Response
     }
 
     const act = await getAsync<{ id: number; titulo: string; professor_id: number; versao_atual: number; status: string }>(
-      'SELECT id, titulo, professor_id, versao_atual, status FROM atividades_pbl WHERE id = ?',
+      'SELECT id, titulo, professor_id, versao_atual, status FROM atividades_pbl WHERE id = ? AND deletado_em IS NULL',
       [id]
     );
 
@@ -586,5 +586,82 @@ export async function reviewPBLActivity(req: AuthenticatedRequest, res: Response
     return res.json({ message: `Atividade atualizada para '${newStatus}'.`, status: newStatus });
   } catch (err) {
     return res.status(500).json({ message: 'Erro ao registrar análise da atividade.' });
+  }
+}
+
+// --- EXCLUSÃO (LÓGICA) DE ATIVIDADES PBL PELA COORDENADORIA ---
+// A atividade sai da Caixa de Entrada, dos relatórios, dos dashboards e do portal
+// do aluno, mas a linha continua no banco com as versões, entregas e notas
+// intactas — restaurar devolve tudo como estava.
+
+/** ADMIN: exclui a atividade PBL inteira (enunciado, versões, publicação e entregas ligadas). */
+export async function deletePBLActivity(req: AuthenticatedRequest, res: Response) {
+  try {
+    const adminId = req.user?.id;
+    const { id } = req.params;
+
+    const act = await getAsync<{ id: number; titulo: string; deletado_em: string | null }>(
+      'SELECT id, titulo, deletado_em FROM atividades_pbl WHERE id = ?',
+      [id]
+    );
+    if (!act) return res.status(404).json({ message: 'Atividade não encontrada.' });
+    if (act.deletado_em) return res.status(400).json({ message: 'Esta atividade já está excluída.' });
+
+    await runAsync(
+      'UPDATE atividades_pbl SET deletado_em = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?',
+      [id]
+    );
+
+    await logAudit(adminId || null, 'EXCLUIR_ATIVIDADE_PBL', 'atividades_pbl', String(id), { titulo: act.titulo });
+    return res.json({ message: `Atividade "${act.titulo}" excluída. Pode ser restaurada se preciso.` });
+  } catch (err) {
+    console.error('Erro ao excluir atividade PBL:', err);
+    return res.status(500).json({ message: 'Erro ao excluir a atividade.' });
+  }
+}
+
+/** ADMIN: lista as atividades PBL excluídas (a "lixeira"). */
+export async function listDeletedPBLActivities(req: AuthenticatedRequest, res: Response) {
+  try {
+    const list = await queryAsync(
+      `SELECT a.id, a.codigo_unico, a.titulo, a.status, a.deletado_em,
+              c.nome as curso_nome, d.nome as disciplina_nome, p.nome as professor_nome
+       FROM atividades_pbl a
+       JOIN cursos c ON a.curso_id = c.id
+       JOIN disciplinas d ON a.disciplina_id = d.id
+       JOIN usuarios p ON a.professor_id = p.id
+       WHERE a.deletado_em IS NOT NULL
+       ORDER BY a.deletado_em DESC`
+    );
+    return res.json(list);
+  } catch (err) {
+    console.error('Erro ao listar atividades excluídas:', err);
+    return res.status(500).json({ message: 'Erro ao listar as atividades excluídas.' });
+  }
+}
+
+/** ADMIN: restaura uma atividade PBL excluída. */
+export async function restorePBLActivity(req: AuthenticatedRequest, res: Response) {
+  try {
+    const adminId = req.user?.id;
+    const { id } = req.params;
+
+    const act = await getAsync<{ id: number; titulo: string; deletado_em: string | null }>(
+      'SELECT id, titulo, deletado_em FROM atividades_pbl WHERE id = ?',
+      [id]
+    );
+    if (!act) return res.status(404).json({ message: 'Atividade não encontrada.' });
+    if (!act.deletado_em) return res.status(400).json({ message: 'Esta atividade não está excluída.' });
+
+    await runAsync(
+      'UPDATE atividades_pbl SET deletado_em = NULL, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?',
+      [id]
+    );
+
+    await logAudit(adminId || null, 'RESTAURAR_ATIVIDADE_PBL', 'atividades_pbl', String(id), { titulo: act.titulo });
+    return res.json({ message: `Atividade "${act.titulo}" restaurada.` });
+  } catch (err) {
+    console.error('Erro ao restaurar atividade PBL:', err);
+    return res.status(500).json({ message: 'Erro ao restaurar a atividade.' });
   }
 }

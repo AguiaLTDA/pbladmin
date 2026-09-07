@@ -40,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
     { path: '/admin/usuarios', label: 'Gestão de Usuários', icon: Users },
     { path: '/admin/estudantes', label: 'Cadastro de Estudantes', icon: GraduationCap },
     { path: '/admin/academic', label: 'Cursos, Turmas & Grupos', icon: BookOpen },
+    { path: '/admin/entregas', label: 'Entregas & Relatórios', icon: Award },
     { path: '/admin/arquivos', label: 'Gerenciador de Arquivos', icon: FolderOpen },
     { path: '/admin/relatorios', label: 'Relatórios & Exportação', icon: BarChart3 },
     { path: '/admin/auditoria', label: 'Trilha de Auditoria', icon: ShieldCheck },

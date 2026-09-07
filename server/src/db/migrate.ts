@@ -44,4 +44,7 @@ export async function runMigrations() {
 
   // Bancos criados antes do autocadastro com senha própria não têm esta coluna em pre_cadastros.
   await runAsync(`ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS senha_hash TEXT DEFAULT NULL`);
+
+  // Exclusão de entregas pela coordenadoria é lógica (recuperável), como no resto do schema.
+  await runAsync(`ALTER TABLE entregas ADD COLUMN IF NOT EXISTS deletado_em TIMESTAMPTZ DEFAULT NULL`);
 }

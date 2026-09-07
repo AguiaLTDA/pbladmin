@@ -112,6 +112,8 @@ export const App: React.FC = () => {
       if (currentRoute === '/admin/usuarios') return <UsuariosAdminView />;
       if (currentRoute === '/admin/estudantes') return <EstudantesAdminView />;
       if (currentRoute === '/admin/academic') return <AcademicAdminView />;
+      // Mesma tela do professor: para o ADMIN ela habilita exclusão/restauração de entregas.
+      if (currentRoute === '/admin/entregas') return <EntregasProfessorView />;
       if (currentRoute === '/admin/arquivos') return <GerenciadorArquivosView />;
       if (currentRoute === '/admin/relatorios') return <RelatoriosAdminView />;
       if (currentRoute === '/admin/auditoria') return <AuditoriaAdminView />;

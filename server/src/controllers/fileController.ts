@@ -113,8 +113,8 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response) {
          JOIN versoes_atividades va ON aa.versao_atividade_id = va.id
          JOIN atividades_pbl a ON va.atividade_id = a.id
          JOIN alunos_segmentados als ON a.id = als.atividade_id
-         WHERE aa.arquivo_id = ? AND aa.aprovado_pelo_admin = 1 
-           AND a.status = 'PUBLICADO' AND als.aluno_id = ?`,
+         WHERE aa.arquivo_id = ? AND aa.aprovado_pelo_admin = 1
+           AND a.status = 'PUBLICADO' AND a.deletado_em IS NULL AND als.aluno_id = ?`,
         [id, user.id]
       );
 
@@ -142,7 +142,7 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response) {
       const isEntregaDaMinhaTurma = await getAsync<{ id: number }>(
         `SELECT ae.id
          FROM arquivos_entregas ae
-         JOIN entregas e ON ae.entrega_id = e.id
+         JOIN entregas e ON ae.entrega_id = e.id AND e.deletado_em IS NULL
          JOIN matriculas m ON m.usuario_id = e.aluno_id AND m.deletado_em IS NULL
          JOIN vinculos_professores vp ON vp.turma_id = m.turma_id
          WHERE ae.arquivo_id = ? AND vp.usuario_id = ? AND vp.ativo = 1`,

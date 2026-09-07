@@ -128,6 +128,32 @@ export interface StudentSubmission {
   liberado_aluno?: number;
 }
 
+/** Entrega na lixeira da coordenadoria (exclusão lógica, restaurável). */
+export interface EntregaExcluida {
+  id: number;
+  status: string;
+  data_envio?: string | null;
+  deletado_em: string;
+  aluno_nome: string;
+  aluno_email: string;
+  grupo_nome?: string | null;
+  atividade_id: number;
+  atividade_titulo: string;
+  codigo_unico: string;
+}
+
+/** Atividade PBL na lixeira da coordenadoria. */
+export interface AtividadeExcluida {
+  id: number;
+  codigo_unico: string;
+  titulo: string;
+  status: PBLStatus;
+  deletado_em: string;
+  curso_nome?: string;
+  disciplina_nome?: string;
+  professor_nome?: string;
+}
+
 export interface NotificationItem {
   id: number;
   usuario_id: number;

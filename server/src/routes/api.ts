@@ -53,15 +53,18 @@ router.post('/academic/classes', authenticateToken, requireRole('ADMIN'), academ
 
 router.get('/academic/groups', authenticateToken, academicCtrl.listGroups);
 router.post('/academic/groups', authenticateToken, requireRole('ADMIN'), academicCtrl.createGroup);
+router.delete('/academic/groups/:id', authenticateToken, requireRole('ADMIN'), academicCtrl.deleteGroup);
 router.get('/academic/groups/:id/membros', authenticateToken, academicCtrl.listGroupMembers);
-router.post('/academic/groups/:id/membros', authenticateToken, requireRole('ALUNO'), academicCtrl.addGroupMember);
+// O aluno indica colegas para o próprio grupo; a coordenadoria monta qualquer grupo.
+router.post('/academic/groups/:id/membros', authenticateToken, requireRole('ALUNO', 'ADMIN'), academicCtrl.addGroupMember);
+router.delete('/academic/groups/:id/membros/:usuarioId', authenticateToken, requireRole('ADMIN'), academicCtrl.removeGroupMember);
 
 router.get('/academic/periods', authenticateToken, academicCtrl.listPeriods);
 
 // --- AUTO-MATRÍCULA DO ALUNO (portal do aluno: escolhe a turma e informa o grupo) ---
 router.get('/academic/my-enrollment', authenticateToken, requireRole('ALUNO'), academicCtrl.listMyEnrollment);
 router.post('/academic/my-enrollment', authenticateToken, requireRole('ALUNO'), academicCtrl.selfEnroll);
-router.get('/academic/students/search', authenticateToken, requireRole('ALUNO'), academicCtrl.searchStudents);
+router.get('/academic/students/search', authenticateToken, requireRole('ALUNO', 'ADMIN'), academicCtrl.searchStudents);
 
 // --- HORÁRIO ACADÊMICO & VÍNCULOS DO DOCENTE ---
 // Professor recebe apenas a própria grade; admin recebe a grade completa.
@@ -96,11 +99,17 @@ router.get('/pbl/mandatory-fields', authenticateToken, pblCtrl.getMandatoryField
 router.put('/pbl/mandatory-fields', authenticateToken, requireRole('ADMIN'), pblCtrl.updateMandatoryFields);
 
 router.get('/pbl/activities', authenticateToken, pblCtrl.listPBLActivities);
+// Precisa vir antes de '/pbl/activities/:id', senão o Express casa 'excluidas' como um id.
+router.get('/pbl/activities/excluidas', authenticateToken, requireRole('ADMIN'), pblCtrl.listDeletedPBLActivities);
 router.get('/pbl/activities/:id', authenticateToken, pblCtrl.getPBLDetails);
 router.post('/pbl/activities', authenticateToken, requireRole('ADMIN'), pblCtrl.createPBLActivity);
 router.put('/pbl/activities/:id', authenticateToken, requireRole('ADMIN'), pblCtrl.updatePBLActivity);
 router.post('/pbl/activities/:id/submit', authenticateToken, requireRole('ADMIN'), pblCtrl.submitForAnalysis);
 router.post('/pbl/activities/:id/review', authenticateToken, requireRole('ADMIN'), pblCtrl.reviewPBLActivity);
+
+// Exclusão lógica da atividade PBL inteira (recuperável pela lixeira).
+router.delete('/pbl/activities/:id', authenticateToken, requireRole('ADMIN'), pblCtrl.deletePBLActivity);
+router.post('/pbl/activities/:id/restaurar', authenticateToken, requireRole('ADMIN'), pblCtrl.restorePBLActivity);
 
 // --- PUBLICATION & SEGMENTATION ---
 router.post('/publication/preview', authenticateToken, requireRole('ADMIN'), pubCtrl.previewAudience);
@@ -114,6 +123,11 @@ router.post('/submissions/student/activities/:atividadeId/answer', authenticateT
 
 router.get('/submissions/activity/:atividadeId', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), subCtrl.listSubmissionsForActivity);
 router.post('/submissions/:entregaId/evaluate', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), subCtrl.evaluateSubmission);
+
+// Exclusão lógica de entregas/relatórios pela coordenadoria (recuperável pela lixeira).
+router.get('/submissions/excluidas', authenticateToken, requireRole('ADMIN'), subCtrl.listDeletedSubmissions);
+router.delete('/submissions/:entregaId', authenticateToken, requireRole('ADMIN'), subCtrl.deleteSubmission);
+router.post('/submissions/:entregaId/restaurar', authenticateToken, requireRole('ADMIN'), subCtrl.restoreSubmission);
 
 // --- FILE MANAGEMENT ---
 router.post('/files/upload', authenticateToken, fileCtrl.uploadMiddleware.single('file'), fileCtrl.uploadFile);

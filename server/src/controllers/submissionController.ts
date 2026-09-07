@@ -27,7 +27,7 @@ export async function getStudentActivities(req: AuthenticatedRequest, res: Respo
       JOIN cursos c ON a.curso_id = c.id
       JOIN disciplinas d ON a.disciplina_id = d.id
       JOIN usuarios p ON a.professor_id = p.id
-      LEFT JOIN entregas ent ON pub.id = ent.publicacao_id AND ent.aluno_id = ?
+      LEFT JOIN entregas ent ON pub.id = ent.publicacao_id AND ent.aluno_id = ? AND ent.deletado_em IS NULL
       LEFT JOIN feedbacks fb ON ent.id = fb.entrega_id
       WHERE als.aluno_id = ? AND a.status = 'PUBLICADO' AND a.deletado_em IS NULL
     `;
@@ -126,7 +126,7 @@ export async function getStudentActivityDetails(req: AuthenticatedRequest, res: 
 
     // Fetch existing submission for student if any
     const entrega = await getAsync<any>(
-      `SELECT * FROM entregas WHERE publicacao_id = ? AND aluno_id = ?`,
+      `SELECT * FROM entregas WHERE publicacao_id = ? AND aluno_id = ? AND deletado_em IS NULL`,
       [act.publicacao_id, studentId]
     );
 
@@ -201,8 +201,9 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
       receiptHash = `PBL-REC-${studentId}-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     }
 
+    // Entrega excluída pela coordenadoria não conta: o aluno recomeça numa entrega nova.
     const existingEntrega = await getAsync<{ id: number; status: string }>(
-      'SELECT id, status FROM entregas WHERE publicacao_id = ? AND aluno_id = ?',
+      'SELECT id, status FROM entregas WHERE publicacao_id = ? AND aluno_id = ? AND deletado_em IS NULL',
       [pub.id, studentId]
     );
 
@@ -263,7 +264,7 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
     const user = req.user;
 
     const act = await getAsync<{ id: number; professor_id: number }>(
-      'SELECT id, professor_id FROM atividades_pbl WHERE id = ?',
+      'SELECT id, professor_id FROM atividades_pbl WHERE id = ? AND deletado_em IS NULL',
       [atividadeId]
     );
 
@@ -295,7 +296,7 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
       LEFT JOIN matriculas m ON m.usuario_id = e.aluno_id AND m.deletado_em IS NULL
       LEFT JOIN turmas t ON m.turma_id = t.id
       LEFT JOIN feedbacks fb ON e.id = fb.entrega_id
-      WHERE e.publicacao_id = ?
+      WHERE e.publicacao_id = ? AND e.deletado_em IS NULL
     `;
     const params: any[] = [pub.id];
 
@@ -346,7 +347,7 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
       `SELECT e.id, e.aluno_id, p.atividade_id
        FROM entregas e
        JOIN publicacoes p ON e.publicacao_id = p.id
-       WHERE e.id = ?`,
+       WHERE e.id = ? AND e.deletado_em IS NULL`,
       [entregaId]
     );
 
@@ -400,5 +401,96 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
     return res.json({ message: 'Avaliação registrada com sucesso.', notaTotal: nTotal });
   } catch (err) {
     return res.status(500).json({ message: 'Erro ao avaliar entrega.' });
+  }
+}
+
+/**
+ * ADMIN: exclui uma entrega (relatório do aluno). A exclusão é lógica — a linha
+ * sai de todas as telas, dashboards e relatórios, mas continua no banco e pode
+ * ser restaurada. A nota/feedback e os arquivos anexados são preservados junto,
+ * de modo que restaurar devolve a entrega completa. Depois de excluída, o aluno
+ * volta a poder enviar aquela atividade do zero.
+ */
+export async function deleteSubmission(req: AuthenticatedRequest, res: Response) {
+  try {
+    const adminId = req.user?.id;
+    const { entregaId } = req.params;
+
+    const entrega = await getAsync<{ id: number; aluno_id: number; deletado_em: string | null }>(
+      'SELECT id, aluno_id, deletado_em FROM entregas WHERE id = ?',
+      [entregaId]
+    );
+    if (!entrega) return res.status(404).json({ message: 'Entrega não encontrada.' });
+    if (entrega.deletado_em) return res.status(400).json({ message: 'Esta entrega já está excluída.' });
+
+    await runAsync('UPDATE entregas SET deletado_em = CURRENT_TIMESTAMP WHERE id = ?', [entregaId]);
+
+    await logAudit(adminId || null, 'EXCLUIR_ENTREGA', 'entregas', String(entregaId), {
+      alunoId: entrega.aluno_id
+    });
+    return res.json({ message: 'Entrega excluída. Ela sai das telas, mas pode ser restaurada.' });
+  } catch (err) {
+    console.error('Erro ao excluir entrega:', err);
+    return res.status(500).json({ message: 'Erro ao excluir a entrega.' });
+  }
+}
+
+/** ADMIN: lista as entregas excluídas (a "lixeira"), para conferência ou restauração. */
+export async function listDeletedSubmissions(req: AuthenticatedRequest, res: Response) {
+  try {
+    const list = await queryAsync(
+      `SELECT e.id, e.status, e.data_envio, e.deletado_em,
+              u.nome as aluno_nome, u.email as aluno_email,
+              g.nome as grupo_nome,
+              a.id as atividade_id, a.titulo as atividade_titulo, a.codigo_unico
+       FROM entregas e
+       JOIN usuarios u ON e.aluno_id = u.id
+       JOIN publicacoes p ON e.publicacao_id = p.id
+       JOIN atividades_pbl a ON p.atividade_id = a.id
+       LEFT JOIN grupos g ON e.grupo_id = g.id
+       WHERE e.deletado_em IS NOT NULL
+       ORDER BY e.deletado_em DESC`
+    );
+    return res.json(list);
+  } catch (err) {
+    console.error('Erro ao listar entregas excluídas:', err);
+    return res.status(500).json({ message: 'Erro ao listar as entregas excluídas.' });
+  }
+}
+
+/** ADMIN: restaura uma entrega excluída. */
+export async function restoreSubmission(req: AuthenticatedRequest, res: Response) {
+  try {
+    const adminId = req.user?.id;
+    const { entregaId } = req.params;
+
+    const entrega = await getAsync<{ id: number; publicacao_id: number; aluno_id: number; deletado_em: string | null }>(
+      'SELECT id, publicacao_id, aluno_id, deletado_em FROM entregas WHERE id = ?',
+      [entregaId]
+    );
+    if (!entrega) return res.status(404).json({ message: 'Entrega não encontrada.' });
+    if (!entrega.deletado_em) return res.status(400).json({ message: 'Esta entrega não está excluída.' });
+
+    // Se o aluno já refez a entrega depois da exclusão, restaurar criaria duas
+    // entregas ativas para a mesma atividade — melhor barrar e explicar.
+    const entregaAtiva = await getAsync<{ id: number }>(
+      'SELECT id FROM entregas WHERE publicacao_id = ? AND aluno_id = ? AND deletado_em IS NULL',
+      [entrega.publicacao_id, entrega.aluno_id]
+    );
+    if (entregaAtiva) {
+      return res.status(409).json({
+        message: 'O aluno já enviou uma nova entrega para esta atividade. Exclua a nova antes de restaurar esta.'
+      });
+    }
+
+    await runAsync('UPDATE entregas SET deletado_em = NULL WHERE id = ?', [entregaId]);
+
+    await logAudit(adminId || null, 'RESTAURAR_ENTREGA', 'entregas', String(entregaId), {
+      alunoId: entrega.aluno_id
+    });
+    return res.json({ message: 'Entrega restaurada com sucesso.' });
+  } catch (err) {
+    console.error('Erro ao restaurar entrega:', err);
+    return res.status(500).json({ message: 'Erro ao restaurar a entrega.' });
   }
 }

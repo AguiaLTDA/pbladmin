@@ -486,12 +486,16 @@ export async function addGroupMember(req: AuthenticatedRequest, res: Response) {
     );
     if (!grupo) return res.status(404).json({ message: 'Grupo não encontrado.' });
 
-    const requisitanteNoGrupo = await getAsync<{ id: number }>(
-      `SELECT id FROM matriculas WHERE usuario_id = ? AND grupo_id = ? AND deletado_em IS NULL`,
-      [alunoId, grupo.id]
-    );
-    if (!requisitanteNoGrupo) {
-      return res.status(403).json({ message: 'Você só pode indicar colegas para um grupo ao qual já pertence.' });
+    // O aluno só mexe no grupo em que ele mesmo está; a coordenadoria monta qualquer grupo.
+    const isAdmin = req.user?.perfilNome === 'ADMIN';
+    if (!isAdmin) {
+      const requisitanteNoGrupo = await getAsync<{ id: number }>(
+        `SELECT id FROM matriculas WHERE usuario_id = ? AND grupo_id = ? AND deletado_em IS NULL`,
+        [alunoId, grupo.id]
+      );
+      if (!requisitanteNoGrupo) {
+        return res.status(403).json({ message: 'Você só pode indicar colegas para um grupo ao qual já pertence.' });
+      }
     }
 
     const colega = await getAsync<{ id: number }>(
@@ -508,9 +512,11 @@ export async function addGroupMember(req: AuthenticatedRequest, res: Response) {
 
     if (matriculaColega) {
       if (matriculaColega.grupo_id === grupo.id) {
-        return res.status(200).json({ message: 'Este colega já está no grupo.' });
+        return res.status(200).json({ message: 'Este aluno já está no grupo.' });
       }
-      if (matriculaColega.grupo_id) {
+      // Entre alunos, tirar alguém de um grupo já formado tem de partir dele mesmo;
+      // a coordenadoria pode remanejar direto.
+      if (matriculaColega.grupo_id && !isAdmin) {
         return res.status(409).json({
           message: 'Este colega já pertence a outro grupo nesta turma. Peça para ele trocar de grupo pelo próprio portal dele.'
         });
@@ -524,7 +530,10 @@ export async function addGroupMember(req: AuthenticatedRequest, res: Response) {
       ]);
     }
 
-    await logAudit(alunoId, 'INDICAR_COLEGA_GRUPO', 'matriculas', undefined, { grupoId: grupo.id, usuarioId });
+    await logAudit(alunoId, isAdmin ? 'ADMIN_ADICIONAR_MEMBRO_GRUPO' : 'INDICAR_COLEGA_GRUPO', 'matriculas', undefined, {
+      grupoId: grupo.id,
+      usuarioId
+    });
 
     const membros = await queryAsync(
       `SELECT u.id, u.nome, u.email
@@ -539,6 +548,93 @@ export async function addGroupMember(req: AuthenticatedRequest, res: Response) {
   } catch (err) {
     console.error('Erro ao indicar colega para o grupo:', err);
     return res.status(500).json({ message: 'Erro ao indicar o colega para o grupo.' });
+  }
+}
+
+/**
+ * ADMIN: tira um aluno do grupo. Ele continua matriculado na turma, apenas sem
+ * grupo — pode escolher outro pelo portal dele ou ser realocado pela coordenadoria.
+ */
+export async function removeGroupMember(req: AuthenticatedRequest, res: Response) {
+  try {
+    const adminId = req.user?.id;
+    const { id, usuarioId } = req.params;
+
+    const grupo = await getAsync<{ id: number; nome: string; turma_id: number }>(
+      `SELECT id, nome, turma_id FROM grupos WHERE id = ? AND deletado_em IS NULL`,
+      [id]
+    );
+    if (!grupo) return res.status(404).json({ message: 'Grupo não encontrado.' });
+
+    const matricula = await getAsync<{ id: number }>(
+      `SELECT id FROM matriculas
+       WHERE usuario_id = ? AND turma_id = ? AND grupo_id = ? AND deletado_em IS NULL`,
+      [usuarioId, grupo.turma_id, grupo.id]
+    );
+    if (!matricula) return res.status(404).json({ message: 'Este aluno não está neste grupo.' });
+
+    await runAsync(`UPDATE matriculas SET grupo_id = NULL WHERE id = ?`, [matricula.id]);
+
+    await logAudit(adminId || null, 'ADMIN_REMOVER_MEMBRO_GRUPO', 'matriculas', String(matricula.id), {
+      grupoId: grupo.id,
+      usuarioId
+    });
+
+    const membros = await queryAsync(
+      `SELECT u.id, u.nome, u.email
+       FROM matriculas m
+       JOIN usuarios u ON m.usuario_id = u.id
+       WHERE m.grupo_id = ? AND m.deletado_em IS NULL
+       ORDER BY u.nome ASC`,
+      [grupo.id]
+    );
+
+    return res.json({ message: 'Aluno removido do grupo. Ele segue matriculado na turma, sem grupo.', membros });
+  } catch (err) {
+    console.error('Erro ao remover membro do grupo:', err);
+    return res.status(500).json({ message: 'Erro ao remover o aluno do grupo.' });
+  }
+}
+
+/**
+ * ADMIN: exclui um grupo (exclusão lógica). Os integrantes continuam matriculados
+ * na turma, só ficam sem grupo. Também zera `ativo`, o que libera o nome para ser
+ * reutilizado naquela turma (o índice único cobre só grupos ativos e não excluídos).
+ */
+export async function deleteGroup(req: AuthenticatedRequest, res: Response) {
+  try {
+    const adminId = req.user?.id;
+    const { id } = req.params;
+
+    const grupo = await getAsync<{ id: number; nome: string }>(
+      `SELECT id, nome FROM grupos WHERE id = ? AND deletado_em IS NULL`,
+      [id]
+    );
+    if (!grupo) return res.status(404).json({ message: 'Grupo não encontrado.' });
+
+    const integrantes = await getAsync<{ total: string }>(
+      `SELECT COUNT(*) as total FROM matriculas WHERE grupo_id = ? AND deletado_em IS NULL`,
+      [grupo.id]
+    );
+    const totalIntegrantes = Number(integrantes?.total || 0);
+
+    await runAsync(`UPDATE matriculas SET grupo_id = NULL WHERE grupo_id = ? AND deletado_em IS NULL`, [grupo.id]);
+    await runAsync(`UPDATE grupos SET deletado_em = CURRENT_TIMESTAMP, ativo = 0 WHERE id = ?`, [grupo.id]);
+
+    await logAudit(adminId || null, 'EXCLUIR_GRUPO', 'grupos', String(grupo.id), {
+      nome: grupo.nome,
+      integrantesLiberados: totalIntegrantes
+    });
+
+    return res.json({
+      message:
+        totalIntegrantes > 0
+          ? `Grupo "${grupo.nome}" excluído. ${totalIntegrantes} aluno(s) ficaram sem grupo nesta turma.`
+          : `Grupo "${grupo.nome}" excluído.`
+    });
+  } catch (err) {
+    console.error('Erro ao excluir grupo:', err);
+    return res.status(500).json({ message: 'Erro ao excluir o grupo.' });
   }
 }
 
