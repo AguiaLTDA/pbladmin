@@ -10,13 +10,25 @@ function gerarSenhaTemporaria(): string {
   return crypto.randomBytes(8).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
 }
 
-// PUBLIC: autocadastro de estudante (antes do login)
+/**
+ * PUBLIC: autocadastro de estudante (antes do login).
+ *
+ * Não existe mais fila de aprovação: a conta do aluno nasce ativa e ele já entra
+ * no portal com o e-mail e a senha que acabou de definir. O registro em
+ * `pre_cadastros` deixa de ser "fila" e passa a ser o cadastro acadêmico
+ * (matrícula, CPF, curso, turma informada) que a coordenação consulta.
+ */
 export async function criarPreCadastro(req: Request, res: Response) {
   try {
     const { nome, email, matricula, cpf, telefone, curso, turma, periodo, origem, senha } = req.body;
 
     if (!nome || !email || !matricula || !curso) {
       return res.status(400).json({ message: 'Nome, e-mail, matrícula e curso são obrigatórios.' });
+    }
+
+    const origemFinal = origem === 'ADMIN' ? 'ADMIN' : 'AUTOCADASTRO';
+    if (origemFinal === 'AUTOCADASTRO' && !senha) {
+      return res.status(400).json({ message: 'Defina a senha de acesso ao portal.' });
     }
     if (senha && String(senha).length < 6) {
       return res.status(400).json({ message: 'A senha deve ter no mínimo 6 caracteres.' });
@@ -29,45 +41,87 @@ export async function criarPreCadastro(req: Request, res: Response) {
       return res.status(409).json({ message: 'Já existe uma conta com este e-mail. Faça login normalmente.' });
     }
 
-    const pendenteExistente = await getAsync<{ id: number }>(
-      `SELECT id FROM pre_cadastros WHERE LOWER(email) = LOWER(?) AND status IN ('PENDENTE', 'APROVADO')`,
-      [email]
-    );
-    if (pendenteExistente) {
-      return res.status(409).json({ message: 'Já existe um cadastro em análise para este e-mail.' });
+    const perfilAluno = await getAsync<{ id: number }>(`SELECT id FROM perfis WHERE nome = 'ALUNO'`);
+    if (!perfilAluno) {
+      return res.status(500).json({ message: 'Perfil ALUNO não está configurado no sistema.' });
     }
 
-    // O aluno já escolhe a própria senha no autocadastro — só guardamos o hash aqui.
-    // Se vier em branco (ex.: pré-cadastro criado pelo admin sem definir senha), a
-    // aprovação cai de volta no fluxo antigo de gerar uma senha temporária.
-    const senhaHash = senha ? await bcrypt.hash(String(senha), 10) : null;
+    // Quando o admin cadastra alguém sem definir senha, geramos uma temporária
+    // para ele repassar; no autocadastro a senha vem sempre do próprio aluno.
+    const senhaTemporaria = senha ? undefined : gerarSenhaTemporaria();
+    const senhaHash = await bcrypt.hash(String(senha || senhaTemporaria), 10);
 
-    const resInsert = await runAsync(
-      `INSERT INTO pre_cadastros (nome, email, matricula, cpf, telefone, curso, turma, periodo, origem, senha_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        nome,
-        email,
-        matricula,
-        cpf || null,
-        telefone || null,
-        curso,
-        turma || null,
-        periodo || null,
-        origem || 'AUTOCADASTRO',
-        senhaHash
-      ]
+    const novoUsuario = await runAsync(
+      `INSERT INTO usuarios (nome, email, senha_hash, perfil_id, ativo) VALUES (?, ?, ?, ?, 1)`,
+      [nome, email, senhaHash, perfilAluno.id]
     );
 
+    // Cadastro da fila antiga para este mesmo e-mail: aproveita a linha em vez de
+    // duplicar, já dando baixa nela (a senha guardada ali não serve mais).
+    const registroAnterior = await getAsync<{ id: number }>(
+      `SELECT id FROM pre_cadastros WHERE LOWER(email) = LOWER(?) AND status = 'PENDENTE'`,
+      [email]
+    );
+
+    let registroId: number;
+    if (registroAnterior) {
+      await runAsync(
+        `UPDATE pre_cadastros
+         SET nome = ?, matricula = ?, cpf = ?, telefone = ?, curso = ?, turma = ?, periodo = ?,
+             origem = ?, status = 'APROVADO', usuario_id = ?, senha_hash = NULL,
+             atualizado_em = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [
+          nome,
+          matricula,
+          cpf || null,
+          telefone || null,
+          curso,
+          turma || null,
+          periodo || null,
+          origemFinal,
+          novoUsuario.lastID,
+          registroAnterior.id
+        ]
+      );
+      registroId = registroAnterior.id;
+    } else {
+      const resInsert = await runAsync(
+        `INSERT INTO pre_cadastros (nome, email, matricula, cpf, telefone, curso, turma, periodo, origem, status, usuario_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'APROVADO', ?)`,
+        [
+          nome,
+          email,
+          matricula,
+          cpf || null,
+          telefone || null,
+          curso,
+          turma || null,
+          periodo || null,
+          origemFinal,
+          novoUsuario.lastID
+        ]
+      );
+      registroId = resInsert.lastID;
+    }
+
+    await logAudit(novoUsuario.lastID, 'AUTOCADASTRO_ALUNO', 'usuarios', novoUsuario.lastID, {
+      email,
+      origem: origemFinal
+    });
+
     return res.status(201).json({
-      id: resInsert.lastID,
-      status: 'PENDENTE',
-      message: senhaHash
-        ? 'Cadastro recebido. Após a validação da secretaria, você já poderá entrar com o e-mail e a senha que definiu.'
-        : 'Cadastro recebido. Aguarde a validação da secretaria para liberar seu acesso.'
+      id: registroId,
+      usuarioId: novoUsuario.lastID,
+      status: 'APROVADO',
+      email,
+      senhaTemporaria,
+      message: senhaTemporaria
+        ? 'Conta de aluno criada. Repasse a senha temporária ao estudante.'
+        : 'Cadastro concluído! Sua conta já está ativa e o acesso ao portal está liberado.'
     });
   } catch (err) {
-    console.error('Erro ao criar pré-cadastro:', err);
+    console.error('Erro ao criar cadastro de estudante:', err);
     return res.status(500).json({ message: 'Erro ao registrar o cadastro.' });
   }
 }
@@ -144,7 +198,7 @@ export async function aprovarPreCadastro(req: AuthenticatedRequest, res: Respons
       [novoUsuario.lastID, req.user?.id || null, id]
     );
 
-    await logAudit(req.user?.id || null, 'APROVAR_PRE_CADASTRO', 'pre_cadastros', id, {
+    await logAudit(req.user?.id || null, 'APROVAR_PRE_CADASTRO', 'pre_cadastros', String(id), {
       email: preCadastro.email,
       usuarioId: novoUsuario.lastID
     });
@@ -184,7 +238,7 @@ export async function rejeitarPreCadastro(req: AuthenticatedRequest, res: Respon
       [justificativa || null, req.user?.id || null, id]
     );
 
-    await logAudit(req.user?.id || null, 'REJEITAR_PRE_CADASTRO', 'pre_cadastros', id, { justificativa });
+    await logAudit(req.user?.id || null, 'REJEITAR_PRE_CADASTRO', 'pre_cadastros', String(id), { justificativa });
 
     return res.json({ message: 'Pré-cadastro rejeitado.' });
   } catch (err) {

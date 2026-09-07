@@ -39,12 +39,16 @@ export const EstudantesAdminView: React.FC = () => {
   const handleCadastrar = async (dados: StudentRegistrationInput) => {
     setSubmitting(true);
     try {
-      const res = await apiRequest<{ message: string }>('/public/pre-cadastro', {
-        method: 'POST',
-        body: JSON.stringify({ ...dados, origem: 'ADMIN' })
-      });
+      const res = await apiRequest<{ message: string; email?: string; senhaTemporaria?: string }>(
+        '/public/pre-cadastro',
+        { method: 'POST', body: JSON.stringify({ ...dados, origem: 'ADMIN' }) }
+      );
       showToast(res.message, 'success');
       setShowModal(false);
+      // Só existe senha temporária quando o admin não definiu uma no formulário.
+      if (res.senhaTemporaria && res.email) {
+        setCredenciaisGeradas({ email: res.email, senhaTemporaria: res.senhaTemporaria });
+      }
       await carregar();
     } catch (err: any) {
       showToast(err.message || 'Não foi possível cadastrar o estudante.', 'error');
@@ -141,7 +145,8 @@ export const EstudantesAdminView: React.FC = () => {
         <div>
           <h2 style={{ fontSize: '1.4rem' }}>Cadastro de Estudantes</h2>
           <p className="text-muted text-sm">
-            Pré-cadastros recebidos pelo portal, aguardando aprovação para virarem contas reais de aluno.
+            Estudantes cadastrados pelo portal. A conta é criada e liberada na hora — a
+            coordenação acompanha aqui e pode desativar acessos em Gestão de Usuários.
           </p>
         </div>
 
@@ -156,7 +161,7 @@ export const EstudantesAdminView: React.FC = () => {
           </button>
           <button onClick={() => setShowModal(true)} className="btn btn-primary">
             <UserPlus size={18} />
-            Novo Pré-Cadastro
+            Cadastrar Estudante
           </button>
         </div>
       </div>
@@ -167,7 +172,8 @@ export const EstudantesAdminView: React.FC = () => {
           style={{ padding: '0.85rem 1rem', background: '#fefce8', border: '1px solid #fde047' }}
         >
           <span className="text-sm">
-            <strong>{pendentesCount}</strong> pré-cadastro(s) aguardando aprovação.
+            <strong>{pendentesCount}</strong> cadastro(s) da fila antiga ainda sem conta criada.
+            Aprove para gerar o acesso — novos cadastros já entram liberados.
           </span>
         </div>
       )}
@@ -216,13 +222,13 @@ export const EstudantesAdminView: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-muted">Carregando pré-cadastros...</div>
+        <div className="text-center py-8 text-muted">Carregando estudantes...</div>
       ) : filtrados.length === 0 ? (
         <div className="card text-center py-8">
           <Table2 size={40} className="text-muted" style={{ margin: '0 auto 1rem' }} />
-          <h3 className="font-bold mb-2">Nenhum pré-cadastro encontrado</h3>
+          <h3 className="font-bold mb-2">Nenhum estudante cadastrado</h3>
           <p className="text-muted text-sm">
-            Use o botão "Novo Pré-Cadastro" ou compartilhe o link público de autocadastro (
+            Use o botão "Cadastrar Estudante" ou compartilhe o link público de autocadastro (
             <code>#/cadastro</code>) com a turma.
           </p>
         </div>
@@ -287,7 +293,7 @@ export const EstudantesAdminView: React.FC = () => {
           </table>
 
           <div className="text-muted text-sm" style={{ marginTop: '0.75rem' }}>
-            Exibindo {filtrados.length} de {estudantes.length} pré-cadastro(s).
+            Exibindo {filtrados.length} de {estudantes.length} estudante(s).
           </div>
         </div>
       )}
@@ -298,7 +304,7 @@ export const EstudantesAdminView: React.FC = () => {
             <div className="modal-header">
               <h3 className="font-bold flex items-center gap-2">
                 <UserPlus size={20} color="var(--primary)" />
-                Novo Pré-Cadastro de Estudante
+                Cadastrar Estudante
               </h3>
               <button onClick={() => setShowModal(false)} className="btn btn-sm btn-secondary">
                 X
@@ -310,7 +316,7 @@ export const EstudantesAdminView: React.FC = () => {
                 onSubmit={handleCadastrar}
                 submitting={submitting}
                 origem="ADMIN"
-                textoBotao="Registrar Pré-Cadastro"
+                textoBotao="Criar Conta do Estudante"
                 onCancel={() => setShowModal(false)}
               />
             </div>

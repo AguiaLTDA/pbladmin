@@ -20,10 +20,13 @@ router.post('/auth/login', authCtrl.login);
 router.get('/auth/profile', authenticateToken, authCtrl.getProfile);
 router.put('/auth/change-password', authenticateToken, authCtrl.changePassword);
 
-// --- CADASTRO PÚBLICO DE ESTUDANTES (sem autenticação, sujeito a aprovação do admin) ---
+// --- CADASTRO PÚBLICO DE ESTUDANTES (sem autenticação; a conta já nasce ativa) ---
+// O limite é por IP e uma turma inteira costuma se cadastrar da mesma rede do campus,
+// então ele precisa comportar a sala toda — não existe mais aprovação manual do admin
+// para destravar quem for barrado aqui.
 const preCadastroLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 5,
+  limit: 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Muitas tentativas de cadastro. Tente novamente em alguns minutos.' }

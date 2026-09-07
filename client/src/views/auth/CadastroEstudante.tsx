@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { FormularioEstudante } from '../../components/FormularioEstudante';
 import { apiRequest } from '../../services/api';
 import { StudentRegistrationInput } from '../../types';
@@ -12,6 +13,7 @@ interface CadastroEstudanteProps {
 
 export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ navigate }) => {
   const { showToast } = useToast();
+  const { login } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [concluido, setConcluido] = useState<{ id: number } | null>(null);
 
@@ -23,7 +25,17 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
         body: JSON.stringify(dados)
       });
       showToast(res.message, 'success');
-      setConcluido({ id: res.id });
+
+      // A conta já nasce ativa: entra direto no portal, na tela de turma e grupo,
+      // que é o primeiro vínculo que o aluno precisa fazer.
+      try {
+        await login(dados.email, String(dados.senha));
+        navigate('/aluno/grupo');
+      } catch {
+        // Conta criada, mas o login automático falhou (rede, por exemplo):
+        // o aluno entra manualmente com as credenciais que acabou de definir.
+        setConcluido({ id: res.id });
+      }
     } catch (err: any) {
       showToast(err.message || 'Não foi possível concluir o cadastro.', 'error');
       throw err;
@@ -100,8 +112,8 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
 
           <p style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.9rem', lineHeight: 1.6 }}>
             Preencha seus dados acadêmicos e já escolha a senha de acesso — seu login é o
-            e-mail informado abaixo. O registro é enviado para a secretaria e, após a
-            validação, você já entra no portal com essas mesmas credenciais.
+            e-mail informado abaixo. O acesso é liberado na hora: ao concluir, você entra
+            direto no portal para definir sua turma e seu grupo.
           </p>
         </div>
 
@@ -109,11 +121,10 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
           {concluido ? (
             <div className="text-center">
               <CheckCircle2 size={56} color="#16a34a" style={{ margin: '0 auto 1rem' }} />
-              <h2 className="font-bold text-lg mb-2">Cadastro recebido!</h2>
+              <h2 className="font-bold text-lg mb-2">Conta criada!</h2>
               <p className="text-muted text-sm mb-4">
-                Protocolo <strong>#{concluido.id}</strong>. Seu cadastro foi registrado e aguarda a
-                validação da secretaria. Assim que for aprovado, entre no portal com o e-mail e a
-                senha que você acabou de definir.
+                Protocolo <strong>#{concluido.id}</strong>. Sua conta já está ativa — entre no
+                portal com o e-mail e a senha que você acabou de definir.
               </p>
 
               <div className="flex gap-2" style={{ justifyContent: 'center' }}>

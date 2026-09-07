@@ -162,7 +162,7 @@ export const FormularioEstudante: React.FC<FormularioEstudanteProps> = ({
 
       {!senhaObrigatoria && (
         <div className="text-muted text-sm" style={{ marginTop: '-0.5rem', marginBottom: '0.75rem' }}>
-          Deixe em branco para gerar uma senha temporária automaticamente na aprovação.
+          Deixe em branco para gerar uma senha temporária automaticamente ao criar a conta.
         </div>
       )}
 
