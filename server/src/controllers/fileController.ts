@@ -154,7 +154,19 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response) {
         [id, user.id]
       );
 
-      if (!isOwner && !isMaterialProprio && !isEntregaDaMinhaTurma && !isMeuArquivoOrientador) {
+      // Material que a coordenação direcionou explicitamente a este docente.
+      const foiDirecionadoAMim = await getAsync<{ id: number }>(
+        `SELECT id FROM arquivos_direcionados WHERE arquivo_id = ? AND professor_id = ?`,
+        [id, user.id]
+      );
+
+      if (
+        !isOwner &&
+        !isMaterialProprio &&
+        !isEntregaDaMinhaTurma &&
+        !isMeuArquivoOrientador &&
+        !foiDirecionadoAMim
+      ) {
         return res.status(403).json({
           message: 'Acesso negado. Este arquivo não pertence às suas atividades nem às turmas que você leciona.'
         });
@@ -214,14 +226,234 @@ export async function deleteFile(req: AuthenticatedRequest, res: Response) {
 export async function listAllFiles(req: AuthenticatedRequest, res: Response) {
   try {
     const files = await queryAsync(
-      `SELECT ar.*, u.nome as enviado_por_nome 
-       FROM arquivos ar 
-       JOIN usuarios u ON ar.enviado_por = u.id 
-       WHERE ar.deletado_em IS NULL 
+      `SELECT ar.*, u.nome as enviado_por_nome,
+              (SELECT COUNT(*) FROM arquivos_direcionados ad WHERE ad.arquivo_id = ar.id) as total_direcionamentos
+       FROM arquivos ar
+       JOIN usuarios u ON ar.enviado_por = u.id
+       WHERE ar.deletado_em IS NULL
        ORDER BY ar.criado_em DESC`
     );
     return res.json(files);
   } catch (err) {
     return res.status(500).json({ message: 'Erro ao listar arquivos.' });
+  }
+}
+
+// --- DIRECIONAMENTO DE ARQUIVOS PARA DOCENTES ---
+// A coordenação escolhe o arquivo, um ou mais professores e, com base nas
+// turmas de cada um, a que curso/turma/disciplina/grupo o material se refere.
+// Só o professor destinatário vê e baixa — o aluno continua recebendo material
+// exclusivamente pela atividade PBL publicada.
+
+/** ADMIN: direciona um arquivo a professores, com os alvos escolhidos. */
+export async function direcionarArquivo(req: AuthenticatedRequest, res: Response) {
+  try {
+    const adminId = req.user?.id;
+    const { id } = req.params;
+    const { professorIds, turmaIds, disciplinaIds, grupoIds, observacao } = req.body;
+
+    if (!Array.isArray(professorIds) || professorIds.length === 0) {
+      return res.status(400).json({ message: 'Selecione pelo menos um professor.' });
+    }
+
+    const arquivo = await getAsync<{ id: number; nome_original: string }>(
+      `SELECT id, nome_original FROM arquivos WHERE id = ? AND deletado_em IS NULL`,
+      [id]
+    );
+    if (!arquivo) return res.status(404).json({ message: 'Arquivo não encontrado.' });
+
+    const turmas: number[] = Array.isArray(turmaIds) ? turmaIds.map(Number) : [];
+    const disciplinas: number[] = Array.isArray(disciplinaIds) ? disciplinaIds.map(Number) : [];
+    const grupos: number[] = Array.isArray(grupoIds) ? grupoIds.map(Number) : [];
+
+    let criados = 0;
+    let jaExistiam = 0;
+    const ignorados: string[] = [];
+
+    for (const professorIdBruto of professorIds) {
+      const professorId = Number(professorIdBruto);
+
+      const professor = await getAsync<{ id: number; nome: string }>(
+        `SELECT u.id, u.nome FROM usuarios u JOIN perfis p ON u.perfil_id = p.id
+         WHERE u.id = ? AND p.nome = 'PROFESSOR' AND u.deletado_em IS NULL`,
+        [professorId]
+      );
+      if (!professor) continue;
+
+      // Só aceita alvos que realmente pertencem ao vínculo do docente — evita
+      // direcionar material de uma turma que não é dele.
+      const turmasDoProfessor = turmas.length
+        ? (
+            await queryAsync<{ turma_id: number }>(
+              `SELECT DISTINCT turma_id FROM vinculos_professores
+               WHERE usuario_id = ? AND ativo = 1 AND turma_id = ANY(?)`,
+              [professorId, turmas]
+            )
+          ).map((r) => r.turma_id)
+        : [];
+
+      // Se o admin pediu turmas e nenhuma é deste docente, ele é pulado com
+      // aviso — cair num direcionamento sem alvo esconderia o erro do admin.
+      if (turmas.length > 0 && turmasDoProfessor.length === 0) {
+        ignorados.push(professor.nome);
+        continue;
+      }
+
+      // Sem turma escolhida, grava uma linha "só para o professor" (alvos nulos).
+      const alvos: (number | null)[] = turmas.length > 0 ? turmasDoProfessor : [null];
+
+      for (const turmaId of alvos) {
+        const turma = turmaId
+          ? await getAsync<{ curso_id: number | null }>(`SELECT curso_id FROM turmas WHERE id = ?`, [turmaId])
+          : null;
+
+        // Disciplina e grupo só entram se combinarem com a turma da linha.
+        const disciplinaId = turmaId
+          ? (
+              await getAsync<{ disciplina_id: number }>(
+                `SELECT disciplina_id FROM vinculos_professores
+                 WHERE usuario_id = ? AND turma_id = ? AND ativo = 1
+                   AND disciplina_id = ANY(?) LIMIT 1`,
+                [professorId, turmaId, disciplinas.length ? disciplinas : [0]]
+              )
+            )?.disciplina_id || null
+          : null;
+
+        const grupoId = turmaId
+          ? (
+              await getAsync<{ id: number }>(
+                `SELECT id FROM grupos WHERE turma_id = ? AND deletado_em IS NULL AND id = ANY(?) LIMIT 1`,
+                [turmaId, grupos.length ? grupos : [0]]
+              )
+            )?.id || null
+          : null;
+
+        // Repetir o mesmo direcionamento não deve empilhar linhas iguais.
+        const duplicado = await getAsync<{ id: number }>(
+          `SELECT id FROM arquivos_direcionados
+           WHERE arquivo_id = ? AND professor_id = ?
+             AND COALESCE(turma_id, 0) = COALESCE(?, 0)
+             AND COALESCE(disciplina_id, 0) = COALESCE(?, 0)
+             AND COALESCE(grupo_id, 0) = COALESCE(?, 0)`,
+          [id, professorId, turmaId, disciplinaId, grupoId]
+        );
+        if (duplicado) {
+          jaExistiam += 1;
+          continue;
+        }
+
+        await runAsync(
+          `INSERT INTO arquivos_direcionados
+             (arquivo_id, professor_id, curso_id, turma_id, disciplina_id, grupo_id, observacao, direcionado_por)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [id, professorId, turma?.curso_id || null, turmaId, disciplinaId, grupoId, observacao || null, adminId]
+        );
+        criados += 1;
+      }
+    }
+
+    const avisoIgnorados = ignorados.length
+      ? ` Fora: ${ignorados.join(', ')} — não leciona nas turmas escolhidas.`
+      : '';
+
+    if (criados === 0) {
+      return res.status(400).json({
+        message: jaExistiam
+          ? `Este arquivo já estava direcionado assim.${avisoIgnorados}`
+          : `Nenhum direcionamento criado.${avisoIgnorados || ' Verifique os professores escolhidos.'}`
+      });
+    }
+
+    await logAudit(adminId || null, 'DIRECIONAR_ARQUIVO', 'arquivos_direcionados', String(id), {
+      arquivo: arquivo.nome_original,
+      professores: professorIds.length,
+      linhas: criados,
+      ignorados
+    });
+
+    return res.status(201).json({
+      message: `Arquivo direcionado (${criados} destino${criados === 1 ? '' : 's'}).${avisoIgnorados}`,
+      criados,
+      jaExistiam,
+      ignorados
+    });
+  } catch (err) {
+    console.error('Erro ao direcionar arquivo:', err);
+    return res.status(500).json({ message: 'Erro ao direcionar o arquivo.' });
+  }
+}
+
+/** ADMIN: direcionamentos já registrados de um arquivo. */
+export async function listarDirecionamentos(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const list = await queryAsync(
+      `SELECT ad.id, ad.observacao, ad.criado_em,
+              u.id as professor_id, u.nome as professor_nome, u.email as professor_email,
+              c.nome as curso_nome, t.nome as turma_nome, t.codigo as turma_codigo,
+              d.nome as disciplina_nome, g.nome as grupo_nome
+       FROM arquivos_direcionados ad
+       JOIN usuarios u ON ad.professor_id = u.id
+       LEFT JOIN cursos c ON ad.curso_id = c.id
+       LEFT JOIN turmas t ON ad.turma_id = t.id
+       LEFT JOIN disciplinas d ON ad.disciplina_id = d.id
+       LEFT JOIN grupos g ON ad.grupo_id = g.id
+       WHERE ad.arquivo_id = ?
+       ORDER BY u.nome ASC, ad.criado_em DESC`,
+      [id]
+    );
+    return res.json(list);
+  } catch (err) {
+    console.error('Erro ao listar direcionamentos:', err);
+    return res.status(500).json({ message: 'Erro ao listar os direcionamentos.' });
+  }
+}
+
+/** ADMIN: remove um direcionamento (o arquivo em si permanece no gerenciador). */
+export async function removerDirecionamento(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { direcionamentoId } = req.params;
+    const alvo = await getAsync<{ id: number; arquivo_id: number }>(
+      `SELECT id, arquivo_id FROM arquivos_direcionados WHERE id = ?`,
+      [direcionamentoId]
+    );
+    if (!alvo) return res.status(404).json({ message: 'Direcionamento não encontrado.' });
+
+    await runAsync(`DELETE FROM arquivos_direcionados WHERE id = ?`, [direcionamentoId]);
+    await logAudit(req.user?.id || null, 'REMOVER_DIRECIONAMENTO_ARQUIVO', 'arquivos_direcionados', String(direcionamentoId), {
+      arquivoId: alvo.arquivo_id
+    });
+
+    return res.json({ message: 'Direcionamento removido.' });
+  } catch (err) {
+    return res.status(500).json({ message: 'Erro ao remover o direcionamento.' });
+  }
+}
+
+/** PROFESSOR: os materiais que a coordenação direcionou a ele. */
+export async function listarMeusDirecionados(req: AuthenticatedRequest, res: Response) {
+  try {
+    const professorId = req.user?.id;
+    const list = await queryAsync(
+      `SELECT ad.id, ad.observacao, ad.criado_em,
+              ar.id as arquivo_id, ar.nome_original, ar.tamanho_bytes, ar.mime_type, ar.categoria,
+              c.nome as curso_nome, t.nome as turma_nome, t.codigo as turma_codigo,
+              d.nome as disciplina_nome, g.nome as grupo_nome,
+              quem.nome as direcionado_por_nome
+       FROM arquivos_direcionados ad
+       JOIN arquivos ar ON ad.arquivo_id = ar.id AND ar.deletado_em IS NULL
+       LEFT JOIN cursos c ON ad.curso_id = c.id
+       LEFT JOIN turmas t ON ad.turma_id = t.id
+       LEFT JOIN disciplinas d ON ad.disciplina_id = d.id
+       LEFT JOIN grupos g ON ad.grupo_id = g.id
+       LEFT JOIN usuarios quem ON ad.direcionado_por = quem.id
+       WHERE ad.professor_id = ?
+       ORDER BY ad.criado_em DESC`,
+      [professorId]
+    );
+    return res.json(list);
+  } catch (err) {
+    console.error('Erro ao listar materiais direcionados:', err);
+    return res.status(500).json({ message: 'Erro ao listar os materiais direcionados a você.' });
   }
 }

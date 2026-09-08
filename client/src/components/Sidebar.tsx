@@ -51,7 +51,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
     { path: '/professor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/professor/turmas', label: 'Minhas Turmas & Horário', icon: CalendarDays },
     { path: '/professor/entregas', label: 'Acompanhamento & Entregas', icon: Award },
-    { path: '/professor/arquivo-orientador', label: 'Arquivo Orientador', icon: BookOpen }
+    { path: '/professor/arquivo-orientador', label: 'Arquivo Orientador', icon: BookOpen },
+    { path: '/professor/materiais', label: 'Materiais Recebidos', icon: FolderOpen }
   ];
 
   const getAlunoItems = () => [

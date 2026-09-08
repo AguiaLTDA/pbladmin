@@ -93,6 +93,8 @@ export interface FileItem {
   aprovado_pelo_admin?: number;
   versao_material?: string;
   criado_em?: string;
+  /** Quantos docentes já receberam este arquivo (gerenciador do admin). */
+  total_direcionamentos?: number | string;
 }
 
 export interface SubmissionFile {
@@ -152,6 +154,31 @@ export interface AtividadeExcluida {
   curso_nome?: string;
   disciplina_nome?: string;
   professor_nome?: string;
+}
+
+/** Direcionamento de um arquivo do gerenciador a um docente. */
+export interface DirecionamentoArquivo {
+  id: number;
+  observacao?: string | null;
+  criado_em: string;
+  professor_id: number;
+  professor_nome: string;
+  professor_email?: string;
+  curso_nome?: string | null;
+  turma_nome?: string | null;
+  turma_codigo?: string | null;
+  disciplina_nome?: string | null;
+  grupo_nome?: string | null;
+}
+
+/** Material que a coordenação direcionou ao professor autenticado. */
+export interface MaterialDirecionado extends DirecionamentoArquivo {
+  arquivo_id: number;
+  nome_original: string;
+  tamanho_bytes: number;
+  mime_type: string;
+  categoria?: string;
+  direcionado_por_nome?: string | null;
 }
 
 export interface NotificationItem {

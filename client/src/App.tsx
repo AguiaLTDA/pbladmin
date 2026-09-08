@@ -26,6 +26,7 @@ import { DashboardProfessorView } from './views/professor/DashboardProfessor';
 import { EntregasProfessorView } from './views/professor/EntregasProfessor';
 import { MinhasTurmasProfessorView } from './views/professor/MinhasTurmasProfessor';
 import { ArquivoOrientadorProfessorView } from './views/professor/ArquivoOrientadorProfessor';
+import { MateriaisRecebidosProfessorView } from './views/professor/MateriaisRecebidosProfessor';
 
 // Aluno Views
 import { DashboardAlunoView } from './views/aluno/DashboardAluno';
@@ -128,6 +129,7 @@ export const App: React.FC = () => {
       if (currentRoute === '/professor/entregas') return <EntregasProfessorView />;
       if (currentRoute === '/professor/turmas') return <MinhasTurmasProfessorView />;
       if (currentRoute === '/professor/arquivo-orientador') return <ArquivoOrientadorProfessorView />;
+      if (currentRoute === '/professor/materiais') return <MateriaisRecebidosProfessorView />;
     }
 
     // ALUNO ROUTES

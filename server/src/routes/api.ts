@@ -139,6 +139,13 @@ router.get('/files/download/:id', authenticateToken, fileCtrl.downloadFile);
 router.delete('/files/:id', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), fileCtrl.deleteFile);
 router.get('/files', authenticateToken, requireRole('ADMIN'), fileCtrl.listAllFiles);
 
+// --- DIRECIONAMENTO DE ARQUIVOS A DOCENTES ---
+// Precisa vir antes de '/files/:id/...' para 'meus-direcionados' não virar um id.
+router.get('/files/meus-direcionados', authenticateToken, requireRole('PROFESSOR'), fileCtrl.listarMeusDirecionados);
+router.get('/files/:id/direcionamentos', authenticateToken, requireRole('ADMIN'), fileCtrl.listarDirecionamentos);
+router.post('/files/:id/direcionamentos', authenticateToken, requireRole('ADMIN'), fileCtrl.direcionarArquivo);
+router.delete('/files/direcionamentos/:direcionamentoId', authenticateToken, requireRole('ADMIN'), fileCtrl.removerDirecionamento);
+
 // --- DASHBOARD & REPORTS ---
 router.get('/dashboard', authenticateToken, dashCtrl.getDashboardData);
 router.get('/reports/general', authenticateToken, requireRole('ADMIN'), reportCtrl.getGeneralReport);

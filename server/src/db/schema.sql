@@ -265,6 +265,33 @@ CREATE TABLE IF NOT EXISTS arquivos (
   FOREIGN KEY (enviado_por) REFERENCES usuarios(id)
 );
 
+-- 13.1 Direcionamento de arquivos do gerenciador para docentes
+-- A coordenação envia um arquivo e o direciona a um ou mais professores,
+-- indicando com base nas turmas do docente a que curso/turma/disciplina/grupo
+-- aquele material se refere. É visível apenas ao professor destinatário — o
+-- material que chega ao aluno continua vindo pela atividade PBL publicada.
+-- Uma linha por professor + alvo; os campos de alvo são opcionais, então
+-- "só para o professor" é um direcionamento com todos eles nulos.
+CREATE TABLE IF NOT EXISTS arquivos_direcionados (
+  id SERIAL PRIMARY KEY,
+  arquivo_id INTEGER NOT NULL,
+  professor_id INTEGER NOT NULL,
+  curso_id INTEGER DEFAULT NULL,
+  turma_id INTEGER DEFAULT NULL,
+  disciplina_id INTEGER DEFAULT NULL,
+  grupo_id INTEGER DEFAULT NULL,
+  observacao TEXT,
+  direcionado_por INTEGER NOT NULL,
+  criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (arquivo_id) REFERENCES arquivos(id),
+  FOREIGN KEY (professor_id) REFERENCES usuarios(id),
+  FOREIGN KEY (curso_id) REFERENCES cursos(id),
+  FOREIGN KEY (turma_id) REFERENCES turmas(id),
+  FOREIGN KEY (disciplina_id) REFERENCES disciplinas(id),
+  FOREIGN KEY (grupo_id) REFERENCES grupos(id),
+  FOREIGN KEY (direcionado_por) REFERENCES usuarios(id)
+);
+
 -- 14. Anexos das Versões de Atividades
 CREATE TABLE IF NOT EXISTS arquivos_atividades (
   id SERIAL PRIMARY KEY,

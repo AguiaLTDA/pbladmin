@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest, getDownloadUrl } from '../../services/api';
 import { FileItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
-import { FolderOpen, Upload, Download, Trash2, FileText, Search, ShieldCheck } from 'lucide-react';
+import { FolderOpen, Upload, Download, Trash2, FileText, Search, ShieldCheck, Send } from 'lucide-react';
+import { DirecionarArquivoModal } from '../../components/DirecionarArquivoModal';
 
 export const GerenciadorArquivosView: React.FC = () => {
   const { showToast } = useToast();
@@ -10,6 +11,7 @@ export const GerenciadorArquivosView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState('');
+  const [arquivoParaDirecionar, setArquivoParaDirecionar] = useState<FileItem | null>(null);
 
   const fetchFiles = () => {
     setLoading(true);
@@ -110,6 +112,7 @@ export const GerenciadorArquivosView: React.FC = () => {
                 <th>Tamanho</th>
                 <th>Hash MD5 (Auditoria)</th>
                 <th>Enviado Por</th>
+                <th>Direcionado a</th>
                 <th>Data do Envio</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
@@ -135,9 +138,26 @@ export const GerenciadorArquivosView: React.FC = () => {
                     </code>
                   </td>
                   <td>{f.enviado_por_nome}</td>
+                  <td>
+                    {/* COUNT do Postgres chega como string: "0" é truthy, daí o Number(). */}
+                    {Number(f.total_direcionamentos || 0) > 0 ? (
+                      <span className="pill-tag pill-tag-green">
+                        {f.total_direcionamentos} docente{Number(f.total_direcionamentos) === 1 ? '' : 's'}
+                      </span>
+                    ) : (
+                      <span className="text-muted text-sm">-</span>
+                    )}
+                  </td>
                   <td>{f.criado_em ? new Date(f.criado_em).toLocaleDateString('pt-BR') : '-'}</td>
                   <td style={{ textAlign: 'right' }}>
                     <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => setArquivoParaDirecionar(f)}
+                        className="btn btn-secondary btn-sm"
+                        title="Direcionar a professores (curso, turma, disciplina, grupo)"
+                      >
+                        <Send size={14} /> Direcionar
+                      </button>
                       <a
                         href={getDownloadUrl(f.id)}
                         target="_blank"
@@ -161,6 +181,15 @@ export const GerenciadorArquivosView: React.FC = () => {
             </tbody>
           </table>
         </div>
+      )}
+
+      {arquivoParaDirecionar && (
+        <DirecionarArquivoModal
+          arquivoId={arquivoParaDirecionar.id}
+          nomeArquivo={arquivoParaDirecionar.nome_original}
+          onClose={() => setArquivoParaDirecionar(null)}
+          onDirecionado={fetchFiles}
+        />
       )}
     </div>
   );
