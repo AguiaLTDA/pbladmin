@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
+import { CronogramaPBL } from '../../components/CronogramaPBL';
 import { Calendar, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface Props {
@@ -33,6 +34,12 @@ export const CalendarioPrazosAlunoView: React.FC<Props> = ({ navigate }) => {
           <p className="text-muted text-sm">Cronograma de entregas das suas atividades PBL organizadas por data de vencimento.</p>
         </div>
       </div>
+
+      <CronogramaPBL />
+
+      <h3 className="font-bold mb-2" style={{ fontSize: '1.05rem' }}>
+        Prazos das suas atividades
+      </h3>
 
       {loading ? (
         <div className="text-center py-8 text-muted">Carregando linha do tempo de prazos...</div>

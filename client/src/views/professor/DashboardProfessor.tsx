@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
+import { CronogramaPBL } from '../../components/CronogramaPBL';
 import { Send, Users, Award, BookOpen, ArrowRight, AlertTriangle } from 'lucide-react';
 
 interface ProfessorDashboardData {
@@ -106,6 +107,8 @@ export const DashboardProfessorView: React.FC<Props> = ({ navigate }) => {
           </div>
         </div>
       )}
+
+      <CronogramaPBL />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
         <div className="card">
