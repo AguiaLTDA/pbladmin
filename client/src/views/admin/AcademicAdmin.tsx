@@ -3,6 +3,7 @@ import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { OrientadorFileAdminRow, OrientadorReplicacaoResultado, OrientadorReviewRow } from '../../types';
 import { GestaoGruposAdmin } from '../../components/GestaoGruposAdmin';
+import { RevisaoDocenteAdmin } from '../../components/RevisaoDocenteAdmin';
 import { BookOpen, Layers, Users, Plus, UserCheck, GraduationCap, Upload, FileText, MessageSquare, CheckCircle2 } from 'lucide-react';
 
 function formatarTamanho(bytes: number): string {
@@ -303,7 +304,7 @@ export const AcademicAdminView: React.FC = () => {
           onClick={() => setActiveTab('revisao')}
           className={`btn btn-sm ${activeTab === 'revisao' ? 'btn-primary' : 'btn-secondary'}`}
         >
-          <MessageSquare size={16} /> Revisão pelos Professores ({orientadorReviews.length})
+          <MessageSquare size={16} /> Revisão Docente ({orientadorReviews.length})
         </button>
       </div>
 
@@ -506,54 +507,8 @@ export const AcademicAdminView: React.FC = () => {
         </div>
       )}
 
-      {/* Conteúdo da Aba Revisão pelos Professores */}
-      {activeTab === 'revisao' && (
-        <div>
-          <div className="mb-4">
-            <span className="font-bold text-sm">
-              Sugestões e ajustes reportados pelos professores sobre o material orientativo,
-              organizados por docente e disciplina. A coordenação apenas consulta o retorno aqui —
-              a edição do material é feita substituindo o arquivo na aba "Arquivo Orientador".
-            </span>
-          </div>
-
-          {orientadorReviews.length === 0 ? (
-            <div className="card text-center py-8">
-              <MessageSquare size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
-              <h3 className="font-bold">Nenhuma sugestão recebida ainda</h3>
-              <p className="text-muted text-sm">
-                Quando um professor enviar uma sugestão sobre o arquivo orientador, ela aparecerá aqui.
-              </p>
-            </div>
-          ) : (
-            Object.entries(agruparRevisoesPorDocente(orientadorReviews)).map(([professorNome, grupo]) => (
-              <div key={professorNome} className="card mb-4" style={{ padding: '1.25rem' }}>
-                <div className="font-bold" style={{ fontSize: '1.05rem' }}>{professorNome}</div>
-                <div className="text-muted text-sm mb-3">{grupo.email}</div>
-
-                {Object.entries(grupo.disciplinas).map(([disciplinaNome, dados]) => (
-                  <div key={disciplinaNome} className="mb-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="pill-tag">{disciplinaNome}</span>
-                      {dados.cursoNome && <span className="text-muted text-sm">{dados.cursoNome}</span>}
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      {dados.itens.map((item) => (
-                        <div key={item.id} className="card" style={{ padding: '0.75rem 1rem' }}>
-                          <div className="text-sm">{item.texto}</div>
-                          <div className="text-muted text-sm mt-1">
-                            {new Date(item.criado_em).toLocaleString('pt-BR')}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      {/* Conteúdo da Aba Revisão Docente */}
+      {activeTab === 'revisao' && <RevisaoDocenteAdmin />}
 
       {/* Modais de Criação */}
       {showClassModal && (

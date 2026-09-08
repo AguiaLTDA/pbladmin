@@ -27,8 +27,10 @@ export const ArquivoOrientadorProfessorView: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [disciplinas, setDisciplinas] = useState<ProfessorBindings['disciplinas']>([]);
+  const [turmas, setTurmas] = useState<ProfessorBindings['turmas']>([]);
   const [comentarios, setComentarios] = useState<OrientadorComment[]>([]);
   const [disciplinaId, setDisciplinaId] = useState<number | ''>('');
+  const [turmaId, setTurmaId] = useState<number | ''>('');
   const [texto, setTexto] = useState('');
   const [enviandoSugestao, setEnviandoSugestao] = useState(false);
 
@@ -40,7 +42,10 @@ export const ArquivoOrientadorProfessorView: React.FC = () => {
       .finally(() => setLoading(false));
 
     apiRequest<ProfessorBindings>('/academic/my-bindings')
-      .then((res) => setDisciplinas(res.disciplinas))
+      .then((res) => {
+        setDisciplinas(res.disciplinas);
+        setTurmas(res.turmas);
+      })
       .catch((err) => showToast(err.message, 'error'));
 
     carregarComentarios();
@@ -93,9 +98,13 @@ export const ArquivoOrientadorProfessorView: React.FC = () => {
     try {
       await apiRequest('/academic/my-orientador-file/comments', {
         method: 'POST',
-        body: JSON.stringify({ disciplinaId: Number(disciplinaId), texto: texto.trim() })
+        body: JSON.stringify({
+          disciplinaId: Number(disciplinaId),
+          turmaId: turmaId ? Number(turmaId) : undefined,
+          texto: texto.trim()
+        })
       });
-      showToast('Sugestão enviada para a coordenação!', 'success');
+      showToast('Revisão enviada para a coordenação!', 'success');
       setTexto('');
       carregarComentarios();
     } catch (err: any) {
@@ -171,16 +180,16 @@ export const ArquivoOrientadorProfessorView: React.FC = () => {
       {arquivo && (
         <div className="card mt-4" style={{ padding: '1.25rem' }}>
           <h3 className="font-bold mb-2" style={{ fontSize: '1.1rem' }}>
-            Enviar sugestão de alteração
+            Revisão do arquivo orientador
           </h3>
           <p className="text-muted text-sm mb-3">
-            Escolha a disciplina a que a sugestão se refere. A coordenação verá seu retorno na
-            revisão administrativa, organizado por disciplina.
+            Indique o curso/disciplina e a turma a que a revisão se refere. A coordenação vê seu
+            retorno na aba "Revisão Docente", organizado por curso, turma e disciplina.
           </p>
 
           <form onSubmit={handleEnviarSugestao}>
             <div className="form-group">
-              <label className="form-label required">Disciplina</label>
+              <label className="form-label required">Disciplina (curso)</label>
               <select
                 className="form-control"
                 value={disciplinaId}
@@ -197,7 +206,22 @@ export const ArquivoOrientadorProfessorView: React.FC = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label required">Sugestão / observação</label>
+              <label className="form-label">Turma</label>
+              <select className="form-control" value={turmaId} onChange={(e: any) => setTurmaId(e.target.value)}>
+                <option value="">-- Todas as turmas desta disciplina --</option>
+                {turmas.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.nome} ({t.codigo})
+                  </option>
+                ))}
+              </select>
+              <div className="text-muted text-sm" style={{ marginTop: '0.35rem' }}>
+                Se escolher uma turma, o sistema confere se você leciona essa disciplina nela.
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label required">Revisão / observação</label>
               <textarea
                 className="form-control"
                 rows={4}
@@ -209,18 +233,21 @@ export const ArquivoOrientadorProfessorView: React.FC = () => {
             </div>
 
             <button type="submit" className="btn btn-primary" disabled={enviandoSugestao}>
-              <Send size={16} /> {enviandoSugestao ? 'Enviando...' : 'Enviar sugestão'}
+              <Send size={16} /> {enviandoSugestao ? 'Enviando...' : 'Enviar revisão'}
             </button>
           </form>
 
           {comentarios.length > 0 && (
             <div className="mt-4">
-              <div className="font-bold text-sm mb-2">Suas sugestões enviadas:</div>
+              <div className="font-bold text-sm mb-2">Suas revisões enviadas:</div>
               <div className="flex flex-col gap-2">
                 {comentarios.map((c) => (
                   <div key={c.id} className="card" style={{ padding: '0.75rem 1rem' }}>
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <span className="pill-tag">{c.disciplina_nome}</span>
+                      <span className="pill-tag">
+                        {c.disciplina_nome}
+                        {c.turma_nome ? ` • ${c.turma_nome}` : ''}
+                      </span>
                       <span className="text-muted text-sm">
                         {new Date(c.criado_em).toLocaleString('pt-BR')}
                       </span>

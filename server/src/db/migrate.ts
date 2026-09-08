@@ -47,4 +47,8 @@ export async function runMigrations() {
 
   // Exclusão de entregas pela coordenadoria é lógica (recuperável), como no resto do schema.
   await runAsync(`ALTER TABLE entregas ADD COLUMN IF NOT EXISTS deletado_em TIMESTAMPTZ DEFAULT NULL`);
+
+  // A revisão do arquivo orientador passou a ser segmentada também por turma
+  // (antes só por disciplina). Fica nulo nos comentários antigos.
+  await runAsync(`ALTER TABLE comentarios_orientador ADD COLUMN IF NOT EXISTS turma_id INTEGER DEFAULT NULL`);
 }

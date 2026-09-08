@@ -11,6 +11,13 @@ export const CURSOS_DISPONIVEIS = [
 ];
 
 /**
+ * Teto de integrantes por grupo PBL. Serve para a interface avisar antes de o
+ * aluno tentar; quem realmente barra é o servidor (`MAX_INTEGRANTES_GRUPO` em
+ * server/src/controllers/academicController.ts) — mantenha os dois iguais.
+ */
+export const MAX_INTEGRANTES_GRUPO = 5;
+
+/**
  * Cronograma oficial das atividades PBL do semestre, divulgado pela coordenação.
  * É a mesma fonte para o portal do professor e o do aluno — ao virar o semestre,
  * basta atualizar este bloco (`fim` é a data usada para marcar o que já venceu).

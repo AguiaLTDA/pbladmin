@@ -289,6 +289,29 @@ export async function enrollStudent(req: AuthenticatedRequest, res: Response) {
     const { usuarioId, turmaId, grupoId } = req.body;
     if (!usuarioId || !turmaId) return res.status(400).json({ message: 'Aluno e Turma são obrigatórios.' });
 
+    if (grupoId) {
+      const lotado = await grupoLotado(Number(grupoId), Number(usuarioId));
+      if (lotado) return res.status(409).json({ message: lotado });
+    }
+
+    // Só existe uma matrícula ativa por aluno/turma (índice único): se ela já
+    // existe, isto aqui é um remanejamento de grupo, não uma matrícula nova —
+    // sem este ramo o INSERT violava a constraint e devolvia um 500 opaco.
+    const matriculaExistente = await getAsync<{ id: number }>(
+      `SELECT id FROM matriculas WHERE usuario_id = ? AND turma_id = ? AND deletado_em IS NULL`,
+      [usuarioId, turmaId]
+    );
+
+    if (matriculaExistente) {
+      await runAsync(`UPDATE matriculas SET grupo_id = ? WHERE id = ?`, [grupoId || null, matriculaExistente.id]);
+      await logAudit(req.user?.id || null, 'ATUALIZAR_MATRICULA_ALUNO', 'matriculas', matriculaExistente.id, {
+        usuarioId,
+        turmaId,
+        grupoId: grupoId || null
+      });
+      return res.json({ message: 'Este aluno já estava matriculado nesta turma — o grupo dele foi atualizado.' });
+    }
+
     const resInsert = await runAsync(
       `INSERT INTO matriculas (usuario_id, turma_id, grupo_id) VALUES (?, ?, ?)`,
       [usuarioId, turmaId, grupoId || null]
@@ -297,6 +320,7 @@ export async function enrollStudent(req: AuthenticatedRequest, res: Response) {
     await logAudit(req.user?.id || null, 'MATRICULAR_ALUNO', 'matriculas', resInsert.lastID, { usuarioId, turmaId });
     return res.status(201).json({ message: 'Aluno matriculado com sucesso.' });
   } catch (err) {
+    console.error('Erro ao matricular aluno:', err);
     return res.status(500).json({ message: 'Erro ao matricular aluno.' });
   }
 }
@@ -306,6 +330,28 @@ export async function enrollStudent(req: AuthenticatedRequest, res: Response) {
 // pertence. Se já existir um grupo com esse nome (mesma turma), o aluno entra
 // nele — é assim que o sistema sincroniza os integrantes de um mesmo grupo
 // sem que ninguém precise criar o grupo manualmente antes.
+
+/** Teto de integrantes por grupo PBL, definido pela coordenação. */
+export const MAX_INTEGRANTES_GRUPO = 5;
+
+/**
+ * Retorna a mensagem de erro quando o grupo já está cheio, ou null se ainda
+ * cabe alguém. `alunoIdIgnorado` evita barrar quem já é integrante e está
+ * apenas reconfirmando o próprio vínculo.
+ */
+async function grupoLotado(grupoId: number, alunoIdIgnorado?: number): Promise<string | null> {
+  const row = await getAsync<{ total: string }>(
+    `SELECT COUNT(*) as total FROM matriculas
+     WHERE grupo_id = ? AND deletado_em IS NULL AND usuario_id != ?`,
+    [grupoId, alunoIdIgnorado ?? 0]
+  );
+
+  const total = Number(row?.total || 0);
+  if (total >= MAX_INTEGRANTES_GRUPO) {
+    return `Este grupo já tem ${total} integrantes e o limite é de ${MAX_INTEGRANTES_GRUPO}. Escolha ou crie outro grupo.`;
+  }
+  return null;
+}
 
 /** ALUNO: lista as próprias matrículas (turma + grupo, quando houver). */
 export async function listMyEnrollment(req: AuthenticatedRequest, res: Response) {
@@ -360,6 +406,10 @@ export async function selfEnroll(req: AuthenticatedRequest, res: Response) {
         [grupoId, turmaId]
       );
       if (!grupo) return res.status(404).json({ message: 'Grupo não encontrado nesta turma.' });
+
+      const lotado = await grupoLotado(grupo.id, alunoId);
+      if (lotado) return res.status(409).json({ message: lotado });
+
       grupoFinalId = grupo.id;
     } else {
       const nomeNormalizado = String(grupoNome).trim();
@@ -368,6 +418,11 @@ export async function selfEnroll(req: AuthenticatedRequest, res: Response) {
         [turmaId, nomeNormalizado]
       );
       if (existente) {
+        // Digitar o nome de um grupo já existente equivale a entrar nele, então
+        // o teto de integrantes também vale aqui.
+        const lotadoPorNome = await grupoLotado(existente.id, alunoId);
+        if (lotadoPorNome) return res.status(409).json({ message: lotadoPorNome });
+
         grupoFinalId = existente.id;
       } else {
         const ins = await runAsync(`INSERT INTO grupos (nome, turma_id) VALUES (?, ?)`, [nomeNormalizado, turmaId]);
@@ -514,6 +569,13 @@ export async function addGroupMember(req: AuthenticatedRequest, res: Response) {
       if (matriculaColega.grupo_id === grupo.id) {
         return res.status(200).json({ message: 'Este aluno já está no grupo.' });
       }
+    }
+
+    // Vale para o aluno que indica e para a coordenadoria: o teto do grupo é o mesmo.
+    const lotado = await grupoLotado(grupo.id, Number(usuarioId));
+    if (lotado) return res.status(409).json({ message: lotado });
+
+    if (matriculaColega) {
       // Entre alunos, tirar alguém de um grupo já formado tem de partir dele mesmo;
       // a coordenadoria pode remanejar direto.
       if (matriculaColega.grupo_id && !isAdmin) {
@@ -874,7 +936,7 @@ export async function getMyOrientadorFile(req: AuthenticatedRequest, res: Respon
 export async function addOrientadorComment(req: AuthenticatedRequest, res: Response) {
   try {
     const professorId = req.user?.id;
-    const { disciplinaId, texto } = req.body;
+    const { disciplinaId, turmaId, texto } = req.body;
     if (!professorId) return res.status(401).json({ message: 'Não autenticado.' });
     if (!disciplinaId || !texto || !String(texto).trim()) {
       return res.status(400).json({ message: 'Disciplina e texto da sugestão são obrigatórios.' });
@@ -888,22 +950,36 @@ export async function addOrientadorComment(req: AuthenticatedRequest, res: Respo
       return res.status(404).json({ message: 'Você ainda não possui um arquivo orientador vinculado.' });
     }
 
-    const disciplinaPermitida = await getAsync<{ id: number }>(
-      `SELECT id FROM vinculos_professores WHERE usuario_id = ? AND disciplina_id = ? AND ativo = 1`,
-      [professorId, disciplinaId]
-    );
-    if (!disciplinaPermitida) {
-      return res.status(403).json({ message: 'Esta disciplina não está entre as que você leciona.' });
+    // Com turma informada, exige o vínculo exato (disciplina naquela turma) — é o
+    // que garante que a revisão chegue ao admin já segmentada por curso/turma.
+    const vinculoDocente = turmaId
+      ? await getAsync<{ id: number }>(
+          `SELECT id FROM vinculos_professores
+           WHERE usuario_id = ? AND disciplina_id = ? AND turma_id = ? AND ativo = 1`,
+          [professorId, disciplinaId, turmaId]
+        )
+      : await getAsync<{ id: number }>(
+          `SELECT id FROM vinculos_professores WHERE usuario_id = ? AND disciplina_id = ? AND ativo = 1`,
+          [professorId, disciplinaId]
+        );
+
+    if (!vinculoDocente) {
+      return res.status(403).json({
+        message: turmaId
+          ? 'Você não leciona esta disciplina nesta turma.'
+          : 'Esta disciplina não está entre as que você leciona.'
+      });
     }
 
     const ins = await runAsync(
-      `INSERT INTO comentarios_orientador (arquivo_orientador_id, professor_id, disciplina_id, texto)
-       VALUES (?, ?, ?, ?)`,
-      [vinculoAtivo.id, professorId, disciplinaId, String(texto).trim()]
+      `INSERT INTO comentarios_orientador (arquivo_orientador_id, professor_id, disciplina_id, turma_id, texto)
+       VALUES (?, ?, ?, ?, ?)`,
+      [vinculoAtivo.id, professorId, disciplinaId, turmaId || null, String(texto).trim()]
     );
 
     await logAudit(professorId, 'SUGERIR_ALTERACAO_ARQUIVO_ORIENTADOR', 'comentarios_orientador', ins.lastID, {
-      disciplinaId
+      disciplinaId,
+      turmaId: turmaId || null
     });
     return res.status(201).json({ id: ins.lastID, message: 'Sugestão enviada para a coordenação.' });
   } catch (err) {
@@ -917,9 +993,14 @@ export async function listMyOrientadorComments(req: AuthenticatedRequest, res: R
   try {
     const professorId = req.user?.id;
     const list = await queryAsync(
-      `SELECT co.id, co.texto, co.criado_em, d.nome as disciplina_nome, d.codigo as disciplina_codigo
+      `SELECT co.id, co.texto, co.criado_em,
+              d.nome as disciplina_nome, d.codigo as disciplina_codigo,
+              t.nome as turma_nome, t.codigo as turma_codigo,
+              c.nome as curso_nome
        FROM comentarios_orientador co
        JOIN disciplinas d ON co.disciplina_id = d.id
+       LEFT JOIN turmas t ON co.turma_id = t.id
+       LEFT JOIN cursos c ON d.curso_id = c.id
        WHERE co.professor_id = ?
        ORDER BY co.criado_em DESC`,
       [professorId]
@@ -942,11 +1023,13 @@ export async function listOrientadorReviews(req: AuthenticatedRequest, res: Resp
       `SELECT co.id, co.texto, co.criado_em,
               u.id as professor_id, u.nome as professor_nome, u.email as professor_email,
               d.id as disciplina_id, d.nome as disciplina_nome, d.codigo as disciplina_codigo,
+              t.id as turma_id, t.nome as turma_nome, t.codigo as turma_codigo,
               c.nome as curso_nome,
               ar.nome_original as arquivo_nome, ao.rotulo
        FROM comentarios_orientador co
        JOIN usuarios u ON co.professor_id = u.id
        JOIN disciplinas d ON co.disciplina_id = d.id
+       LEFT JOIN turmas t ON co.turma_id = t.id
        LEFT JOIN cursos c ON d.curso_id = c.id
        JOIN arquivos_orientadores ao ON co.arquivo_orientador_id = ao.id
        JOIN arquivos ar ON ao.arquivo_id = ar.id
@@ -956,6 +1039,69 @@ export async function listOrientadorReviews(req: AuthenticatedRequest, res: Resp
   } catch (err) {
     console.error('Erro ao listar revisões dos professores:', err);
     return res.status(500).json({ message: 'Erro ao listar as revisões dos professores.' });
+  }
+}
+
+/**
+ * ADMIN: a aba "Revisão Docente" — reúne os dois retornos do professor,
+ * segmentados por curso, turma e disciplina:
+ *
+ * 1. `orientador`: as revisões sobre o arquivo orientador (texto livre).
+ * 2. `pblGrupos`: a revisão dos PBLs dos grupos, que é o feedback/nota que o
+ *    docente já registra ao avaliar cada entrega — aqui ele é apenas trazido
+ *    para o admin, agrupável por turma, disciplina e grupo.
+ *
+ * A turma do feedback vem da matrícula do aluno na turma que o docente leciona
+ * (o mesmo critério de alcance usado para ele ver a entrega).
+ */
+export async function listRevisaoDocente(req: AuthenticatedRequest, res: Response) {
+  try {
+    const orientador = await queryAsync(
+      `SELECT co.id, co.texto, co.criado_em,
+              u.id as professor_id, u.nome as professor_nome, u.email as professor_email,
+              d.nome as disciplina_nome, d.codigo as disciplina_codigo,
+              t.nome as turma_nome, t.codigo as turma_codigo,
+              c.nome as curso_nome,
+              ar.nome_original as arquivo_nome, ao.rotulo
+       FROM comentarios_orientador co
+       JOIN usuarios u ON co.professor_id = u.id
+       JOIN disciplinas d ON co.disciplina_id = d.id
+       LEFT JOIN turmas t ON co.turma_id = t.id
+       LEFT JOIN cursos c ON d.curso_id = c.id
+       JOIN arquivos_orientadores ao ON co.arquivo_orientador_id = ao.id
+       JOIN arquivos ar ON ao.arquivo_id = ar.id
+       ORDER BY u.nome ASC, co.criado_em DESC`
+    );
+
+    const pblGrupos = await queryAsync(
+      `SELECT DISTINCT ON (fb.id)
+              fb.id, fb.observacoes as texto, fb.nota_escrita, fb.nota_oral, fb.nota_total,
+              fb.liberado_aluno, fb.criado_em,
+              av.id as professor_id, av.nome as professor_nome, av.email as professor_email,
+              al.nome as aluno_nome, al.email as aluno_email,
+              g.nome as grupo_nome,
+              t.nome as turma_nome, t.codigo as turma_codigo,
+              d.nome as disciplina_nome, d.codigo as disciplina_codigo,
+              c.nome as curso_nome,
+              a.id as atividade_id, a.titulo as atividade_titulo, a.codigo_unico
+       FROM feedbacks fb
+       JOIN entregas e ON fb.entrega_id = e.id AND e.deletado_em IS NULL
+       JOIN publicacoes pub ON e.publicacao_id = pub.id
+       JOIN atividades_pbl a ON pub.atividade_id = a.id AND a.deletado_em IS NULL
+       JOIN usuarios av ON fb.avaliador_id = av.id
+       JOIN usuarios al ON e.aluno_id = al.id
+       JOIN disciplinas d ON a.disciplina_id = d.id
+       JOIN cursos c ON a.curso_id = c.id
+       LEFT JOIN grupos g ON e.grupo_id = g.id
+       LEFT JOIN matriculas m ON m.usuario_id = e.aluno_id AND m.deletado_em IS NULL
+       LEFT JOIN turmas t ON m.turma_id = t.id
+       ORDER BY fb.id DESC`
+    );
+
+    return res.json({ orientador, pblGrupos });
+  } catch (err) {
+    console.error('Erro ao listar a revisão docente:', err);
+    return res.status(500).json({ message: 'Erro ao listar a revisão docente.' });
   }
 }
 

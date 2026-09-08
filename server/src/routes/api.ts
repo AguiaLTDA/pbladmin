@@ -89,6 +89,10 @@ router.post('/academic/my-orientador-file/comments', authenticateToken, requireR
 router.get('/academic/my-orientador-file/comments', authenticateToken, requireRole('PROFESSOR'), academicCtrl.listMyOrientadorComments);
 router.get('/academic/orientador-reviews', authenticateToken, requireRole('ADMIN'), academicCtrl.listOrientadorReviews);
 
+// Aba "Revisão Docente" do admin: revisões do arquivo orientador + revisão dos PBLs
+// dos grupos (o feedback que o docente lança nas entregas), por curso/turma/disciplina.
+router.get('/academic/revisao-docente', authenticateToken, requireRole('ADMIN'), academicCtrl.listRevisaoDocente);
+
 // Aprova o kit vigente do professor e replica em novas atividades PBL (uma por disciplina,
 // turmas pré-designadas via segmentação). Só o admin aciona; não exige liberação prévia do professor.
 router.post('/academic/orientador-files/:professorId/aprovar-replicar', authenticateToken, requireRole('ADMIN'), academicCtrl.aprovarEReplicarOrientador);

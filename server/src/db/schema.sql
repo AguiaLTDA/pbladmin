@@ -151,11 +151,13 @@ CREATE TABLE IF NOT EXISTS comentarios_orientador (
   arquivo_orientador_id INTEGER NOT NULL,
   professor_id INTEGER NOT NULL,
   disciplina_id INTEGER NOT NULL,
+  turma_id INTEGER DEFAULT NULL, -- turma em que o docente leciona a disciplina; nulo nos registros antigos
   texto TEXT NOT NULL,
   criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (arquivo_orientador_id) REFERENCES arquivos_orientadores(id),
   FOREIGN KEY (professor_id) REFERENCES usuarios(id),
-  FOREIGN KEY (disciplina_id) REFERENCES disciplinas(id)
+  FOREIGN KEY (disciplina_id) REFERENCES disciplinas(id),
+  FOREIGN KEY (turma_id) REFERENCES turmas(id)
 );
 
 -- 9.1 Grade de Horário Acadêmico (fonte do vínculo Professor <-> Turma <-> Disciplina)

@@ -316,6 +316,39 @@ export interface OrientadorComment {
   criado_em: string;
   disciplina_nome: string;
   disciplina_codigo?: string;
+  turma_nome?: string | null;
+  turma_codigo?: string | null;
+  curso_nome?: string | null;
+}
+
+/** Revisão do PBL dos grupos = o feedback/nota que o docente lançou na entrega. */
+export interface RevisaoPBLGrupo {
+  id: number;
+  texto?: string | null;
+  nota_escrita?: number;
+  nota_oral?: number;
+  nota_total?: number;
+  liberado_aluno?: number;
+  criado_em: string;
+  professor_id: number;
+  professor_nome: string;
+  professor_email?: string;
+  aluno_nome: string;
+  aluno_email?: string;
+  grupo_nome?: string | null;
+  turma_nome?: string | null;
+  turma_codigo?: string | null;
+  disciplina_nome: string;
+  disciplina_codigo?: string;
+  curso_nome?: string;
+  atividade_id: number;
+  atividade_titulo: string;
+  codigo_unico: string;
+}
+
+export interface RevisaoDocentePayload {
+  orientador: OrientadorReviewRow[];
+  pblGrupos: RevisaoPBLGrupo[];
 }
 
 export interface OrientadorReviewRow {
@@ -328,6 +361,9 @@ export interface OrientadorReviewRow {
   disciplina_id: number;
   disciplina_nome: string;
   disciplina_codigo?: string;
+  turma_id?: number | null;
+  turma_nome?: string | null;
+  turma_codigo?: string | null;
   curso_nome?: string;
   arquivo_nome?: string;
   rotulo?: string;

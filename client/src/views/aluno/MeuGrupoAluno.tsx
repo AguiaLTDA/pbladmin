@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { TurmaOption, GrupoOption, GrupoMembro, MinhaMatricula } from '../../types';
+import { MAX_INTEGRANTES_GRUPO } from '../../constants/academico';
 import { Users, UserPlus, CheckCircle2, RefreshCw, LogIn, Search, UserCheck, Repeat } from 'lucide-react';
 
 interface AdicionarColegaProps {
@@ -229,11 +230,16 @@ const SeletorGrupo: React.FC<SeletorGrupoProps> = ({ turmaId, onConfirmado, onCa
               onChange={(e: any) => setGrupoExistenteId(e.target.value ? Number(e.target.value) : '')}
             >
               <option value="">-- Selecione o grupo --</option>
-              {gruposDaTurma.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.nome} ({g.total_integrantes || 0} integrante{g.total_integrantes === 1 ? '' : 's'})
-                </option>
-              ))}
+              {gruposDaTurma.map((g) => {
+                const integrantes = Number(g.total_integrantes || 0);
+                const lotado = integrantes >= MAX_INTEGRANTES_GRUPO;
+                return (
+                  <option key={g.id} value={g.id} disabled={lotado}>
+                    {g.nome} ({integrantes}/{MAX_INTEGRANTES_GRUPO}
+                    {lotado ? ' — lotado' : ''})
+                  </option>
+                );
+              })}
             </select>
           )}
         </div>
@@ -351,6 +357,8 @@ export const MeuGrupoAlunoView: React.FC = () => {
                 <>
                   <div className="pill-tag pill-tag-green" style={{ marginBottom: '0.5rem' }}>
                     <Users size={12} /> {m.grupo_nome}
+                    {membrosPorGrupo[m.grupo_id as number] &&
+                      ` (${membrosPorGrupo[m.grupo_id as number].length}/${MAX_INTEGRANTES_GRUPO})`}
                   </div>
                   {membrosPorGrupo[m.grupo_id as number]?.length ? (
                     <ul className="text-sm text-muted" style={{ paddingLeft: '1rem', margin: 0 }}>

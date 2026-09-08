@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { GrupoOption, GrupoMembro, TurmaOption } from '../types';
+import { MAX_INTEGRANTES_GRUPO } from '../constants/academico';
 import { Plus, Trash2, Users, Search, UserPlus, UserMinus, ChevronDown, ChevronRight } from 'lucide-react';
 
 interface GestaoGruposAdminProps {
@@ -186,7 +187,12 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
                       </button>
                     </td>
                     <td>{g.turma_nome}</td>
-                    <td>{g.total_integrantes || 0} alunos</td>
+                    <td>
+                      {Number(g.total_integrantes || 0)}/{MAX_INTEGRANTES_GRUPO}
+                      {Number(g.total_integrantes || 0) >= MAX_INTEGRANTES_GRUPO && (
+                        <span className="text-muted text-sm"> — lotado</span>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'right' }}>
                       <div className="flex gap-2 justify-end">
                         <button onClick={() => alternarExpandido(g.id)} className="btn btn-secondary btn-sm">
