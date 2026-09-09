@@ -102,9 +102,16 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response) {
       return res.status(404).json({ message: 'Arquivo não encontrado ou removido.' });
     }
 
+    // Arquivos institucionais (ex.: Manual do Aluno PBL) são de leitura livre para
+    // qualquer usuário autenticado — pulam as checagens de posse/turma abaixo.
+    const ehArquivoInstitucional = await getAsync<{ id: number }>(
+      `SELECT id FROM arquivos_institucionais WHERE arquivo_id = ?`,
+      [id]
+    );
+
     // Permission Authorization check:
     // If Student: verify if file belongs to a Published activity directed to them or their own submission
-    if (user.perfilNome === 'ALUNO') {
+    if (user.perfilNome === 'ALUNO' && !ehArquivoInstitucional) {
       const isOwner = fileRow.enviado_por === user.id;
 
       const isActivityFile = await getAsync<{ id: number }>(
@@ -125,7 +132,7 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response) {
 
     // Se PROFESSOR: só o que ele enviou, o material das próprias atividades PBL
     // e os anexos das entregas de alunos das turmas que ele leciona.
-    if (user.perfilNome === 'PROFESSOR') {
+    if (user.perfilNome === 'PROFESSOR' && !ehArquivoInstitucional) {
       const isOwner = fileRow.enviado_por === user.id;
 
       const isMaterialProprio = await getAsync<{ id: number }>(
@@ -455,5 +462,67 @@ export async function listarMeusDirecionados(req: AuthenticatedRequest, res: Res
   } catch (err) {
     console.error('Erro ao listar materiais direcionados:', err);
     return res.status(500).json({ message: 'Erro ao listar os materiais direcionados a você.' });
+  }
+}
+
+/**
+ * Arquivos institucionais: um "slot" nomeado (ex.: 'MANUAL_ALUNO_PBL') que aponta
+ * para o `arquivo` vigente. Qualquer usuário autenticado pode consultar/baixar
+ * (ver bypass em downloadFile acima); só o ADMIN troca o arquivo do slot.
+ */
+export async function getInstitutionalFile(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { chave } = req.params;
+    const row = await getAsync(
+      `SELECT ai.chave, ai.atualizado_em,
+              ar.id as arquivo_id, ar.nome_original, ar.tamanho_bytes, ar.mime_type, ar.categoria
+       FROM arquivos_institucionais ai
+       JOIN arquivos ar ON ai.arquivo_id = ar.id AND ar.deletado_em IS NULL
+       WHERE ai.chave = ?`,
+      [chave]
+    );
+    return res.json(row || null);
+  } catch (err) {
+    console.error('Erro ao buscar arquivo institucional:', err);
+    return res.status(500).json({ message: 'Erro ao buscar o arquivo institucional.' });
+  }
+}
+
+/** ADMIN: define (ou substitui) o arquivo vigente de um slot institucional. */
+export async function setInstitutionalFile(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { chave } = req.params;
+    const { arquivoId } = req.body;
+    const adminId = req.user?.id;
+    if (!arquivoId) return res.status(400).json({ message: 'Arquivo é obrigatório.' });
+
+    const arquivo = await getAsync<{ id: number }>(`SELECT id FROM arquivos WHERE id = ? AND deletado_em IS NULL`, [
+      arquivoId
+    ]);
+    if (!arquivo) return res.status(404).json({ message: 'Arquivo não encontrado.' });
+
+    const existente = await getAsync<{ id: number }>(`SELECT id FROM arquivos_institucionais WHERE chave = ?`, [
+      chave
+    ]);
+
+    if (existente) {
+      await runAsync(
+        `UPDATE arquivos_institucionais SET arquivo_id = ?, atualizado_por = ?, atualizado_em = CURRENT_TIMESTAMP WHERE chave = ?`,
+        [arquivoId, adminId || null, chave]
+      );
+    } else {
+      await runAsync(
+        `INSERT INTO arquivos_institucionais (chave, arquivo_id, atualizado_por) VALUES (?, ?, ?)`,
+        [chave, arquivoId, adminId || null]
+      );
+    }
+
+    await logAudit(adminId || null, 'DEFINIR_ARQUIVO_INSTITUCIONAL', 'arquivos_institucionais', String(chave), {
+      arquivoId
+    });
+    return res.json({ message: 'Arquivo institucional atualizado com sucesso.' });
+  } catch (err) {
+    console.error('Erro ao definir arquivo institucional:', err);
+    return res.status(500).json({ message: 'Erro ao definir o arquivo institucional.' });
   }
 }

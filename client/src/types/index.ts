@@ -223,6 +223,8 @@ export interface StudentRegistration extends StudentRegistrationInput {
   status: 'PENDENTE' | 'APROVADO' | 'REJEITADO';
   usuario_id?: number | null;
   justificativa_rejeicao?: string | null;
+  /** Preenchido apenas nos cadastros que estão na lixeira. */
+  deletado_em?: string | null;
 }
 
 // --- AUTO-MATRÍCULA E GRUPO PBL (PORTAL DO ALUNO) ---
@@ -299,6 +301,18 @@ export interface ProfessorBindings {
   professorId: number;
   turmas: ProfessorClassBinding[];
   disciplinas: Array<{ id: number; nome: string; codigo: string; curso_nome: string }>;
+}
+
+// --- ARQUIVOS INSTITUCIONAIS (ex.: Manual do Aluno PBL) ---
+
+export interface InstitutionalFile {
+  chave: string;
+  atualizado_em: string;
+  arquivo_id: number;
+  nome_original: string;
+  tamanho_bytes: number;
+  mime_type: string;
+  categoria?: string;
 }
 
 // --- ARQUIVO ORIENTADOR VINCULADO À CONTA DO PROFESSOR ---

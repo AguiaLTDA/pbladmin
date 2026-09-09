@@ -34,6 +34,10 @@ const preCadastroLimiter = rateLimit({
 router.post('/public/pre-cadastro', preCadastroLimiter, preCadastroCtrl.criarPreCadastro);
 
 router.get('/admin/pre-cadastros', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.listarPreCadastros);
+// Antes das rotas com ':id' para 'excluidos' não ser interpretado como um id.
+router.get('/admin/pre-cadastros/excluidos', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.listarPreCadastrosExcluidos);
+router.delete('/admin/pre-cadastros/:id', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.excluirPreCadastro);
+router.post('/admin/pre-cadastros/:id/restaurar', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.restaurarPreCadastro);
 router.post('/admin/pre-cadastros/:id/aprovar', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.aprovarPreCadastro);
 router.post('/admin/pre-cadastros/:id/rejeitar', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.rejeitarPreCadastro);
 
@@ -142,6 +146,12 @@ router.get('/files', authenticateToken, requireRole('ADMIN'), fileCtrl.listAllFi
 // --- DIRECIONAMENTO DE ARQUIVOS A DOCENTES ---
 // Precisa vir antes de '/files/:id/...' para 'meus-direcionados' não virar um id.
 router.get('/files/meus-direcionados', authenticateToken, requireRole('PROFESSOR'), fileCtrl.listarMeusDirecionados);
+
+// --- ARQUIVOS INSTITUCIONAIS (ex.: Manual do Aluno PBL) ---
+// Slot nomeado -> arquivo vigente. Leitura livre para qualquer autenticado;
+// só o admin troca o arquivo do slot. Precisa vir antes de '/files/:id'.
+router.get('/files/institutional/:chave', authenticateToken, fileCtrl.getInstitutionalFile);
+router.put('/files/institutional/:chave', authenticateToken, requireRole('ADMIN'), fileCtrl.setInstitutionalFile);
 router.get('/files/:id/direcionamentos', authenticateToken, requireRole('ADMIN'), fileCtrl.listarDirecionamentos);
 router.post('/files/:id/direcionamentos', authenticateToken, requireRole('ADMIN'), fileCtrl.direcionarArquivo);
 router.delete('/files/direcionamentos/:direcionamentoId', authenticateToken, requireRole('ADMIN'), fileCtrl.removerDirecionamento);

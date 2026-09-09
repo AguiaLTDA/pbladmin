@@ -133,11 +133,12 @@ export async function listarPreCadastros(req: AuthenticatedRequest, res: Respons
     // Nunca expõe `senha_hash` para o frontend — mesmo hasheada, não tem por que sair do servidor.
     let sql = `SELECT id, nome, email, matricula, cpf, telefone, curso, turma, periodo, origem, status,
                       usuario_id, aprovado_por, justificativa_rejeicao, criado_em, atualizado_em
-               FROM pre_cadastros`;
+               FROM pre_cadastros
+               WHERE deletado_em IS NULL`;
     const params: any[] = [];
 
     if (status) {
-      sql += ` WHERE status = ?`;
+      sql += ` AND status = ?`;
       params.push(status);
     }
     sql += ` ORDER BY criado_em DESC`;
@@ -243,5 +244,127 @@ export async function rejeitarPreCadastro(req: AuthenticatedRequest, res: Respon
     return res.json({ message: 'Pré-cadastro rejeitado.' });
   } catch (err) {
     return res.status(500).json({ message: 'Erro ao rejeitar o pré-cadastro.' });
+  }
+}
+
+// --- EXCLUSÃO DE ESTUDANTES PELA COORDENADORIA ---
+// A exclusão é lógica nas duas pontas: o cadastro sai da lista e a conta do
+// aluno perde o acesso (o login exige `deletado_em IS NULL`). As matrículas
+// ficam intactas, mas as consultas de turma/grupo ignoram aluno excluído — por
+// isso restaurar devolve o estudante exatamente como estava, com grupo e tudo.
+
+/** ADMIN: exclui o cadastro do estudante e, se houver conta, o acesso dela. */
+export async function excluirPreCadastro(req: AuthenticatedRequest, res: Response) {
+  try {
+    const adminId = req.user?.id;
+    const { id } = req.params;
+
+    const preCadastro = await getAsync<{
+      id: number;
+      nome: string;
+      email: string;
+      usuario_id: number | null;
+      deletado_em: string | null;
+    }>('SELECT id, nome, email, usuario_id, deletado_em FROM pre_cadastros WHERE id = ?', [id]);
+
+    if (!preCadastro) return res.status(404).json({ message: 'Cadastro não encontrado.' });
+    if (preCadastro.deletado_em) return res.status(400).json({ message: 'Este cadastro já está excluído.' });
+
+    await runAsync(
+      `UPDATE pre_cadastros SET deletado_em = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?`,
+      [id]
+    );
+
+    // Sem isso o aluno continuaria entrando no portal com a conta dele.
+    if (preCadastro.usuario_id) {
+      await runAsync(
+        `UPDATE usuarios SET deletado_em = CURRENT_TIMESTAMP, ativo = 0, atualizado_em = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [preCadastro.usuario_id]
+      );
+    }
+
+    await logAudit(adminId || null, 'EXCLUIR_CADASTRO_ESTUDANTE', 'pre_cadastros', String(id), {
+      email: preCadastro.email,
+      usuarioId: preCadastro.usuario_id
+    });
+
+    return res.json({
+      message: preCadastro.usuario_id
+        ? `Cadastro de ${preCadastro.nome} excluído e acesso revogado. Pode ser restaurado.`
+        : `Cadastro de ${preCadastro.nome} excluído. Pode ser restaurado.`
+    });
+  } catch (err) {
+    console.error('Erro ao excluir cadastro de estudante:', err);
+    return res.status(500).json({ message: 'Erro ao excluir o cadastro.' });
+  }
+}
+
+/** ADMIN: cadastros de estudantes excluídos (a "lixeira"). */
+export async function listarPreCadastrosExcluidos(req: AuthenticatedRequest, res: Response) {
+  try {
+    const lista = await queryAsync(
+      `SELECT id, nome, email, matricula, curso, turma, periodo, status, usuario_id, criado_em, deletado_em
+       FROM pre_cadastros
+       WHERE deletado_em IS NOT NULL
+       ORDER BY deletado_em DESC`
+    );
+    return res.json(lista);
+  } catch (err) {
+    return res.status(500).json({ message: 'Erro ao listar os cadastros excluídos.' });
+  }
+}
+
+/** ADMIN: restaura o cadastro e devolve o acesso da conta do aluno. */
+export async function restaurarPreCadastro(req: AuthenticatedRequest, res: Response) {
+  try {
+    const adminId = req.user?.id;
+    const { id } = req.params;
+
+    const preCadastro = await getAsync<{
+      id: number;
+      nome: string;
+      email: string;
+      usuario_id: number | null;
+      deletado_em: string | null;
+    }>('SELECT id, nome, email, usuario_id, deletado_em FROM pre_cadastros WHERE id = ?', [id]);
+
+    if (!preCadastro) return res.status(404).json({ message: 'Cadastro não encontrado.' });
+    if (!preCadastro.deletado_em) return res.status(400).json({ message: 'Este cadastro não está excluído.' });
+
+    // Enquanto esteve excluído, o e-mail pode ter sido usado por outra conta:
+    // devolver o acesso criaria dois logins iguais.
+    const conflito = await getAsync<{ id: number }>(
+      `SELECT id FROM usuarios
+       WHERE LOWER(email) = LOWER(?) AND deletado_em IS NULL AND id != ?`,
+      [preCadastro.email, preCadastro.usuario_id || 0]
+    );
+    if (conflito) {
+      return res.status(409).json({
+        message: 'Já existe outra conta ativa com este e-mail. Desative-a antes de restaurar este cadastro.'
+      });
+    }
+
+    await runAsync(
+      `UPDATE pre_cadastros SET deletado_em = NULL, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?`,
+      [id]
+    );
+
+    if (preCadastro.usuario_id) {
+      await runAsync(
+        `UPDATE usuarios SET deletado_em = NULL, ativo = 1, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?`,
+        [preCadastro.usuario_id]
+      );
+    }
+
+    await logAudit(adminId || null, 'RESTAURAR_CADASTRO_ESTUDANTE', 'pre_cadastros', String(id), {
+      email: preCadastro.email,
+      usuarioId: preCadastro.usuario_id
+    });
+
+    return res.json({ message: `Cadastro de ${preCadastro.nome} restaurado, com o acesso de volta.` });
+  } catch (err) {
+    console.error('Erro ao restaurar cadastro de estudante:', err);
+    return res.status(500).json({ message: 'Erro ao restaurar o cadastro.' });
   }
 }

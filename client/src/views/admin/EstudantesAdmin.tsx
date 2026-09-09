@@ -4,7 +4,7 @@ import { FormularioEstudante } from '../../components/FormularioEstudante';
 import { apiRequest } from '../../services/api';
 import { StudentRegistration, StudentRegistrationInput } from '../../types';
 import { CURSOS_DISPONIVEIS } from '../../constants/academico';
-import { UserPlus, Search, RefreshCw, Table2, Download, Check, X, KeyRound } from 'lucide-react';
+import { UserPlus, Search, RefreshCw, Table2, Download, Check, X, KeyRound, Trash2, RotateCcw } from 'lucide-react';
 
 export const EstudantesAdminView: React.FC = () => {
   const { showToast } = useToast();
@@ -19,14 +19,26 @@ export const EstudantesAdminView: React.FC = () => {
   const [credenciaisGeradas, setCredenciaisGeradas] = useState<{ email: string; senhaTemporaria: string } | null>(
     null
   );
+  const [excluidos, setExcluidos] = useState<StudentRegistration[]>([]);
+  const [mostrarLixeira, setMostrarLixeira] = useState(false);
+
+  const carregarExcluidos = async () => {
+    try {
+      const lista = await apiRequest<StudentRegistration[]>('/admin/pre-cadastros/excluidos');
+      setExcluidos(lista);
+    } catch {
+      setExcluidos([]);
+    }
+  };
 
   const carregar = async () => {
     setLoading(true);
     try {
       const lista = await apiRequest<StudentRegistration[]>('/admin/pre-cadastros');
       setEstudantes(lista);
+      await carregarExcluidos();
     } catch (err: any) {
-      showToast(err.message || 'Erro ao listar pré-cadastros.', 'error');
+      showToast(err.message || 'Erro ao listar os estudantes.', 'error');
     } finally {
       setLoading(false);
     }
@@ -35,6 +47,33 @@ export const EstudantesAdminView: React.FC = () => {
   useEffect(() => {
     carregar();
   }, []);
+
+  const handleExcluir = async (item: StudentRegistration) => {
+    const aviso = item.usuario_id
+      ? `Excluir o cadastro de ${item.nome}? Ele perde o acesso ao portal e sai das turmas e grupos. Dá para restaurar depois.`
+      : `Excluir o cadastro de ${item.nome}? Dá para restaurar depois.`;
+    if (!window.confirm(aviso)) return;
+
+    try {
+      const res = await apiRequest<{ message: string }>(`/admin/pre-cadastros/${item.id}`, { method: 'DELETE' });
+      showToast(res.message, 'success');
+      await carregar();
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível excluir o cadastro.', 'error');
+    }
+  };
+
+  const handleRestaurar = async (item: StudentRegistration) => {
+    try {
+      const res = await apiRequest<{ message: string }>(`/admin/pre-cadastros/${item.id}/restaurar`, {
+        method: 'POST'
+      });
+      showToast(res.message, 'success');
+      await carregar();
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível restaurar o cadastro.', 'error');
+    }
+  };
 
   const handleCadastrar = async (dados: StudentRegistrationInput) => {
     setSubmitting(true);
@@ -264,28 +303,36 @@ export const EstudantesAdminView: React.FC = () => {
                     </span>
                   </td>
                   <td>
-                    {e.status === 'PENDENTE' ? (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleAprovar(e)}
-                          className="btn btn-sm btn-primary"
-                          title="Aprovar e criar conta de aluno"
-                        >
-                          <Check size={14} />
-                          Aprovar
-                        </button>
-                        <button
-                          onClick={() => handleRejeitar(e)}
-                          className="btn btn-sm btn-secondary"
-                          title="Rejeitar cadastro"
-                        >
-                          <X size={14} />
-                          Rejeitar
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-muted text-sm">-</span>
-                    )}
+                    <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+                      {e.status === 'PENDENTE' && (
+                        <>
+                          <button
+                            onClick={() => handleAprovar(e)}
+                            className="btn btn-sm btn-primary"
+                            title="Aprovar e criar conta de aluno"
+                          >
+                            <Check size={14} />
+                            Aprovar
+                          </button>
+                          <button
+                            onClick={() => handleRejeitar(e)}
+                            className="btn btn-sm btn-secondary"
+                            title="Rejeitar cadastro"
+                          >
+                            <X size={14} />
+                            Rejeitar
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => handleExcluir(e)}
+                        className="btn btn-sm btn-danger"
+                        title="Excluir o cadastro e revogar o acesso (recuperável)"
+                      >
+                        <Trash2 size={14} />
+                        Excluir
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -297,6 +344,57 @@ export const EstudantesAdminView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Lixeira de cadastros excluídos */}
+      <div className="card" style={{ padding: '1rem', marginTop: '1rem' }}>
+        <div className="flex items-center justify-between gap-2" style={{ flexWrap: 'wrap' }}>
+          <h3 className="font-bold flex items-center gap-2">
+            <Trash2 size={18} color="var(--primary)" /> Cadastros excluídos ({excluidos.length})
+          </h3>
+          <button onClick={() => setMostrarLixeira((v) => !v)} className="btn btn-secondary btn-sm">
+            {mostrarLixeira ? 'Ocultar' : 'Ver excluídos'}
+          </button>
+        </div>
+
+        {mostrarLixeira && (
+          <div style={{ marginTop: '0.75rem' }}>
+            {excluidos.length === 0 ? (
+              <span className="text-muted text-sm">Nenhum cadastro excluído.</span>
+            ) : (
+              <div className="table-responsive">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>E-mail</th>
+                      <th>Matrícula</th>
+                      <th>Curso</th>
+                      <th>Excluído em</th>
+                      <th style={{ textAlign: 'right' }}>Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {excluidos.map((e) => (
+                      <tr key={e.id}>
+                        <td className="font-bold">{e.nome}</td>
+                        <td>{e.email}</td>
+                        <td>{e.matricula}</td>
+                        <td>{e.curso}</td>
+                        <td>{e.deletado_em ? new Date(e.deletado_em).toLocaleString('pt-BR') : '-'}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button onClick={() => handleRestaurar(e)} className="btn btn-primary btn-sm">
+                            <RotateCcw size={14} /> Restaurar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {showModal && (
         <div className="modal-overlay">

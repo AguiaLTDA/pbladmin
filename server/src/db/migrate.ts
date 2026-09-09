@@ -51,4 +51,8 @@ export async function runMigrations() {
   // A revisão do arquivo orientador passou a ser segmentada também por turma
   // (antes só por disciplina). Fica nulo nos comentários antigos.
   await runAsync(`ALTER TABLE comentarios_orientador ADD COLUMN IF NOT EXISTS turma_id INTEGER DEFAULT NULL`);
+
+  // A coordenadoria pode excluir um cadastro de estudante; como no resto do
+  // schema, a exclusão é lógica e o registro pode ser restaurado.
+  await runAsync(`ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS deletado_em TIMESTAMPTZ DEFAULT NULL`);
 }

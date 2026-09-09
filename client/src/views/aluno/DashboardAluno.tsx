@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { GraduationCap, Clock, CheckCircle2, AlertTriangle, ArrowRight, Sparkles } from 'lucide-react';
+import { ManualAlunoPBLButton } from '../../components/ManualAlunoPBLButton';
 
 interface AlunoDashboardData {
   kpis: {
@@ -101,6 +102,8 @@ export const DashboardAlunoView: React.FC<Props> = ({ navigate }) => {
               <span>Consultar Calendário de Prazos</span>
               <ArrowRight size={16} />
             </button>
+
+            <ManualAlunoPBLButton />
           </div>
         </div>
       </div>

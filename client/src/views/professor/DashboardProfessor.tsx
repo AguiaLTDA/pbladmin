@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { CronogramaPBL } from '../../components/CronogramaPBL';
+import { ManualAlunoPBLButton } from '../../components/ManualAlunoPBLButton';
 import { Send, Users, Award, BookOpen, ArrowRight, AlertTriangle } from 'lucide-react';
 
 interface ProfessorDashboardData {
@@ -128,6 +129,8 @@ export const DashboardProfessorView: React.FC<Props> = ({ navigate }) => {
               <span>Minhas Turmas & Horário</span>
               <ArrowRight size={16} />
             </button>
+
+            <ManualAlunoPBLButton />
           </div>
         </div>
       </div>

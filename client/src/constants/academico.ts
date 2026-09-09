@@ -39,41 +39,54 @@ export const CRONOGRAMA_PBL: {
 } = {
   periodo: '2026/2',
   totalAvaliativo: '2,5 pontos',
+  // Fonte: seção 6 (Cronograma e Entregas) do "Manual do Aluno PBL".
   etapas: [
     {
-      ordem: null,
-      titulo: 'Cadastro dos grupos',
-      prazoTexto: 'até 08 de setembro',
-      fim: '2026-09-08'
-    },
-    {
       ordem: 1,
-      titulo: 'Entrega do PDF com a situação-problema',
-      prazoTexto: 'até 15 de setembro',
-      fim: '2026-09-15'
+      titulo: 'Cadastro dos grupos',
+      prazoTexto: 'até 11 de setembro',
+      fim: '2026-09-11'
     },
     {
       ordem: 2,
+      titulo: 'Entrega do PDF com a situação-problema',
+      prazoTexto: 'até 23 de setembro',
+      fim: '2026-09-23'
+    },
+    {
+      ordem: 3,
+      titulo: 'Autoavaliação interna do grupo (1ª rodada)',
+      prazoTexto: 'de 26 de outubro a 03 de novembro',
+      fim: '2026-11-03'
+    },
+    {
+      ordem: 4,
       titulo: 'Entrega do PBL escrito',
       prazoTexto: 'até 04 de novembro',
       fim: '2026-11-04',
       pontos: '1,0 ponto'
     },
     {
-      ordem: 3,
+      ordem: 5,
       titulo: 'Devolutiva do professor sobre o texto entregue',
       prazoTexto: 'até 13 de novembro',
       fim: '2026-11-13'
     },
     {
-      ordem: 4,
+      ordem: 6,
+      titulo: 'Autoavaliação interna do grupo (2ª rodada)',
+      prazoTexto: 'de 16 a 22 de novembro',
+      fim: '2026-11-22'
+    },
+    {
+      ordem: 7,
       titulo: 'Apresentação do PBL oral',
       prazoTexto: 'de 23 a 27 de novembro',
       fim: '2026-11-27',
       pontos: '1,5 ponto'
     },
     {
-      ordem: 5,
+      ordem: 8,
       titulo: 'Divulgação das notas e feedback final do semestre',
       prazoTexto: 'até 04 de dezembro',
       fim: '2026-12-04'

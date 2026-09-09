@@ -292,6 +292,20 @@ CREATE TABLE IF NOT EXISTS arquivos_direcionados (
   FOREIGN KEY (direcionado_por) REFERENCES usuarios(id)
 );
 
+-- 13.2 Arquivos institucionais (slot nomeado -> arquivo vigente)
+-- Ex.: chave 'MANUAL_ALUNO_PBL' aponta para o PDF do manual do aluno em vigor.
+-- Qualquer usuário autenticado pode baixar (bypass em fileController.downloadFile);
+-- só o admin troca o arquivo do slot via setInstitutionalFile.
+CREATE TABLE IF NOT EXISTS arquivos_institucionais (
+  id SERIAL PRIMARY KEY,
+  chave TEXT UNIQUE NOT NULL,
+  arquivo_id INTEGER NOT NULL,
+  atualizado_por INTEGER,
+  atualizado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (arquivo_id) REFERENCES arquivos(id),
+  FOREIGN KEY (atualizado_por) REFERENCES usuarios(id)
+);
+
 -- 14. Anexos das Versões de Atividades
 CREATE TABLE IF NOT EXISTS arquivos_atividades (
   id SERIAL PRIMARY KEY,
@@ -469,6 +483,7 @@ CREATE TABLE IF NOT EXISTS pre_cadastros (
   usuario_id INTEGER DEFAULT NULL, -- preenchido quando aprovado
   aprovado_por INTEGER DEFAULT NULL,
   justificativa_rejeicao TEXT,
+  deletado_em TIMESTAMPTZ DEFAULT NULL, -- exclusão pela coordenadoria; recuperável
   criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   atualizado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id),

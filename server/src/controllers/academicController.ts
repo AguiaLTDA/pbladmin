@@ -160,7 +160,9 @@ export async function listClasses(req: AuthenticatedRequest, res: Response) {
     let sql = `
       SELECT t.*, d.nome as disciplina_nome, d.codigo as disciplina_codigo,
              COALESCE(c.nome, cd.nome) as curso_nome, p.nome as periodo_nome,
-             (SELECT COUNT(*) FROM matriculas m WHERE m.turma_id = t.id AND m.deletado_em IS NULL) as total_alunos
+             (SELECT COUNT(*) FROM matriculas m
+                JOIN usuarios ua ON m.usuario_id = ua.id AND ua.deletado_em IS NULL
+               WHERE m.turma_id = t.id AND m.deletado_em IS NULL) as total_alunos
       FROM turmas t
       LEFT JOIN disciplinas d ON t.disciplina_id = d.id
       LEFT JOIN cursos c ON t.curso_id = c.id
@@ -220,7 +222,9 @@ export async function listGroups(req: AuthenticatedRequest, res: Response) {
     const { turmaId } = req.query;
     let sql = `
       SELECT g.*, t.nome as turma_nome,
-             (SELECT COUNT(*) FROM matriculas m WHERE m.grupo_id = g.id AND m.deletado_em IS NULL) as total_integrantes
+             (SELECT COUNT(*) FROM matriculas m
+                JOIN usuarios ua ON m.usuario_id = ua.id AND ua.deletado_em IS NULL
+               WHERE m.grupo_id = g.id AND m.deletado_em IS NULL) as total_integrantes
       FROM grupos g
       JOIN turmas t ON g.turma_id = t.id
       WHERE g.deletado_em IS NULL
@@ -341,8 +345,9 @@ export const MAX_INTEGRANTES_GRUPO = 5;
  */
 async function grupoLotado(grupoId: number, alunoIdIgnorado?: number): Promise<string | null> {
   const row = await getAsync<{ total: string }>(
-    `SELECT COUNT(*) as total FROM matriculas
-     WHERE grupo_id = ? AND deletado_em IS NULL AND usuario_id != ?`,
+    `SELECT COUNT(*) as total FROM matriculas m
+       JOIN usuarios u ON m.usuario_id = u.id AND u.deletado_em IS NULL
+     WHERE m.grupo_id = ? AND m.deletado_em IS NULL AND m.usuario_id != ?`,
     [grupoId, alunoIdIgnorado ?? 0]
   );
 
@@ -449,7 +454,7 @@ export async function selfEnroll(req: AuthenticatedRequest, res: Response) {
     const membros = await queryAsync(
       `SELECT u.id, u.nome, u.email
        FROM matriculas m
-       JOIN usuarios u ON m.usuario_id = u.id
+       JOIN usuarios u ON m.usuario_id = u.id AND u.deletado_em IS NULL
        WHERE m.grupo_id = ? AND m.deletado_em IS NULL
        ORDER BY u.nome ASC`,
       [grupoFinalId]
@@ -476,7 +481,7 @@ export async function listGroupMembers(req: AuthenticatedRequest, res: Response)
     const membros = await queryAsync(
       `SELECT u.id, u.nome, u.email
        FROM matriculas m
-       JOIN usuarios u ON m.usuario_id = u.id
+       JOIN usuarios u ON m.usuario_id = u.id AND u.deletado_em IS NULL
        WHERE m.grupo_id = ? AND m.deletado_em IS NULL
        ORDER BY u.nome ASC`,
       [id]
@@ -600,7 +605,7 @@ export async function addGroupMember(req: AuthenticatedRequest, res: Response) {
     const membros = await queryAsync(
       `SELECT u.id, u.nome, u.email
        FROM matriculas m
-       JOIN usuarios u ON m.usuario_id = u.id
+       JOIN usuarios u ON m.usuario_id = u.id AND u.deletado_em IS NULL
        WHERE m.grupo_id = ? AND m.deletado_em IS NULL
        ORDER BY u.nome ASC`,
       [grupo.id]
@@ -645,7 +650,7 @@ export async function removeGroupMember(req: AuthenticatedRequest, res: Response
     const membros = await queryAsync(
       `SELECT u.id, u.nome, u.email
        FROM matriculas m
-       JOIN usuarios u ON m.usuario_id = u.id
+       JOIN usuarios u ON m.usuario_id = u.id AND u.deletado_em IS NULL
        WHERE m.grupo_id = ? AND m.deletado_em IS NULL
        ORDER BY u.nome ASC`,
       [grupo.id]
@@ -675,7 +680,9 @@ export async function deleteGroup(req: AuthenticatedRequest, res: Response) {
     if (!grupo) return res.status(404).json({ message: 'Grupo não encontrado.' });
 
     const integrantes = await getAsync<{ total: string }>(
-      `SELECT COUNT(*) as total FROM matriculas WHERE grupo_id = ? AND deletado_em IS NULL`,
+      `SELECT COUNT(*) as total FROM matriculas m
+         JOIN usuarios u ON m.usuario_id = u.id AND u.deletado_em IS NULL
+       WHERE m.grupo_id = ? AND m.deletado_em IS NULL`,
       [grupo.id]
     );
     const totalIntegrantes = Number(integrantes?.total || 0);
@@ -787,7 +794,9 @@ export async function listMyBindings(req: AuthenticatedRequest, res: Response) {
     const turmas = await queryAsync(
       `SELECT t.id, t.codigo, t.nome, t.periodo_curso, t.turno,
               c.nome as curso_nome, pl.nome as periodo_nome,
-              (SELECT COUNT(*) FROM matriculas m WHERE m.turma_id = t.id AND m.deletado_em IS NULL) as total_alunos,
+              (SELECT COUNT(*) FROM matriculas m
+                JOIN usuarios ua ON m.usuario_id = ua.id AND ua.deletado_em IS NULL
+               WHERE m.turma_id = t.id AND m.deletado_em IS NULL) as total_alunos,
               (SELECT STRING_AGG(d.nome, ' | ')
                  FROM vinculos_professores v2
                  JOIN disciplinas d ON v2.disciplina_id = d.id
