@@ -584,6 +584,27 @@ textarea.form-control {
   background-color: #f4f7f5;
 }
 
+/* Coluna de ações fixada à direita: mantém os botões (Editar/Revisar/Direcionar/
+   Excluir) sempre visíveis em tabelas largas que rolam na horizontal.
+   Escopado a .table-sticky-actions para não afetar as demais tabelas. */
+.table-sticky-actions th:last-child,
+.table-sticky-actions td:last-child {
+  position: sticky;
+  right: 0;
+  box-shadow: -6px 0 6px -4px rgba(0, 0, 0, 0.08);
+}
+.table-sticky-actions th:last-child {
+  background-color: var(--primary-light);
+  z-index: 2;
+}
+.table-sticky-actions td:last-child {
+  background-color: var(--bg-surface);
+  z-index: 1;
+}
+.table-sticky-actions tbody tr:hover td:last-child {
+  background-color: #f4f7f5;
+}
+
 /* Badges e Pills Institucionais (UNIVC Style) */
 .status-badge {
   display: inline-flex;

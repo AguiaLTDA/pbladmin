@@ -13,7 +13,8 @@ import {
   Edit3,
   PlusCircle,
   Trash2,
-  RotateCcw
+  RotateCcw,
+  Send
 } from 'lucide-react';
 
 interface Props {
@@ -155,7 +156,7 @@ export const CaixaEntradaPBLView: React.FC<Props> = ({ navigate }) => {
         </div>
       ) : (
         <div className="table-responsive">
-          <table className="table">
+          <table className="table table-sticky-actions">
             <thead>
               <tr>
                 <th>Código</th>
@@ -210,6 +211,14 @@ export const CaixaEntradaPBLView: React.FC<Props> = ({ navigate }) => {
                       >
                         <Eye size={16} />
                         Revisar & Avaliar
+                      </button>
+                      <button
+                        onClick={() => navigate(`/admin/segmentacao/${act.id}`)}
+                        className="btn btn-secondary btn-sm"
+                        title="Direcionar esta atividade para turmas, grupos ou alunos específicos"
+                      >
+                        <Send size={16} />
+                        Direcionar
                       </button>
                       <button
                         onClick={() => handleExcluir(act)}
