@@ -9,7 +9,9 @@ import {
   FileText,
   Clock,
   ArrowRight,
-  TrendingUp
+  TrendingUp,
+  GraduationCap,
+  Layers
 } from 'lucide-react';
 
 interface DashboardData {
@@ -22,6 +24,8 @@ interface DashboardData {
     publicadas: number;
     suspensas: number;
     alunosAlcancados: number;
+    alunosRelacionados: number;
+    gruposRelacionados: number;
     totalEntregas: number;
     entregasNoPrazo: number;
     entregasComAtraso: number;
@@ -112,6 +116,26 @@ export const DashboardAdminView: React.FC<Props> = ({ navigate }) => {
           <div>
             <div className="kpi-value">{k?.alunosAlcancados || 0}</div>
             <div className="kpi-label">Alunos Alcançados</div>
+          </div>
+        </div>
+
+        <div className="kpi-card" style={{ '--kpi-color': '#0891b2', '--kpi-bg': '#cffafe' } as React.CSSProperties}>
+          <div className="kpi-icon-wrapper">
+            <GraduationCap size={24} />
+          </div>
+          <div>
+            <div className="kpi-value">{k?.alunosRelacionados || 0}</div>
+            <div className="kpi-label">Alunos Relacionados</div>
+          </div>
+        </div>
+
+        <div className="kpi-card" style={{ '--kpi-color': '#4f46e5', '--kpi-bg': '#e0e7ff' } as React.CSSProperties}>
+          <div className="kpi-icon-wrapper">
+            <Layers size={24} />
+          </div>
+          <div>
+            <div className="kpi-value">{k?.gruposRelacionados || 0}</div>
+            <div className="kpi-label">Grupos Relacionados</div>
           </div>
         </div>
 

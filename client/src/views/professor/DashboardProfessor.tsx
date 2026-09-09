@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { CronogramaPBL } from '../../components/CronogramaPBL';
 import { ManualAlunoPBLButton } from '../../components/ManualAlunoPBLButton';
-import { Send, Users, Award, BookOpen, ArrowRight, AlertTriangle } from 'lucide-react';
+import { Send, Users, Award, BookOpen, ArrowRight, AlertTriangle, GraduationCap, Layers } from 'lucide-react';
 
 interface ProfessorDashboardData {
   kpis: {
     publicadas: number;
     alunosAlcancados: number;
+    alunosRelacionados: number;
+    gruposRelacionados: number;
     entregasPendentes: number;
     temArquivoOrientador: boolean;
   };
@@ -60,6 +62,26 @@ export const DashboardProfessorView: React.FC<Props> = ({ navigate }) => {
           <div>
             <div className="kpi-value">{k?.alunosAlcancados || 0}</div>
             <div className="kpi-label">Alunos Alcançados</div>
+          </div>
+        </div>
+
+        <div className="kpi-card" style={{ '--kpi-color': '#0891b2', '--kpi-bg': '#cffafe' } as React.CSSProperties}>
+          <div className="kpi-icon-wrapper">
+            <GraduationCap size={24} />
+          </div>
+          <div>
+            <div className="kpi-value">{k?.alunosRelacionados || 0}</div>
+            <div className="kpi-label">Alunos Relacionados</div>
+          </div>
+        </div>
+
+        <div className="kpi-card" style={{ '--kpi-color': '#4f46e5', '--kpi-bg': '#e0e7ff' } as React.CSSProperties}>
+          <div className="kpi-icon-wrapper">
+            <Layers size={24} />
+          </div>
+          <div>
+            <div className="kpi-value">{k?.gruposRelacionados || 0}</div>
+            <div className="kpi-label">Grupos Relacionados</div>
           </div>
         </div>
 

@@ -39,6 +39,16 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
          GROUP BY c.id`
       );
 
+      // Alunos relacionados = todos os alunos com matrícula ativa (base institucional).
+      const alunosRelacionados = await getAsync<{ count: number }>(
+        `SELECT COUNT(DISTINCT usuario_id) as count FROM matriculas WHERE deletado_em IS NULL`
+      );
+
+      // Grupos relacionados = todos os grupos PBL ativos.
+      const gruposRelacionados = await getAsync<{ count: number }>(
+        `SELECT COUNT(*) as count FROM grupos WHERE deletado_em IS NULL AND ativo = 1`
+      );
+
       return res.json({
         kpis: {
           aguardandoAnalise: (statusMap['ENVIADO_ANALISE'] || 0) + (statusMap['REENVIADO'] || 0),
@@ -49,6 +59,8 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
           publicadas: statusMap['PUBLICADO'] || 0,
           suspensas: statusMap['SUSPENSO'] || 0,
           alunosAlcancados: totalAlunos?.count || 0,
+          alunosRelacionados: alunosRelacionados?.count || 0,
+          gruposRelacionados: gruposRelacionados?.count || 0,
           totalEntregas: totalEntregas?.count || 0,
           entregasNoPrazo: entregasPrazo?.count || 0,
           entregasComAtraso: entregasAtraso?.count || 0
@@ -98,10 +110,37 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
         [user.id]
       );
 
+      // Alunos relacionados = alunos com matrícula ativa nas turmas que o professor
+      // leciona (turmas/cursos vinculados a ele pela grade), independente de PBL publicado.
+      const alunosRelacionadosProf = await getAsync<{ count: number }>(
+        `SELECT COUNT(DISTINCT m.usuario_id) as count
+         FROM matriculas m
+         WHERE m.deletado_em IS NULL
+           AND m.turma_id IN (
+             SELECT vp.turma_id FROM vinculos_professores vp
+             WHERE vp.usuario_id = ? AND vp.ativo = 1
+           )`,
+        [user.id]
+      );
+
+      // Grupos relacionados = grupos PBL ativos das turmas que o professor leciona.
+      const gruposRelacionadosProf = await getAsync<{ count: number }>(
+        `SELECT COUNT(*) as count
+         FROM grupos g
+         WHERE g.deletado_em IS NULL AND g.ativo = 1
+           AND g.turma_id IN (
+             SELECT vp.turma_id FROM vinculos_professores vp
+             WHERE vp.usuario_id = ? AND vp.ativo = 1
+           )`,
+        [user.id]
+      );
+
       return res.json({
         kpis: {
           publicadas: publicadas?.count || 0,
           alunosAlcancados: totalAlunosProf?.count || 0,
+          alunosRelacionados: alunosRelacionadosProf?.count || 0,
+          gruposRelacionados: gruposRelacionadosProf?.count || 0,
           entregasPendentes: entregasPendentes?.count || 0,
           temArquivoOrientador: !!orientador
         }
