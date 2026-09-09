@@ -1,7 +1,19 @@
+import dotenv from 'dotenv';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-export const JWT_SECRET = process.env.JWT_SECRET || 'pbl-super-secret-key-2026';
+// Garante que as env vars já estejam carregadas mesmo se este módulo for importado
+// (via a cadeia de rotas/controllers) antes do dotenv.config() de app.ts rodar.
+dotenv.config();
+
+const jwtSecretFromEnv = process.env.JWT_SECRET;
+if (!jwtSecretFromEnv) {
+  throw new Error(
+    'JWT_SECRET não definido. Defina a variável de ambiente JWT_SECRET com um valor forte ' +
+    '(ex.: openssl rand -hex 32) antes de iniciar o servidor.'
+  );
+}
+export const JWT_SECRET: string = jwtSecretFromEnv;
 
 export interface UserPayload {
   id: number;
