@@ -7,7 +7,7 @@ export async function getGeneralReport(req: AuthenticatedRequest, res: Response)
     const { cursoId, professorId, status } = req.query;
 
     let sql = `
-      SELECT a.codigo_unico, a.titulo, a.status, a.versao_atual,
+      SELECT a.id, a.codigo_unico, a.titulo, a.status, a.versao_atual,
              c.nome as curso_nome, d.nome as disciplina_nome,
              p.nome as professor_nome, a.criado_em,
              (SELECT COUNT(*) FROM alunos_segmentados als WHERE als.atividade_id = a.id) as total_alunos_alcancados,
@@ -32,6 +32,10 @@ export async function getGeneralReport(req: AuthenticatedRequest, res: Response)
     if (status) {
       sql += ` AND a.status = ?`;
       params.push(status);
+    } else {
+      // Sem filtro explícito, arquivadas ficam fora da visão padrão — ainda
+      // consultáveis escolhendo "Arquivados" no filtro de status.
+      sql += ` AND a.status != 'ARQUIVADO'`;
     }
 
     sql += ` ORDER BY a.criado_em DESC`;

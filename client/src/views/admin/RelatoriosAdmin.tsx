@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
-import { BarChart3, Download, Search, Filter, FileSpreadsheet } from 'lucide-react';
+import { BarChart3, Download, Search, Filter, FileSpreadsheet, Archive, ArchiveRestore } from 'lucide-react';
 
 export const RelatoriosAdminView: React.FC = () => {
   const { showToast } = useToast();
   const [reportData, setReportData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  const [arquivandoId, setArquivandoId] = useState<number | null>(null);
 
   const fetchReport = () => {
     setLoading(true);
@@ -45,6 +46,27 @@ export const RelatoriosAdminView: React.FC = () => {
       .catch((err) => showToast('Erro ao exportar CSV.', 'error'));
   };
 
+  const handleAlterarStatus = async (id: number, novoStatus: 'ARQUIVADO' | 'ENCERRADO', confirmar?: string) => {
+    if (confirmar && !window.confirm(confirmar)) return;
+
+    setArquivandoId(id);
+    try {
+      await apiRequest(`/publication/activities/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ novoStatus })
+      });
+      showToast(
+        novoStatus === 'ARQUIVADO' ? 'Atividade arquivada com sucesso.' : 'Atividade desarquivada com sucesso.',
+        'success'
+      );
+      fetchReport();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao alterar o status da atividade.', 'error');
+    } finally {
+      setArquivandoId(null);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -76,6 +98,7 @@ export const RelatoriosAdminView: React.FC = () => {
             <option value="ENVIADO_ANALISE">Em Análise</option>
             <option value="AJUSTES_SOLICITADOS">Ajustes Solicitados</option>
             <option value="RASCUNHO">Rascunhos</option>
+            <option value="ARQUIVADO">Arquivados</option>
           </select>
         </div>
       </div>
@@ -95,6 +118,7 @@ export const RelatoriosAdminView: React.FC = () => {
                 <th>Alunos Alcançados</th>
                 <th>Entregas Concluídas</th>
                 <th>Data Criação</th>
+                <th style={{ textAlign: 'right' }}>Ação</th>
               </tr>
             </thead>
             <tbody>
@@ -108,6 +132,31 @@ export const RelatoriosAdminView: React.FC = () => {
                   <td>{r.total_alunos_alcancados} alunos</td>
                   <td><strong>{r.total_entregas} entregas</strong></td>
                   <td>{new Date(r.criado_em).toLocaleDateString('pt-BR')}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {r.status === 'ARQUIVADO' ? (
+                      <button
+                        disabled={arquivandoId === r.id}
+                        onClick={() => handleAlterarStatus(r.id, 'ENCERRADO')}
+                        className="btn btn-secondary btn-sm"
+                      >
+                        <ArchiveRestore size={14} /> Desarquivar
+                      </button>
+                    ) : (
+                      <button
+                        disabled={arquivandoId === r.id}
+                        onClick={() =>
+                          handleAlterarStatus(
+                            r.id,
+                            'ARQUIVADO',
+                            `Arquivar "${r.titulo}"? A atividade sai da visão padrão dos relatórios e pode ser filtrada em "Arquivados".`
+                          )
+                        }
+                        className="btn btn-secondary btn-sm"
+                      >
+                        <Archive size={14} /> Arquivar
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
