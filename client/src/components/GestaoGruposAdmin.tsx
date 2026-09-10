@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { apiRequest } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { GrupoOption, GrupoMembro, TurmaOption } from '../types';
 import { MAX_INTEGRANTES_GRUPO } from '../constants/academico';
-import { Plus, Trash2, Users, Search, UserPlus, UserMinus, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Users, Search, UserPlus, UserMinus, ChevronDown, ChevronRight, Filter } from 'lucide-react';
 
 interface GestaoGruposAdminProps {
   grupos: GrupoOption[];
@@ -32,6 +32,22 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
   const [termo, setTermo] = useState('');
   const [resultados, setResultados] = useState<GrupoMembro[]>([]);
   const [buscando, setBuscando] = useState(false);
+
+  const [turmaFiltro, setTurmaFiltro] = useState<number | ''>('');
+
+  // Só as turmas que de fato têm grupo — evita um seletor gigante com opções vazias.
+  const turmasComGrupos = useMemo(() => {
+    const mapa = new Map<number, string>();
+    grupos.forEach((g) => {
+      if (g.turma_id) mapa.set(g.turma_id, g.turma_nome || `Turma #${g.turma_id}`);
+    });
+    return Array.from(mapa, ([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [grupos]);
+
+  const gruposFiltrados = useMemo(
+    () => (turmaFiltro === '' ? grupos : grupos.filter((g) => g.turma_id === Number(turmaFiltro))),
+    [grupos, turmaFiltro]
+  );
 
   const carregarMembros = (grupoId: number) => {
     setCarregandoMembrosId(grupoId);
@@ -153,12 +169,46 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
         </button>
       </div>
 
-      {grupos.length === 0 ? (
+      <div className="card mb-4" style={{ padding: '0.85rem 1rem' }}>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2" style={{ minWidth: '280px', flex: 1 }}>
+            <Filter size={18} className="text-muted" />
+            <select
+              className="form-control"
+              value={turmaFiltro}
+              onChange={(e) => setTurmaFiltro(e.target.value ? Number(e.target.value) : '')}
+            >
+              <option value="">Todas as turmas ({grupos.length} grupos)</option>
+              {turmasComGrupos.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <span className="text-muted text-sm">
+            Exibindo {gruposFiltrados.length} de {grupos.length} grupo(s).
+          </span>
+
+          {turmaFiltro !== '' && (
+            <button onClick={() => setTurmaFiltro('')} className="btn btn-secondary btn-sm">
+              Limpar filtro
+            </button>
+          )}
+        </div>
+      </div>
+
+      {gruposFiltrados.length === 0 ? (
         <div className="card text-center py-8">
           <Users size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
-          <h3 className="font-bold">Nenhum grupo cadastrado</h3>
+          <h3 className="font-bold">
+            {turmaFiltro === '' ? 'Nenhum grupo cadastrado' : 'Nenhum grupo nesta turma'}
+          </h3>
           <p className="text-muted text-sm">
-            Crie um grupo aqui ou deixe que os próprios alunos se organizem pelo portal deles.
+            {turmaFiltro === ''
+              ? 'Crie um grupo aqui ou deixe que os próprios alunos se organizem pelo portal deles.'
+              : 'Escolha outra turma no filtro ou crie um grupo para esta turma.'}
           </p>
         </div>
       ) : (
@@ -173,7 +223,7 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
               </tr>
             </thead>
             <tbody>
-              {grupos.map((g) => (
+              {gruposFiltrados.map((g) => (
                 <React.Fragment key={g.id}>
                   <tr>
                     <td>

@@ -123,8 +123,10 @@ export async function initAndSeedDb() {
   );
 
   // 7. Seed Período Letivo
+  // Mesmo nome/datas de PERIODO_LETIVO_HORARIO: num banco novo, o seed e a
+  // importação da grade precisam convergir para um único período letivo.
   const p1 = await runAsync(
-    `INSERT INTO periodos_letivos (nome, data_inicio, data_fim) VALUES ('2026/1', '2026-02-01', '2026-07-15')`
+    `INSERT INTO periodos_letivos (nome, data_inicio, data_fim) VALUES ('2026/2', '2026-08-01', '2026-12-19')`
   );
 
   // 8. Seed Turmas

@@ -55,4 +55,18 @@ export async function runMigrations() {
   // A coordenadoria pode excluir um cadastro de estudante; como no resto do
   // schema, a exclusão é lógica e o registro pode ser restaurado.
   await runAsync(`ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS deletado_em TIMESTAMPTZ DEFAULT NULL`);
+
+  // O semestre corrente é 2026/2. Bancos montados na primeira carga ficaram com o
+  // período nomeado '2026/1' — renomear a linha existente (em vez de criar outra)
+  // faz turmas, atividades e horários já vinculados a ela passarem a exibir 2026/2
+  // de uma vez. Precisa rodar ANTES de importarHorarioAcademico (que procura o
+  // período por PERIODO_LETIVO_HORARIO.nome), senão a importação criaria um
+  // período novo e, junto, turmas duplicadas. O NOT EXISTS mantém idempotente e
+  // evita dois períodos com o mesmo nome caso 2026/2 já exista.
+  await runAsync(
+    `UPDATE periodos_letivos
+        SET nome = '2026/2', data_inicio = '2026-08-01', data_fim = '2026-12-19'
+      WHERE nome = '2026/1'
+        AND NOT EXISTS (SELECT 1 FROM periodos_letivos p2 WHERE p2.nome = '2026/2')`
+  );
 }

@@ -215,7 +215,7 @@ export const SIGLAS_CURSO: Record<string, string> = {
 };
 
 export const PERIODO_LETIVO_HORARIO = {
-  nome: '2026/1',
-  dataInicio: '2026-02-02',
-  dataFim: '2026-06-30'
+  nome: '2026/2',
+  dataInicio: '2026-08-01',
+  dataFim: '2026-12-19'
 };
