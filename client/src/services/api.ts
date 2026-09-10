@@ -21,6 +21,12 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.
  * Os passos 2 e 3 só entram em cena quando o passo anterior está indisponível
  * (falha de rede / não configurado) — nunca para mascarar um erro de negócio.
  */
+/** Erro de negócio devolvido pelo backend, com o `codigo` preservado. */
+export interface ApiError extends Error {
+  codigo?: string;
+  status?: number;
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
@@ -66,7 +72,13 @@ export async function apiRequest<T = any>(
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         if (!response.ok) {
-          throw new Error(data.message || 'Erro ao processar requisição.');
+          // Preserva `codigo` e o status: a tela de login precisa distinguir
+          // "senha errada" de "e-mail ainda não validado" para oferecer o
+          // reenvio do link em vez de só repetir a mensagem de erro.
+          const erro = new Error(data.message || 'Erro ao processar requisição.') as ApiError;
+          erro.codigo = data.codigo;
+          erro.status = response.status;
+          throw erro;
         }
         return data as T;
       }
@@ -86,8 +98,11 @@ export async function apiRequest<T = any>(
     if (res !== undefined) return res;
   } catch (err: any) {
     // Credenciais inválidas são resposta legítima e devem chegar ao usuário.
-    // Nunca cair no fallback de demonstração em cima de uma falha de login.
-    if (endpoint.startsWith('/auth/')) throw err;
+    // Nunca cair no fallback de demonstração em cima de uma falha de login,
+    // nem nos fluxos públicos de validação de e-mail e senha: um "sucesso"
+    // simulado ali faria o aluno acreditar que a senha foi trocada ou que o
+    // e-mail saiu, quando nada aconteceu.
+    if (endpoint.startsWith('/auth/') || endpoint.startsWith('/public/')) throw err;
     console.warn(`Handler error on ${endpoint}:`, err?.message || err);
   }
 
@@ -176,6 +191,14 @@ async function handleSupabaseRequest<T>(endpoint: string, options: RequestInit):
 
 // Fallbacks de Dados Garantidos com Retorno em 0ms
 function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestInit): T {
+  // Autenticação e fluxos públicos de e-mail/senha não têm equivalente de
+  // demonstração: sem backend a resposta honesta é falhar, não simular.
+  if (endpoint.startsWith('/auth/') || endpoint.startsWith('/public/')) {
+    throw new Error(
+      'Não foi possível falar com o servidor do portal. Verifique sua conexão e tente novamente em instantes.'
+    );
+  }
+
   // Lista de Atividades do Aluno
   if (endpoint.includes('/submissions/student/activities')) {
     if (endpoint.match(/\/submissions\/student\/activities\/\d+/)) {
