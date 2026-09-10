@@ -4,7 +4,45 @@ import { FormularioEstudante } from '../../components/FormularioEstudante';
 import { apiRequest } from '../../services/api';
 import { StudentRegistration, StudentRegistrationInput } from '../../types';
 import { CURSOS_DISPONIVEIS } from '../../constants/academico';
-import { UserPlus, Search, RefreshCw, Table2, Download, Check, X, KeyRound, Trash2, RotateCcw } from 'lucide-react';
+import {
+  UserPlus,
+  Search,
+  RefreshCw,
+  Table2,
+  Download,
+  Check,
+  X,
+  KeyRound,
+  Trash2,
+  RotateCcw,
+  AlertTriangle
+} from 'lucide-react';
+
+/**
+ * Situação do aluno quanto ao grupo PBL, para o alerta ao lado do nome.
+ *
+ * Só alerta quem já tem conta no portal: um cadastro PENDENTE ainda não
+ * deveria estar em grupo, e a coluna de status já diz isso — repetir o alerta
+ * ali só tiraria força do aviso de quem realmente está pendurado.
+ */
+function situacaoGrupo(e: StudentRegistration): { alerta: boolean; titulo: string } {
+  if (!e.usuario_id) return { alerta: false, titulo: '' };
+  if (e.grupos_nomes) return { alerta: false, titulo: `Grupo PBL: ${e.grupos_nomes}` };
+  if (Number(e.total_matriculas || 0) === 0) {
+    // A turma exibida na linha é a que o aluno digitou no cadastro; sem
+    // matrícula no portal ele não aparece em nenhuma turma de verdade.
+    return {
+      alerta: true,
+      titulo:
+        'Sem grupo PBL — o aluno ainda não se matriculou em nenhuma turma no portal ' +
+        '(a turma da linha é a que ele informou no cadastro).'
+    };
+  }
+  return {
+    alerta: true,
+    titulo: 'Sem grupo PBL — o aluno já está matriculado na turma, mas ainda não escolheu nem criou um grupo.'
+  };
+}
 
 export const EstudantesAdminView: React.FC = () => {
   const { showToast } = useToast();
@@ -287,13 +325,36 @@ export const EstudantesAdminView: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filtrados.map((e) => (
+              {filtrados.map((e) => {
+                const grupo = situacaoGrupo(e);
+
+                return (
                 <tr key={e.id}>
-                  <td className="font-bold">{e.nome}</td>
+                  <td className="font-bold">
+                    <span className="flex items-center gap-2">
+                      {e.nome}
+                      {grupo.alerta && (
+                        <span
+                          title={grupo.titulo}
+                          aria-label={grupo.titulo}
+                          style={{ display: 'inline-flex', color: '#d97706', flexShrink: 0 }}
+                        >
+                          <AlertTriangle size={16} />
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td>{e.email}</td>
                   <td>{e.matricula}</td>
                   <td>{e.curso}</td>
-                  <td>{[e.turma, e.periodo].filter(Boolean).join(' • ') || '-'}</td>
+                  <td>
+                    <div>{[e.turma, e.periodo].filter(Boolean).join(' • ') || '-'}</div>
+                    {e.grupos_nomes ? (
+                      <div className="text-muted text-sm">{e.grupos_nomes}</div>
+                    ) : (
+                      grupo.alerta && <div className="text-sm" style={{ color: '#b45309' }}>Sem grupo</div>
+                    )}
+                  </td>
                   <td>{e.criado_em ? new Date(e.criado_em).toLocaleString('pt-BR') : '-'}</td>
                   <td>
                     <span
@@ -335,7 +396,8 @@ export const EstudantesAdminView: React.FC = () => {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
 

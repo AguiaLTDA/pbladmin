@@ -131,21 +131,31 @@ export async function listarPreCadastros(req: AuthenticatedRequest, res: Respons
   try {
     const { status } = req.query;
     // Nunca expõe `senha_hash` para o frontend — mesmo hasheada, não tem por que sair do servidor.
-    let sql = `SELECT id, nome, email, matricula, cpf, telefone, curso, turma, periodo, origem, status,
-                      usuario_id, aprovado_por, justificativa_rejeicao, criado_em, atualizado_em
-               FROM pre_cadastros
-               WHERE deletado_em IS NULL`;
+    // `grupos_nomes` e `total_matriculas` alimentam o alerta de "sem grupo" na
+    // lista do admin: o aluno pode ter conta e turma e ainda não ter escolhido
+    // grupo, e é justamente esse o caso que a coordenação precisa cobrar.
+    let sql = `SELECT pc.id, pc.nome, pc.email, pc.matricula, pc.cpf, pc.telefone, pc.curso, pc.turma,
+                      pc.periodo, pc.origem, pc.status, pc.usuario_id, pc.aprovado_por,
+                      pc.justificativa_rejeicao, pc.criado_em, pc.atualizado_em,
+                      (SELECT COUNT(*) FROM matriculas m
+                        WHERE m.usuario_id = pc.usuario_id AND m.deletado_em IS NULL) as total_matriculas,
+                      (SELECT string_agg(DISTINCT g.nome, ' • ') FROM matriculas m
+                         JOIN grupos g ON m.grupo_id = g.id AND g.deletado_em IS NULL AND g.ativo = 1
+                        WHERE m.usuario_id = pc.usuario_id AND m.deletado_em IS NULL) as grupos_nomes
+               FROM pre_cadastros pc
+               WHERE pc.deletado_em IS NULL`;
     const params: any[] = [];
 
     if (status) {
-      sql += ` AND status = ?`;
+      sql += ` AND pc.status = ?`;
       params.push(status);
     }
-    sql += ` ORDER BY criado_em DESC`;
+    sql += ` ORDER BY pc.criado_em DESC`;
 
     const lista = await queryAsync(sql, params);
     return res.json(lista);
   } catch (err) {
+    console.error('Erro ao listar pré-cadastros:', err);
     return res.status(500).json({ message: 'Erro ao listar pré-cadastros.' });
   }
 }

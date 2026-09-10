@@ -225,6 +225,10 @@ export interface StudentRegistration extends StudentRegistrationInput {
   justificativa_rejeicao?: string | null;
   /** Preenchido apenas nos cadastros que estão na lixeira. */
   deletado_em?: string | null;
+  /** Grupos PBL ativos do aluno, separados por ' • '. Nulo = ainda sem grupo. */
+  grupos_nomes?: string | null;
+  /** Matrículas ativas do aluno. Vem como string do Postgres (COUNT). */
+  total_matriculas?: number | string | null;
 }
 
 // --- AUTO-MATRÍCULA E GRUPO PBL (PORTAL DO ALUNO) ---
