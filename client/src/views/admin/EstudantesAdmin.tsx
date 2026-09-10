@@ -15,7 +15,8 @@ import {
   KeyRound,
   Trash2,
   RotateCcw,
-  AlertTriangle
+  AlertTriangle,
+  Pencil
 } from 'lucide-react';
 
 /**
@@ -57,6 +58,7 @@ export const EstudantesAdminView: React.FC = () => {
   const [credenciaisGeradas, setCredenciaisGeradas] = useState<{ email: string; senhaTemporaria: string } | null>(
     null
   );
+  const [editando, setEditando] = useState<StudentRegistration | null>(null);
   const [excluidos, setExcluidos] = useState<StudentRegistration[]>([]);
   const [mostrarLixeira, setMostrarLixeira] = useState(false);
 
@@ -85,6 +87,26 @@ export const EstudantesAdminView: React.FC = () => {
   useEffect(() => {
     carregar();
   }, []);
+
+  const handleEditar = async (dados: StudentRegistrationInput) => {
+    if (!editando) return;
+
+    setSubmitting(true);
+    try {
+      const res = await apiRequest<{ message: string }>(`/admin/pre-cadastros/${editando.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(dados)
+      });
+      showToast(res.message, 'success');
+      setEditando(null);
+      await carregar();
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível salvar as alterações.', 'error');
+      throw err;
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleExcluir = async (item: StudentRegistration) => {
     const aviso = item.usuario_id
@@ -386,6 +408,14 @@ export const EstudantesAdminView: React.FC = () => {
                         </>
                       )}
                       <button
+                        onClick={() => setEditando(e)}
+                        className="btn btn-sm btn-secondary"
+                        title="Corrigir os dados do cadastro, inclusive o e-mail"
+                      >
+                        <Pencil size={14} />
+                        Editar
+                      </button>
+                      <button
                         onClick={() => handleExcluir(e)}
                         className="btn btn-sm btn-danger"
                         title="Excluir o cadastro e revogar o acesso (recuperável)"
@@ -403,6 +433,47 @@ export const EstudantesAdminView: React.FC = () => {
 
           <div className="text-muted text-sm" style={{ marginTop: '0.75rem' }}>
             Exibindo {filtrados.length} de {estudantes.length} estudante(s).
+          </div>
+        </div>
+      )}
+
+      {/* Modal de edição do cadastro */}
+      {editando && (
+        <div className="modal-overlay">
+          <div className="modal-container">
+            <div className="modal-header">
+              <h3 className="font-bold flex items-center gap-2">
+                <Pencil size={20} color="var(--primary)" />
+                Editar cadastro de {editando.nome}
+              </h3>
+            </div>
+
+            <div className="modal-body">
+              <p className="text-muted text-sm mb-4">
+                Corrigir o e-mail invalida a confirmação anterior e envia um link novo para o
+                endereço corrigido — o aluno precisa clicar nele para voltar a entrar. A senha não
+                se altera aqui: para isso use Gestão de Usuários &gt; Redefinir senha.
+              </p>
+
+              <FormularioEstudante
+                onSubmit={handleEditar}
+                submitting={submitting}
+                origem={editando.origem || 'ADMIN'}
+                textoBotao="Salvar alterações"
+                onCancel={() => setEditando(null)}
+                ocultarSenha
+                valoresIniciais={{
+                  nome: editando.nome,
+                  email: editando.email,
+                  matricula: editando.matricula,
+                  cpf: editando.cpf || '',
+                  telefone: editando.telefone || '',
+                  curso: editando.curso,
+                  turma: editando.turma || '',
+                  periodo: editando.periodo || ''
+                }}
+              />
+            </div>
           </div>
         </div>
       )}

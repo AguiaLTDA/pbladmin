@@ -11,6 +11,14 @@ interface FormularioEstudanteProps {
   onCancel?: () => void;
   /** Autocadastro público: o aluno precisa sair já com login (e-mail) e senha definidos. */
   senhaObrigatoria?: boolean;
+  /** Preenche o formulário para edição de um cadastro que já existe. */
+  valoresIniciais?: StudentRegistrationInput;
+  /**
+   * Esconde os campos de senha. Na edição pela coordenação a senha não se
+   * mexe aqui — isso é feito em Gestão de Usuários > Redefinir senha, que
+   * gera uma temporária e a exibe para repassar.
+   */
+  ocultarSenha?: boolean;
 }
 
 const ESTADO_INICIAL: StudentRegistrationInput = {
@@ -30,9 +38,11 @@ export const FormularioEstudante: React.FC<FormularioEstudanteProps> = ({
   origem,
   textoBotao = 'Finalizar Cadastro',
   onCancel,
-  senhaObrigatoria = false
+  senhaObrigatoria = false,
+  valoresIniciais,
+  ocultarSenha = false
 }) => {
-  const [dados, setDados] = useState<StudentRegistrationInput>(ESTADO_INICIAL);
+  const [dados, setDados] = useState<StudentRegistrationInput>(valoresIniciais || ESTADO_INICIAL);
   const [senha, setSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
@@ -45,7 +55,7 @@ export const FormularioEstudante: React.FC<FormularioEstudanteProps> = ({
     e.preventDefault();
     setErroSenha(null);
 
-    if (senhaObrigatoria && !senha) {
+    if (!ocultarSenha && senhaObrigatoria && !senha) {
       setErroSenha('Defina a senha de acesso ao portal.');
       return;
     }
@@ -67,7 +77,7 @@ export const FormularioEstudante: React.FC<FormularioEstudanteProps> = ({
       return;
     }
 
-    setDados(ESTADO_INICIAL);
+    setDados(valoresIniciais || ESTADO_INICIAL);
     setSenha('');
     setConfirmarSenha('');
   };
@@ -112,6 +122,7 @@ export const FormularioEstudante: React.FC<FormularioEstudanteProps> = ({
         </div>
       </div>
 
+      {!ocultarSenha && (
       <div className="flex flex-wrap gap-4">
         <div className="form-group" style={{ flex: 1, minWidth: '180px' }}>
           <label className={`form-label${senhaObrigatoria ? ' required' : ''}`}>Senha de acesso</label>
@@ -161,6 +172,7 @@ export const FormularioEstudante: React.FC<FormularioEstudanteProps> = ({
           />
         </div>
       </div>
+      )}
 
       {erroSenha && (
         <div className="text-sm" style={{ color: '#d94a34', marginTop: '-0.5rem', marginBottom: '0.75rem' }}>
@@ -168,7 +180,7 @@ export const FormularioEstudante: React.FC<FormularioEstudanteProps> = ({
         </div>
       )}
 
-      {!senhaObrigatoria && (
+      {!ocultarSenha && !senhaObrigatoria && (
         <div className="text-muted text-sm" style={{ marginTop: '-0.5rem', marginBottom: '0.75rem' }}>
           Deixe em branco para gerar uma senha temporária automaticamente ao criar a conta.
         </div>

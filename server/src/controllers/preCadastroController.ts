@@ -468,3 +468,138 @@ export async function restaurarPreCadastro(req: AuthenticatedRequest, res: Respo
     return res.status(500).json({ message: 'Erro ao restaurar o cadastro.' });
   }
 }
+
+/**
+ * ADMIN: corrige os dados de um cadastro de estudante — inclusive o e-mail.
+ *
+ * Existe porque, com a validação por e-mail ativa, um endereço digitado errado
+ * trancava o aluno fora do portal sem saída: ele não recebia o link, não
+ * recuperava a senha e não podia se recadastrar (a matrícula já estava tomada).
+ *
+ * Trocar o e-mail invalida a validação anterior e dispara um link novo para o
+ * endereço corrigido — o endereço novo ainda não foi provado por ninguém.
+ */
+export async function atualizarPreCadastro(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const { nome, email, matricula, cpf, telefone, curso, turma, periodo } = req.body;
+
+    if (!nome || !email || !matricula || !curso) {
+      return res.status(400).json({ message: 'Nome, e-mail, matrícula e curso são obrigatórios.' });
+    }
+
+    const atual = await getAsync<{
+      id: number;
+      email: string;
+      usuario_id: number | null;
+    }>('SELECT id, email, usuario_id FROM pre_cadastros WHERE id = ? AND deletado_em IS NULL', [id]);
+    if (!atual) return res.status(404).json({ message: 'Cadastro não encontrado.' });
+
+    const emailNovo = String(email).trim();
+    const emailMudou = emailNovo.toLowerCase() !== atual.email.toLowerCase();
+
+    // As mesmas travas do autocadastro, ignorando o próprio registro.
+    if (emailMudou) {
+      const conflito = await getAsync<{ id: number }>(
+        `SELECT id FROM usuarios WHERE LOWER(email) = LOWER(?) AND id != ?`,
+        [emailNovo, atual.usuario_id ?? 0]
+      );
+      if (conflito) {
+        return res.status(409).json({
+          codigo: 'EMAIL_JA_CADASTRADO',
+          message: 'Já existe outra conta com este e-mail.'
+        });
+      }
+    }
+
+    const matriculaNova = String(matricula).trim();
+    const conflitoMatricula = await getAsync<{ id: number; nome: string }>(
+      `SELECT id, nome FROM pre_cadastros
+        WHERE LOWER(matricula) = LOWER(?) AND deletado_em IS NULL AND id != ?`,
+      [matriculaNova, atual.id]
+    );
+    if (conflitoMatricula) {
+      return res.status(409).json({
+        codigo: 'MATRICULA_JA_CADASTRADA',
+        message: `A matrícula ${matriculaNova} já pertence ao cadastro de ${conflitoMatricula.nome}.`
+      });
+    }
+
+    const cpfNormalizado = cpf ? String(cpf).replace(/\D/g, '') : '';
+    if (cpfNormalizado) {
+      const conflitoCpf = await getAsync<{ id: number; nome: string }>(
+        `SELECT id, nome FROM pre_cadastros
+          WHERE REGEXP_REPLACE(COALESCE(cpf, ''), '[^0-9]', '', 'g') = ?
+            AND deletado_em IS NULL AND id != ?`,
+        [cpfNormalizado, atual.id]
+      );
+      if (conflitoCpf) {
+        return res.status(409).json({
+          codigo: 'CPF_JA_CADASTRADO',
+          message: `Este CPF já pertence ao cadastro de ${conflitoCpf.nome}.`
+        });
+      }
+    }
+
+    await runAsync(
+      `UPDATE pre_cadastros
+          SET nome = ?, email = ?, matricula = ?, cpf = ?, telefone = ?, curso = ?, turma = ?,
+              periodo = ?, atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [
+        nome,
+        emailNovo,
+        matriculaNova,
+        cpf || null,
+        telefone || null,
+        curso,
+        turma || null,
+        periodo || null,
+        atual.id
+      ]
+    );
+
+    // Sem provedor de e-mail configurado, zerar a validação trancaria o aluno
+    // fora sem link para clicar — nesse caso a conta segue liberada.
+    const revalidar = emailMudou && emailConfigurado();
+    let linkEnviado = false;
+
+    if (atual.usuario_id) {
+      await runAsync(
+        `UPDATE usuarios
+            SET nome = ?, email = ?,
+                email_verificado_em = ${revalidar ? 'NULL' : 'email_verificado_em'},
+                atualizado_em = CURRENT_TIMESTAMP
+          WHERE id = ?`,
+        [nome, emailNovo, atual.usuario_id]
+      );
+
+      if (revalidar) {
+        try {
+          linkEnviado = await enviarLinkVerificacao(atual.usuario_id, nome, emailNovo);
+        } catch (erroEnvio) {
+          console.error('Falha ao enviar validação após correção de e-mail:', erroEnvio);
+        }
+      }
+    }
+
+    await logAudit(req.user?.id || null, 'EDITAR_PRE_CADASTRO', 'pre_cadastros', String(atual.id), {
+      emailAnterior: atual.email,
+      emailNovo,
+      emailMudou
+    });
+
+    return res.json({
+      revalidacaoPendente: revalidar,
+      linkEnviado,
+      message: revalidar
+        ? linkEnviado
+          ? `Cadastro atualizado. Enviamos um novo link de validação para ${emailNovo}.`
+          : `Cadastro atualizado, mas o e-mail de validação não saiu. Use "Reenviar" na tela de login ou tente de novo.`
+        : 'Cadastro atualizado com sucesso.'
+    });
+  } catch (err) {
+    console.error('Erro ao atualizar cadastro de estudante:', err);
+    return res.status(500).json({ message: 'Erro ao atualizar o cadastro.' });
+  }
+}
