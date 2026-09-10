@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
+import { MedalhaContexto } from '../../components/MedalhaContexto';
 import { User, PerfilRole } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { Users, UserPlus, Search, ShieldCheck, CheckCircle, XCircle } from 'lucide-react';
@@ -131,7 +132,10 @@ export const UsuariosAdminView: React.FC = () => {
               {users.map((u) => (
                 <tr key={u.id}>
                   <td>
-                    <div className="font-bold">{u.nome}</div>
+                    <div className="font-bold">
+                      {u.nome}
+                      <MedalhaContexto completo={u.contextoCompleto} tamanho={13} />
+                    </div>
                   </td>
                   <td>{u.email}</td>
                   <td>

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
-import { GraduationCap, Clock, CheckCircle2, AlertTriangle, ArrowRight, Sparkles } from 'lucide-react';
+import { GraduationCap, Clock, CheckCircle2, AlertTriangle, ArrowRight, Sparkles, Award } from 'lucide-react';
 import { ManualAlunoPBLButton } from '../../components/ManualAlunoPBLButton';
+import { useAuth } from '../../context/AuthContext';
 
 interface AlunoDashboardData {
   kpis: {
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export const DashboardAlunoView: React.FC<Props> = ({ navigate }) => {
+  const { user } = useAuth();
   const [data, setData] = useState<AlunoDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -45,6 +47,32 @@ export const DashboardAlunoView: React.FC<Props> = ({ navigate }) => {
           Ver Minhas Atividades
         </button>
       </div>
+
+      {/* Chamariz do Contexto do Aluno: some assim que a medalha é conquistada,
+          para não virar ruído permanente no painel de quem já respondeu. */}
+      {user && !user.contextoCompleto && (
+        <div
+          className="card flex items-center justify-between gap-2"
+          style={{ marginBottom: '1.5rem', borderLeft: '4px solid #b45309' }}
+        >
+          <div className="flex items-center gap-2">
+            <Award size={22} color="#b45309" />
+            <div>
+              <div className="font-bold">Conte sua realidade profissional</div>
+              <p className="text-muted text-sm" style={{ margin: 0 }}>
+                Responda o Contexto do Aluno para que os casos PBL fiquem parecidos com o que você
+                vive no trabalho — e ganhe a medalha Contexto Completo, que pode valer horas de
+                atividade complementar.
+              </p>
+            </div>
+          </div>
+
+          <button onClick={() => navigate('/aluno/contexto')} className="btn btn-secondary">
+            Responder
+            <ArrowRight size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Cards de KPIs */}
       <div className="grid-kpi">

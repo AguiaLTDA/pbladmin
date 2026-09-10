@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
+import { MedalhaContexto } from '../../components/MedalhaContexto';
 import { PBLActivity, StudentSubmission, SubmissionFile, EntregaExcluida } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -339,7 +340,10 @@ export const EntregasProfessorView: React.FC = () => {
                       {itens.map((sub) => (
                         <tr key={sub.id}>
                           <td>
-                            <div className="font-bold">{sub.aluno_nome}</div>
+                            <div className="font-bold">
+                              {sub.aluno_nome}
+                              <MedalhaContexto completo={sub.contexto_completo} tamanho={13} />
+                            </div>
                             <div className="text-muted text-sm">{sub.aluno_email}</div>
                           </td>
                           <td>
@@ -431,7 +435,10 @@ export const EntregasProfessorView: React.FC = () => {
                       {excluidas.map((e) => (
                         <tr key={e.id}>
                           <td>
-                            <div className="font-bold">{e.aluno_nome}</div>
+                            <div className="font-bold">
+                              {e.aluno_nome}
+                              <MedalhaContexto completo={e.contexto_completo} tamanho={13} />
+                            </div>
                             <div className="text-muted text-sm">{e.aluno_email}</div>
                           </td>
                           <td>

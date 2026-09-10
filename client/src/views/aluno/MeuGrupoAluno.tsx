@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
+import { MedalhaContexto } from '../../components/MedalhaContexto';
 import { useToast } from '../../context/ToastContext';
 import { TurmaOption, GrupoOption, GrupoMembro, MinhaMatricula } from '../../types';
 import { MAX_INTEGRANTES_GRUPO } from '../../constants/academico';
@@ -363,7 +364,10 @@ export const MeuGrupoAlunoView: React.FC = () => {
                   {membrosPorGrupo[m.grupo_id as number]?.length ? (
                     <ul className="text-sm text-muted" style={{ paddingLeft: '1rem', margin: 0 }}>
                       {membrosPorGrupo[m.grupo_id as number].map((membro) => (
-                        <li key={membro.id}>{membro.nome}</li>
+                        <li key={membro.id}>
+                          {membro.nome}
+                          <MedalhaContexto completo={membro.contexto_completo} tamanho={12} />
+                        </li>
                       ))}
                     </ul>
                   ) : (

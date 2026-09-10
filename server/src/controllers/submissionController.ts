@@ -289,9 +289,11 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
              e.*, u.nome as aluno_nome, u.email as aluno_email,
              g.id as grupo_id, g.nome as grupo_nome,
              t.id as turma_id, t.nome as turma_nome, t.codigo as turma_codigo,
-             fb.nota_escrita, fb.nota_oral, fb.nota_total, fb.observacoes, fb.liberado_aluno
+             fb.nota_escrita, fb.nota_oral, fb.nota_total, fb.observacoes, fb.liberado_aluno,
+             (ca.completed_at IS NOT NULL) as contexto_completo
       FROM entregas e
       JOIN usuarios u ON e.aluno_id = u.id
+      LEFT JOIN contexto_aluno ca ON ca.usuario_id = e.aluno_id
       LEFT JOIN grupos g ON e.grupo_id = g.id
       LEFT JOIN matriculas m ON m.usuario_id = e.aluno_id AND m.deletado_em IS NULL
       LEFT JOIN turmas t ON m.turma_id = t.id

@@ -14,10 +14,12 @@ import {
   Calendar,
   CalendarDays,
   LogOut,
-  Award
+  Award,
+  Briefcase
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { BrandLogo } from './BrandLogo';
+import { MedalhaContexto } from './MedalhaContexto';
 
 interface SidebarProps {
   currentRoute: string;
@@ -59,7 +61,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
     { path: '/aluno/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/aluno/atividades', label: 'Minhas Atividades', icon: GraduationCap },
     { path: '/aluno/grupo', label: 'Meus Grupos PBL', icon: Users },
-    { path: '/aluno/calendario', label: 'Calendário de Prazos', icon: Calendar }
+    { path: '/aluno/calendario', label: 'Calendário de Prazos', icon: Calendar },
+    { path: '/aluno/contexto', label: 'Meu Contexto Profissional', icon: Briefcase }
   ];
 
   let navItems = getAlunoItems();
@@ -99,7 +102,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
         <div className="user-profile-summary">
           <div className="avatar">{nomeExibicao.charAt(0).toUpperCase()}</div>
           <div className="user-info">
-            <span className="user-name" title={nomeExibicao}>{nomeExibicao}</span>
+            <span className="user-name" title={nomeExibicao}>
+              {nomeExibicao}
+              <MedalhaContexto completo={user.contextoCompleto} tamanho={13} />
+            </span>
             <span className={`user-role-badge role-${perfilExibicao.toLowerCase()}`}>
               {perfilExibicao}
             </span>

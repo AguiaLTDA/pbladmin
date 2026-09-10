@@ -12,6 +12,7 @@ import * as reportCtrl from '../controllers/reportController';
 import * as notifCtrl from '../controllers/notificationController';
 import * as auditCtrl from '../controllers/auditController';
 import * as preCadastroCtrl from '../controllers/preCadastroController';
+import * as contextoCtrl from '../controllers/contextoAlunoController';
 
 const router = Router();
 
@@ -154,6 +155,16 @@ router.post('/submissions/:entregaId/evaluate', authenticateToken, requireRole('
 router.get('/submissions/excluidas', authenticateToken, requireRole('ADMIN'), subCtrl.listDeletedSubmissions);
 router.delete('/submissions/:entregaId', authenticateToken, requireRole('ADMIN'), subCtrl.deleteSubmission);
 router.post('/submissions/:entregaId/restaurar', authenticateToken, requireRole('ADMIN'), subCtrl.restoreSubmission);
+
+// --- CONTEXTO PROFISSIONAL DO ALUNO ---
+// As rotas literais ('/student/context', '/student/badges') vêm antes das que
+// têm parâmetro, senão o Express casaria 'context' como :usuarioId.
+router.get('/student/context', authenticateToken, requireRole('ALUNO'), contextoCtrl.getMeuContexto);
+router.post('/student/context', authenticateToken, requireRole('ALUNO'), contextoCtrl.salvarContexto);
+router.put('/student/context', authenticateToken, requireRole('ALUNO'), contextoCtrl.salvarContexto);
+router.get('/student/badges', authenticateToken, contextoCtrl.listarMedalhas);
+router.get('/student/:usuarioId/context', authenticateToken, contextoCtrl.getContextoDeAluno);
+router.get('/student/:usuarioId/badges', authenticateToken, contextoCtrl.listarMedalhas);
 
 // --- FILE MANAGEMENT ---
 router.post('/files/upload', authenticateToken, fileCtrl.uploadMiddleware.single('file'), fileCtrl.uploadFile);

@@ -8,6 +8,8 @@ export interface User {
   perfilNome: PerfilRole;
   ativo?: number;
   criado_em?: string;
+  /** Aluno que preencheu o Contexto do Aluno o bastante para ganhar a medalha. */
+  contextoCompleto?: boolean;
 }
 
 export type PBLStatus =
@@ -108,6 +110,8 @@ export interface SubmissionFile {
 }
 
 export interface StudentSubmission {
+  /** Medalha de Contexto Completo do aluno, para exibir ao lado do nome. */
+  contexto_completo?: boolean;
   id: number;
   publicacao_id: number;
   aluno_id: number;
@@ -132,6 +136,8 @@ export interface StudentSubmission {
 
 /** Entrega na lixeira da coordenadoria (exclusão lógica, restaurável). */
 export interface EntregaExcluida {
+  /** Medalha de Contexto Completo do aluno, para exibir ao lado do nome. */
+  contexto_completo?: boolean;
   id: number;
   status: string;
   data_envio?: string | null;
@@ -254,6 +260,55 @@ export interface GrupoMembro {
   id: number;
   nome: string;
   email: string;
+  contexto_completo?: boolean;
+}
+
+/** Respostas do aluno sobre a própria realidade profissional. Todas opcionais. */
+export interface ContextoAlunoInput {
+  work_sector?: string;
+  company_size?: string;
+  daily_tasks?: string;
+  workplace_challenges?: string;
+  relevant_experience?: string;
+  key_learnings?: string;
+  course_connection?: string;
+  career_goals?: string;
+}
+
+export interface MedalhaAluno {
+  codigo: string;
+  titulo: string;
+  descricao: string;
+  icone: string;
+  horasComplementares: number;
+  conquistadaEm?: string;
+}
+
+/**
+ * O que a API devolve: as respostas mais o progresso e a medalha já calculados
+ * no servidor, para que a tela nunca discorde dele sobre o que é "completo".
+ */
+export interface ContextoAluno {
+  usuarioId: number;
+  existe: boolean;
+  workSector: string | null;
+  companySize: string | null;
+  dailyTasks: string;
+  workplaceChallenges: string;
+  relevantExperience: string;
+  keyLearnings: string;
+  courseConnection: string;
+  careerGoals: string;
+  completed: boolean;
+  completedAt: string | null;
+  respondidas: number;
+  totalPerguntas: number;
+  minimoParaMedalha: number;
+  minimoCaracteres: number;
+  medalha: MedalhaAluno | null;
+  ganhouMedalha?: boolean;
+  perdeuMedalha?: boolean;
+  message?: string;
 }
 
 export interface MinhaMatricula {

@@ -10,9 +10,11 @@ export async function listUsers(req: AuthenticatedRequest, res: Response) {
   try {
     const { perfil, busca } = req.query;
     let sql = `
-      SELECT u.id, u.nome, u.email, u.perfil_id, p.nome as perfil_nome, u.ativo, u.criado_em 
-      FROM usuarios u 
-      JOIN perfis p ON u.perfil_id = p.id 
+      SELECT u.id, u.nome, u.email, u.perfil_id, p.nome as perfil_nome, u.ativo, u.criado_em,
+             (ca.completed_at IS NOT NULL) as contexto_completo
+      FROM usuarios u
+      JOIN perfis p ON u.perfil_id = p.id
+      LEFT JOIN contexto_aluno ca ON ca.usuario_id = u.id
       WHERE u.deletado_em IS NULL
     `;
     const params: any[] = [];
@@ -36,7 +38,8 @@ export async function listUsers(req: AuthenticatedRequest, res: Response) {
       perfilId: u.perfil_id,
       perfilNome: u.perfil_nome,
       ativo: u.ativo,
-      criado_em: u.criado_em
+      criado_em: u.criado_em,
+      contextoCompleto: !!u.contexto_completo
     }));
     return res.json(mapped);
   } catch (err) {
@@ -456,9 +459,11 @@ export async function selfEnroll(req: AuthenticatedRequest, res: Response) {
     await logAudit(alunoId, 'AUTO_MATRICULA_GRUPO', 'matriculas', undefined, { turmaId, grupoId: grupoFinalId });
 
     const membros = await queryAsync(
-      `SELECT u.id, u.nome, u.email
+      `SELECT u.id, u.nome, u.email,
+              (ca.completed_at IS NOT NULL) as contexto_completo
        FROM matriculas m
        JOIN usuarios u ON m.usuario_id = u.id AND u.deletado_em IS NULL
+       LEFT JOIN contexto_aluno ca ON ca.usuario_id = u.id
        WHERE m.grupo_id = ? AND m.deletado_em IS NULL
        ORDER BY u.nome ASC`,
       [grupoFinalId]
@@ -483,9 +488,11 @@ export async function listGroupMembers(req: AuthenticatedRequest, res: Response)
     if (!grupo) return res.status(404).json({ message: 'Grupo não encontrado.' });
 
     const membros = await queryAsync(
-      `SELECT u.id, u.nome, u.email
+      `SELECT u.id, u.nome, u.email,
+              (ca.completed_at IS NOT NULL) as contexto_completo
        FROM matriculas m
        JOIN usuarios u ON m.usuario_id = u.id AND u.deletado_em IS NULL
+       LEFT JOIN contexto_aluno ca ON ca.usuario_id = u.id
        WHERE m.grupo_id = ? AND m.deletado_em IS NULL
        ORDER BY u.nome ASC`,
       [id]
@@ -607,9 +614,11 @@ export async function addGroupMember(req: AuthenticatedRequest, res: Response) {
     });
 
     const membros = await queryAsync(
-      `SELECT u.id, u.nome, u.email
+      `SELECT u.id, u.nome, u.email,
+              (ca.completed_at IS NOT NULL) as contexto_completo
        FROM matriculas m
        JOIN usuarios u ON m.usuario_id = u.id AND u.deletado_em IS NULL
+       LEFT JOIN contexto_aluno ca ON ca.usuario_id = u.id
        WHERE m.grupo_id = ? AND m.deletado_em IS NULL
        ORDER BY u.nome ASC`,
       [grupo.id]
@@ -652,9 +661,11 @@ export async function removeGroupMember(req: AuthenticatedRequest, res: Response
     });
 
     const membros = await queryAsync(
-      `SELECT u.id, u.nome, u.email
+      `SELECT u.id, u.nome, u.email,
+              (ca.completed_at IS NOT NULL) as contexto_completo
        FROM matriculas m
        JOIN usuarios u ON m.usuario_id = u.id AND u.deletado_em IS NULL
+       LEFT JOIN contexto_aluno ca ON ca.usuario_id = u.id
        WHERE m.grupo_id = ? AND m.deletado_em IS NULL
        ORDER BY u.nome ASC`,
       [grupo.id]

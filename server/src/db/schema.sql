@@ -512,3 +512,28 @@ CREATE INDEX IF NOT EXISTS idx_tokens_email_usuario ON tokens_email(usuario_id, 
 -- tem matricula repetida de antes desta trava (ver migrate.ts, que tenta criar
 -- o indice unico e avisa quando os duplicados impedem).
 CREATE INDEX IF NOT EXISTS idx_pre_cadastro_matricula ON pre_cadastros(LOWER(matricula));
+
+-- 29. Contexto profissional do aluno
+-- Alimenta a escrita dos casos PBL com a realidade de trabalho de quem vai
+-- resolvê-los. Todas as perguntas sao OPCIONAIS: o aluno responde o que quiser,
+-- e a linha existe assim que ele salva qualquer coisa. `completed_at` marca o
+-- momento em que ele atingiu o criterio da medalha (ver config/contextoAluno.ts).
+-- UNIQUE em usuario_id porque cada aluno tem um unico contexto, atualizado no lugar.
+CREATE TABLE IF NOT EXISTS contexto_aluno (
+  id SERIAL PRIMARY KEY,
+  usuario_id INTEGER NOT NULL UNIQUE,
+  work_sector VARCHAR(100) DEFAULT NULL,
+  company_size VARCHAR(30) DEFAULT NULL, -- 'mei' | 'pequena' | 'media' | 'grande' | 'nao_se_aplica'
+  daily_tasks TEXT,
+  workplace_challenges TEXT,
+  relevant_experience TEXT,
+  key_learnings TEXT,
+  course_connection TEXT,
+  career_goals TEXT,
+  completed_at TIMESTAMPTZ DEFAULT NULL,
+  criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_contexto_aluno_completo ON contexto_aluno(completed_at);

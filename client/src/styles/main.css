@@ -1041,3 +1041,54 @@ textarea.form-control {
   .login-titulo { margin-bottom: 0; }
   .login-acesso { padding: 1.75rem 1.5rem; }
 }
+
+/* --- Medalha "Contexto Completo" e progresso do formulário de contexto --- */
+/* A medalha aparece dentro de linhas de nome já apertadas (sidebar, tabelas),
+   então é inline-flex e não quebra a linha nem empurra o texto vizinho. */
+.medalha-contexto {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.35rem;
+  color: #b45309;
+  vertical-align: middle;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+.medalha-contexto > span {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.45rem;
+  border-radius: 9999px;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.contexto-progresso {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 12px;
+  background: var(--bg-main, #f9fafb);
+}
+
+.contexto-barra {
+  height: 8px;
+  border-radius: 9999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.contexto-barra-preenchida {
+  height: 100%;
+  border-radius: 9999px;
+  background: #3b82f6;
+  transition: width 0.25s ease;
+}
+
+.contexto-barra-preenchida.completa {
+  background: #b45309;
+}

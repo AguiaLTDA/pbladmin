@@ -199,6 +199,37 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
     );
   }
 
+  // Contexto do Aluno: sem backend, a tela abre vazia em vez de quebrar. Salvar
+  // é que não pode fingir sucesso — a resposta viria de lugar nenhum.
+  if (endpoint.startsWith('/student/context')) {
+    if ((options.method || 'GET').toUpperCase() !== 'GET') {
+      throw new Error('Não foi possível salvar seu contexto: o servidor do portal está indisponível.');
+    }
+    return {
+      usuarioId: 0,
+      existe: false,
+      workSector: null,
+      companySize: null,
+      dailyTasks: '',
+      workplaceChallenges: '',
+      relevantExperience: '',
+      keyLearnings: '',
+      courseConnection: '',
+      careerGoals: '',
+      completed: false,
+      completedAt: null,
+      respondidas: 0,
+      totalPerguntas: 6,
+      minimoParaMedalha: 4,
+      minimoCaracteres: 15,
+      medalha: null
+    } as unknown as T;
+  }
+
+  if (endpoint.startsWith('/student/') && endpoint.endsWith('/badges')) {
+    return { usuarioId: 0, medalhas: [] } as unknown as T;
+  }
+
   // Lista de Atividades do Aluno
   if (endpoint.includes('/submissions/student/activities')) {
     if (endpoint.match(/\/submissions\/student\/activities\/\d+/)) {

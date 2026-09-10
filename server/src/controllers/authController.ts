@@ -125,9 +125,11 @@ export async function getProfile(req: AuthenticatedRequest, res: Response) {
       ativo: number;
       criado_em: string;
     }>(
-      `SELECT u.id, u.nome, u.email, u.perfil_id, p.nome as perfil_nome, u.ativo, u.criado_em
+      `SELECT u.id, u.nome, u.email, u.perfil_id, p.nome as perfil_nome, u.ativo, u.criado_em,
+              (ca.completed_at IS NOT NULL) as contexto_completo
        FROM usuarios u
        JOIN perfis p ON u.perfil_id = p.id
+       LEFT JOIN contexto_aluno ca ON ca.usuario_id = u.id
        WHERE u.id = ? AND u.deletado_em IS NULL`,
       [req.user.id]
     );
@@ -143,7 +145,8 @@ export async function getProfile(req: AuthenticatedRequest, res: Response) {
       perfilId: user.perfil_id,
       perfilNome: user.perfil_nome,
       ativo: user.ativo,
-      criado_em: user.criado_em
+      criado_em: user.criado_em,
+      contextoCompleto: !!(user as any).contexto_completo
     });
   } catch (err) {
     return res.status(500).json({ message: 'Erro ao obter dados do perfil.' });

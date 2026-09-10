@@ -37,6 +37,7 @@ import { MinhasAtividadesAlunoView } from './views/aluno/MinhasAtividadesAluno';
 import { CalendarioPrazosAlunoView } from './views/aluno/CalendarioPrazosAluno';
 import { DetalhesPBLAlunoView } from './views/aluno/DetalhesPBLAluno';
 import { MeuGrupoAlunoView } from './views/aluno/MeuGrupoAluno';
+import { ContextoAlunoView } from './views/aluno/ContextoAluno';
 
 /**
  * Separa o caminho da query string do hash. Os links enviados por e-mail
@@ -168,6 +169,7 @@ export const App: React.FC = () => {
       if (currentRoute === '/aluno/dashboard') return <DashboardAlunoView navigate={navigate} />;
       if (currentRoute === '/aluno/atividades') return <MinhasAtividadesAlunoView navigate={navigate} />;
       if (currentRoute === '/aluno/grupo') return <MeuGrupoAlunoView />;
+      if (currentRoute === '/aluno/contexto') return <ContextoAlunoView />;
       if (currentRoute === '/aluno/calendario') return <CalendarioPrazosAlunoView navigate={navigate} />;
       if (currentRoute.startsWith('/aluno/atividade/')) {
         const id = currentRoute.split('/aluno/atividade/')[1];
