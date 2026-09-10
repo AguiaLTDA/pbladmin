@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { FormularioEstudante } from '../../components/FormularioEstudante';
 import { apiRequest } from '../../services/api';
 import { StudentRegistrationInput } from '../../types';
-import { GraduationCap, ArrowLeft, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { GraduationCap, ArrowLeft, CheckCircle2, ShieldCheck, MailCheck, UserX } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
 
 interface CadastroEstudanteProps {
@@ -15,29 +15,56 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
   const { showToast } = useToast();
   const { login } = useAuth();
   const [submitting, setSubmitting] = useState(false);
-  const [concluido, setConcluido] = useState<{ id: number } | null>(null);
+  const [concluido, setConcluido] = useState<{
+    id: number;
+    email: string;
+    validacaoPendente: boolean;
+  } | null>(null);
+  // Cadastro recusado por já existir (e-mail, matrícula ou CPF). Aponta para um
+  // caminho diferente — entrar ou recuperar a senha —, então fica num aviso fixo
+  // acima do formulário em vez de um toast que desaparece antes de ser lido.
+  const [jaCadastrado, setJaCadastrado] = useState<string | null>(null);
 
   const handleSubmit = async (dados: StudentRegistrationInput) => {
     setSubmitting(true);
+    setJaCadastrado(null);
     try {
-      const res = await apiRequest<{ id: number; message: string }>('/public/pre-cadastro', {
+      const res = await apiRequest<{
+        id: number;
+        message: string;
+        validacaoPendente?: boolean;
+      }>('/public/pre-cadastro', {
         method: 'POST',
         body: JSON.stringify(dados)
       });
       showToast(res.message, 'success');
 
-      // A conta já nasce ativa: entra direto no portal, na tela de turma e grupo,
-      // que é o primeiro vínculo que o aluno precisa fazer.
+      if (res.validacaoPendente) {
+        // Sem validar o e-mail o login está travado — tentar entrar agora só
+        // produziria um 403 confuso logo depois de o cadastro dar certo.
+        setConcluido({ id: res.id, email: dados.email, validacaoPendente: true });
+        return;
+      }
+
+      // Portal sem validação por e-mail configurada: a conta já nasce liberada e
+      // o aluno entra direto na tela de turma e grupo, o primeiro vínculo dele.
       try {
         await login(dados.email, String(dados.senha));
         navigate('/aluno/grupo');
       } catch {
         // Conta criada, mas o login automático falhou (rede, por exemplo):
         // o aluno entra manualmente com as credenciais que acabou de definir.
-        setConcluido({ id: res.id });
+        setConcluido({ id: res.id, email: dados.email, validacaoPendente: false });
       }
     } catch (err: any) {
-      showToast(err.message || 'Não foi possível concluir o cadastro.', 'error');
+      const duplicado = ['EMAIL_JA_CADASTRADO', 'MATRICULA_JA_CADASTRADA', 'CPF_JA_CADASTRADO'].includes(
+        err?.codigo
+      );
+      if (duplicado) {
+        setJaCadastrado(err.message);
+      } else {
+        showToast(err.message || 'Não foi possível concluir o cadastro.', 'error');
+      }
       throw err;
     } finally {
       setSubmitting(false);
@@ -112,13 +139,31 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
 
           <p style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.9rem', lineHeight: 1.6 }}>
             Preencha seus dados acadêmicos e já escolha a senha de acesso — seu login é o
-            e-mail informado abaixo. O acesso é liberado na hora: ao concluir, você entra
-            direto no portal para definir sua turma e seu grupo.
+            e-mail informado abaixo. Informe um e-mail que você realmente acesse: é por ele
+            que o portal confirma seu cadastro e permite recuperar a senha depois.
           </p>
         </div>
 
         <div style={{ padding: '2rem 2.5rem' }}>
-          {concluido ? (
+          {concluido?.validacaoPendente ? (
+            <div className="text-center">
+              <MailCheck size={56} color="#2563eb" style={{ margin: '0 auto 1rem' }} />
+              <h2 className="font-bold text-lg mb-2">Confirme seu e-mail</h2>
+              <p className="text-muted text-sm mb-4">
+                Protocolo <strong>#{concluido.id}</strong>. Enviamos uma mensagem para{' '}
+                <strong>{concluido.email}</strong> — clique no link dela para liberar seu acesso ao
+                portal. O link vale por 48 horas.
+              </p>
+              <p className="text-muted text-sm mb-4">
+                Não chegou? Confira a caixa de spam. Na tela de login, ao entrar com seu e-mail e
+                senha, o portal oferece o reenvio do link.
+              </p>
+
+              <button onClick={() => navigate('/login')} className="btn btn-primary">
+                Ir para o Login
+              </button>
+            </div>
+          ) : concluido ? (
             <div className="text-center">
               <CheckCircle2 size={56} color="#16a34a" style={{ margin: '0 auto 1rem' }} />
               <h2 className="font-bold text-lg mb-2">Conta criada!</h2>
@@ -138,6 +183,40 @@ export const CadastroEstudanteView: React.FC<CadastroEstudanteProps> = ({ naviga
             </div>
           ) : (
             <>
+              {/* Aviso ACIMA do formulário, e não em tela própria: trocar a tela
+                  desmontaria o formulário e o aluno perderia tudo que digitou.
+                  Assim ele corrige só o campo errado — ou sai por um dos links. */}
+              {jaCadastrado && (
+                <div
+                  className="card mb-4"
+                  style={{ background: '#fffbeb', border: '1px solid #fef3c7' }}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <UserX size={18} color="#b45309" />
+                    <strong style={{ color: '#b45309' }}>Você já tem cadastro</strong>
+                  </div>
+                  <p className="text-sm text-muted" style={{ marginTop: 0 }}>
+                    {jaCadastrado}
+                  </p>
+                  <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/recuperar-senha')}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      Esqueci minha senha
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/login')}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      Ir para o Login
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <FormularioEstudante
                 onSubmit={handleSubmit}
                 submitting={submitting}

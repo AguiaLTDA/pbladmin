@@ -58,7 +58,15 @@ export const FormularioEstudante: React.FC<FormularioEstudanteProps> = ({
       return;
     }
 
-    await onSubmit({ ...dados, origem, senha: senha || undefined });
+    try {
+      await onSubmit({ ...dados, origem, senha: senha || undefined });
+    } catch {
+      // Quem chamou já comunicou a falha (toast ou tela de "já tem cadastro").
+      // Aqui só evitamos a rejeição não tratada e preservamos o que foi digitado,
+      // para o aluno corrigir sem preencher tudo de novo.
+      return;
+    }
+
     setDados(ESTADO_INICIAL);
     setSenha('');
     setConfirmarSenha('');

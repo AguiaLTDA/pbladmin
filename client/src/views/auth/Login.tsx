@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { KeyRound, Mail, ArrowRight, Eye, EyeOff, Layers, Users, Target } from 'lucide-react';
+import { apiRequest } from '../../services/api';
+import { KeyRound, Mail, ArrowRight, Eye, EyeOff, Layers, Users, Target, MailWarning } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
 
 interface LoginProps {
@@ -34,6 +35,10 @@ export const LoginView: React.FC<LoginProps> = ({ navigate }) => {
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Guarda o aviso de cadastro pendente para oferecer o reenvio do link. Só
+  // aparece quando o backend confirma que a senha está certa e falta validar.
+  const [pendenteValidacao, setPendenteValidacao] = useState<string | null>(null);
+  const [reenviando, setReenviando] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +48,7 @@ export const LoginView: React.FC<LoginProps> = ({ navigate }) => {
     }
 
     setLoading(true);
+    setPendenteValidacao(null);
     try {
       await login(email, senha);
       showToast('Autenticação realizada com sucesso.', 'success');
@@ -52,9 +58,27 @@ export const LoginView: React.FC<LoginProps> = ({ navigate }) => {
       else if (userSaved.perfilNome === 'PROFESSOR') navigate('/professor/dashboard');
       else navigate('/aluno/dashboard');
     } catch (err: any) {
+      if (err?.codigo === 'EMAIL_NAO_VERIFICADO') {
+        setPendenteValidacao(email);
+      }
       showToast(err.message || 'Falha ao realizar login.', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReenviar = async () => {
+    setReenviando(true);
+    try {
+      const res = await apiRequest<{ message: string }>('/public/reenviar-verificacao', {
+        method: 'POST',
+        body: JSON.stringify({ email: pendenteValidacao })
+      });
+      showToast(res.message, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível reenviar o e-mail.', 'error');
+    } finally {
+      setReenviando(false);
     }
   };
 
@@ -154,6 +178,40 @@ export const LoginView: React.FC<LoginProps> = ({ navigate }) => {
                 </button>
               </div>
             </div>
+
+            <div style={{ textAlign: 'right', marginBottom: '1rem' }}>
+              <a
+                href="#/recuperar-senha"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate('/recuperar-senha');
+                }}
+                className="text-sm"
+              >
+                Esqueci minha senha
+              </a>
+            </div>
+
+            {pendenteValidacao && (
+              <div className="card mb-4" style={{ background: '#fffbeb', border: '1px solid #fef3c7' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <MailWarning size={18} color="#b45309" />
+                  <strong style={{ color: '#b45309' }}>Cadastro aguardando validação</strong>
+                </div>
+                <p className="text-sm text-muted" style={{ marginTop: 0 }}>
+                  Enviamos um link de confirmação para <strong>{pendenteValidacao}</strong>. Abra a
+                  mensagem e clique no link para liberar o acesso — confira também a caixa de spam.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleReenviar}
+                  disabled={reenviando}
+                  className="btn btn-secondary btn-sm"
+                >
+                  {reenviando ? 'Reenviando…' : 'Reenviar e-mail de validação'}
+                </button>
+              </div>
+            )}
 
             <button type="submit" disabled={loading} className="btn btn-primary login-submit">
               {loading ? 'Autenticando…' : 'Entrar no portal'}

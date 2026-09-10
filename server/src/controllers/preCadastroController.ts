@@ -4,6 +4,20 @@ import crypto from 'crypto';
 import { queryAsync, runAsync, getAsync } from '../config/db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
+import { enviarLinkVerificacao } from './authController';
+import { emailConfigurado } from '../services/email';
+
+/**
+ * Mostra o e-mail de um cadastro existente sem entregá-lo por inteiro: o dono
+ * reconhece o próprio endereço, mas a tela pública de cadastro não vira uma
+ * fonte de e-mails de estudantes para quem só tem o número da matrícula.
+ */
+function mascararEmail(email: string): string {
+  const [usuario, dominio] = String(email).split('@');
+  if (!dominio) return '***';
+  const visivel = usuario.slice(0, 3);
+  return `${visivel}${usuario.length > 3 ? '***' : ''}@${dominio}`;
+}
 
 function gerarSenhaTemporaria(): string {
   // 10 caracteres alfanuméricos, fáceis de ditar/transcrever para o aluno.
@@ -38,7 +52,52 @@ export async function criarPreCadastro(req: Request, res: Response) {
       email
     ]);
     if (contaExistente) {
-      return res.status(409).json({ message: 'Já existe uma conta com este e-mail. Faça login normalmente.' });
+      return res.status(409).json({
+        codigo: 'EMAIL_JA_CADASTRADO',
+        message:
+          'Já existe uma conta com este e-mail. Entre normalmente ou use "Esqueci minha senha" para recuperar o acesso.'
+      });
+    }
+
+    // O mesmo estudante não pode se cadastrar duas vezes trocando de e-mail:
+    // matrícula e CPF identificam a pessoa, o e-mail não. `usuarios.email` já é
+    // único no banco, então aqui cobrimos os outros dois documentos.
+    const matriculaNormalizada = String(matricula).trim();
+    const cadastroMesmaMatricula = await getAsync<{ id: number; email: string; nome: string }>(
+      `SELECT id, email, nome FROM pre_cadastros
+        WHERE LOWER(matricula) = LOWER(?) AND deletado_em IS NULL
+        ORDER BY criado_em ASC LIMIT 1`,
+      [matriculaNormalizada]
+    );
+    if (cadastroMesmaMatricula) {
+      return res.status(409).json({
+        codigo: 'MATRICULA_JA_CADASTRADA',
+        message:
+          `A matrícula ${matriculaNormalizada} já tem cadastro no portal, feito com o e-mail ` +
+          `${mascararEmail(cadastroMesmaMatricula.email)}. Se for você, entre com esse e-mail ou use ` +
+          '"Esqueci minha senha". Se não reconhece esse endereço, procure a coordenação.'
+      });
+    }
+
+    const cpfNormalizado = cpf ? String(cpf).replace(/\D/g, '') : '';
+    if (cpfNormalizado) {
+      const cadastroMesmoCpf = await getAsync<{ id: number; email: string }>(
+        // `[^0-9]` e não `\D`: dentro de template literal o JS consome a barra
+        // invertida e o Postgres receberia 'D', apagando a letra D em vez dos
+        // separadores — a comparação nunca casaria.
+        `SELECT id, email FROM pre_cadastros
+          WHERE REGEXP_REPLACE(COALESCE(cpf, ''), '[^0-9]', '', 'g') = ? AND deletado_em IS NULL
+          ORDER BY criado_em ASC LIMIT 1`,
+        [cpfNormalizado]
+      );
+      if (cadastroMesmoCpf) {
+        return res.status(409).json({
+          codigo: 'CPF_JA_CADASTRADO',
+          message:
+            `Este CPF já tem cadastro no portal, feito com o e-mail ${mascararEmail(cadastroMesmoCpf.email)}. ` +
+            'Se for você, entre com esse e-mail ou use "Esqueci minha senha".'
+        });
+      }
     }
 
     const perfilAluno = await getAsync<{ id: number }>(`SELECT id FROM perfis WHERE nome = 'ALUNO'`);
@@ -51,8 +110,15 @@ export async function criarPreCadastro(req: Request, res: Response) {
     const senhaTemporaria = senha ? undefined : gerarSenhaTemporaria();
     const senhaHash = await bcrypt.hash(String(senha || senhaTemporaria), 10);
 
+    // Autocadastro nasce sem e-mail validado e o login fica travado até o aluno
+    // clicar no link. Duas exceções, ambas por necessidade prática:
+    // - origem ADMIN: quem cria é a coordenação, que já repassa a senha na mão;
+    // - envio de e-mail não configurado: sem provedor não existe link para
+    //   clicar, e travar seria trancar o aluno fora do portal sem saída.
+    const exigeValidacao = origemFinal === 'AUTOCADASTRO' && emailConfigurado();
     const novoUsuario = await runAsync(
-      `INSERT INTO usuarios (nome, email, senha_hash, perfil_id, ativo) VALUES (?, ?, ?, ?, 1)`,
+      `INSERT INTO usuarios (nome, email, senha_hash, perfil_id, ativo, email_verificado_em)
+       VALUES (?, ?, ?, ?, 1, ${exigeValidacao ? 'NULL' : 'CURRENT_TIMESTAMP'})`,
       [nome, email, senhaHash, perfilAluno.id]
     );
 
@@ -110,15 +176,37 @@ export async function criarPreCadastro(req: Request, res: Response) {
       origem: origemFinal
     });
 
+    let validacaoEnviada = false;
+    let avisoEnvio: string | undefined;
+    if (exigeValidacao) {
+      try {
+        validacaoEnviada = await enviarLinkVerificacao(novoUsuario.lastID, nome, email);
+      } catch (erroEnvio) {
+        // A conta já existe; sem o e-mail o aluno usa "reenviar link" na tela de
+        // login. Derrubar o cadastro aqui o obrigaria a digitar tudo de novo.
+        console.error('Falha ao enviar e-mail de validação do cadastro:', erroEnvio);
+        avisoEnvio =
+          'Não conseguimos enviar o e-mail de validação agora. Na tela de login, use ' +
+          '"Reenviar e-mail de validação" para tentar de novo.';
+      }
+    }
+
+    const mensagem = senhaTemporaria
+      ? 'Conta de aluno criada. Repasse a senha temporária ao estudante.'
+      : validacaoEnviada
+        ? `Cadastro recebido! Enviamos um e-mail para ${email} — clique no link de confirmação para liberar o acesso.`
+        : avisoEnvio ||
+          'Cadastro concluído! Sua conta já está ativa e o acesso ao portal está liberado.';
+
     return res.status(201).json({
       id: registroId,
       usuarioId: novoUsuario.lastID,
       status: 'APROVADO',
       email,
       senhaTemporaria,
-      message: senhaTemporaria
-        ? 'Conta de aluno criada. Repasse a senha temporária ao estudante.'
-        : 'Cadastro concluído! Sua conta já está ativa e o acesso ao portal está liberado.'
+      validacaoPendente: exigeValidacao,
+      validacaoEnviada,
+      message: mensagem
     });
   } catch (err) {
     console.error('Erro ao criar cadastro de estudante:', err);
@@ -198,7 +286,9 @@ export async function aprovarPreCadastro(req: AuthenticatedRequest, res: Respons
     const senhaHash = preCadastro.senha_hash || (await bcrypt.hash(senhaTemporaria as string, 10));
 
     const novoUsuario = await runAsync(
-      `INSERT INTO usuarios (nome, email, senha_hash, perfil_id, ativo) VALUES (?, ?, ?, ?, 1)`,
+      // Aprovacao manual pela coordenacao vale como validacao do e-mail.
+      `INSERT INTO usuarios (nome, email, senha_hash, perfil_id, ativo, email_verificado_em)
+       VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)`,
       [preCadastro.nome, preCadastro.email, senhaHash, perfilAluno.id]
     );
 

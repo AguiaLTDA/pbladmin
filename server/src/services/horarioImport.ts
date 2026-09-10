@@ -194,7 +194,10 @@ export async function importarHorarioAcademico(
 
       if (!row) {
         const ins = await runAsync(
-          `INSERT INTO usuarios (nome, email, senha_hash, perfil_id, ativo) VALUES (?, ?, ?, ?, 1)`,
+          // Docente vindo da grade academica importada: conta institucional,
+          // nao passa pelo autocadastro, entao nasce validada.
+          `INSERT INTO usuarios (nome, email, senha_hash, perfil_id, ativo, email_verificado_em)
+           VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)`,
           [nome, email, senhaPadrao, PERFIL_PROFESSOR]
         );
         row = { id: ins.lastID };

@@ -5,6 +5,9 @@ import { Sidebar } from './components/Sidebar';
 import { LoginView } from './views/auth/Login';
 import { PerfilView } from './views/auth/Perfil';
 import { CadastroEstudanteView } from './views/auth/CadastroEstudante';
+import { RecuperarSenhaView } from './views/auth/RecuperarSenha';
+import { RedefinirSenhaView } from './views/auth/RedefinirSenha';
+import { VerificarEmailView } from './views/auth/VerificarEmail';
 
 // Admin Views
 import { DashboardAdminView } from './views/admin/DashboardAdmin';
@@ -35,17 +38,29 @@ import { CalendarioPrazosAlunoView } from './views/aluno/CalendarioPrazosAluno';
 import { DetalhesPBLAlunoView } from './views/aluno/DetalhesPBLAluno';
 import { MeuGrupoAlunoView } from './views/aluno/MeuGrupoAluno';
 
+/**
+ * Separa o caminho da query string do hash. Os links enviados por e-mail
+ * chegam como `#/verificar-email?token=...`, e o roteamento compara o caminho
+ * com `===` — sem tirar a query, nenhuma rota casaria.
+ */
+function lerHash(): { rota: string; params: URLSearchParams } {
+  const hash = window.location.hash.replace(/^#/, '');
+  const corte = hash.indexOf('?');
+  const rota = corte >= 0 ? hash.slice(0, corte) : hash;
+  const params = new URLSearchParams(corte >= 0 ? hash.slice(corte + 1) : '');
+  return { rota: rota || '/login', params };
+}
+
 export const App: React.FC = () => {
   const { user, isAuthenticated, loading } = useAuth();
-  const [currentRoute, setCurrentRoute] = useState<string>(() => {
-    const hash = window.location.hash.replace('#', '');
-    return hash || '/login';
-  });
+  const [currentRoute, setCurrentRoute] = useState<string>(() => lerHash().rota);
+  const [routeParams, setRouteParams] = useState<URLSearchParams>(() => lerHash().params);
 
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '');
-      if (hash) setCurrentRoute(hash);
+      const { rota, params } = lerHash();
+      setCurrentRoute(rota);
+      setRouteParams(params);
     };
 
     window.addEventListener('hashchange', handleHashChange);
@@ -54,7 +69,9 @@ export const App: React.FC = () => {
 
   const navigate = (path: string) => {
     window.location.hash = path;
-    setCurrentRoute(path);
+    const corte = path.indexOf('?');
+    setCurrentRoute(corte >= 0 ? path.slice(0, corte) : path);
+    setRouteParams(new URLSearchParams(corte >= 0 ? path.slice(corte + 1) : ''));
   };
 
   // Redirect after login if on /login
@@ -74,9 +91,23 @@ export const App: React.FC = () => {
     );
   }
 
-  // Rota pública de autocadastro de estudantes (não exige autenticação)
+  // Rotas públicas (não exigem autenticação). Precisam vir ANTES do bloco de
+  // login: os links de e-mail são abertos por quem ainda não entrou no portal —
+  // e, no caso da validação, por quem está justamente impedido de entrar.
   if (currentRoute === '/cadastro') {
     return <CadastroEstudanteView navigate={navigate} />;
+  }
+
+  if (currentRoute === '/recuperar-senha') {
+    return <RecuperarSenhaView navigate={navigate} />;
+  }
+
+  if (currentRoute === '/redefinir-senha') {
+    return <RedefinirSenhaView navigate={navigate} token={routeParams.get('token') || ''} />;
+  }
+
+  if (currentRoute === '/verificar-email') {
+    return <VerificarEmailView navigate={navigate} token={routeParams.get('token') || ''} />;
   }
 
   if (!isAuthenticated || currentRoute === '/login') {

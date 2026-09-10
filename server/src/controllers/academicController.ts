@@ -58,7 +58,11 @@ export async function createUser(req: AuthenticatedRequest, res: Response) {
 
     const hash = await bcrypt.hash(senha, 10);
     const resInsert = await runAsync(
-      `INSERT INTO usuarios (nome, email, senha_hash, perfil_id, ativo) VALUES (?, ?, ?, ?, 1)`,
+      // Conta criada pela coordenacao: quem cadastra ja confere o e-mail e
+      // repassa a senha, entao nasce validada — exigir o clique no link
+      // trancaria professores e admins fora do portal.
+      `INSERT INTO usuarios (nome, email, senha_hash, perfil_id, ativo, email_verificado_em)
+       VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)`,
       [nome, email, hash, perfilId]
     );
 

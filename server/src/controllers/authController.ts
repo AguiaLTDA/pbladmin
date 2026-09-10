@@ -1,9 +1,38 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getAsync, runAsync } from '../config/db';
 import { AuthenticatedRequest, JWT_SECRET } from '../middleware/auth';
 import { logAudit } from '../services/audit';
+import {
+  APP_URL,
+  emailConfigurado,
+  enviarEmail,
+  montarEmailRecuperacao,
+  montarEmailVerificacao
+} from '../services/email';
+import { VALIDADE_MINUTOS, conferirToken, consumirToken, emitirToken } from '../services/tokens';
+
+/** Mensagem única do "esqueci minha senha": não revela se o e-mail tem conta. */
+const RESPOSTA_RECUPERACAO =
+  'Se este e-mail estiver cadastrado no portal, enviamos as instruções para redefinir a senha. ' +
+  'Confira também a caixa de spam.';
+
+/** Envia o link de validação de cadastro. Devolve false se o envio não saiu. */
+export async function enviarLinkVerificacao(
+  usuarioId: number,
+  nome: string,
+  email: string
+): Promise<boolean> {
+  if (!emailConfigurado()) return false;
+
+  const token = await emitirToken(usuarioId, 'VERIFICACAO_EMAIL');
+  const link = `${APP_URL}/#/verificar-email?token=${token}`;
+  const horas = Math.round(VALIDADE_MINUTOS.VERIFICACAO_EMAIL / 60);
+  const msg = montarEmailVerificacao(nome, link, horas);
+  await enviarEmail({ ...msg, para: email });
+  return true;
+}
 
 export async function login(req: AuthenticatedRequest, res: Response) {
   try {
@@ -21,6 +50,7 @@ export async function login(req: AuthenticatedRequest, res: Response) {
       perfil_id: number;
       perfil_nome: 'ADMIN' | 'PROFESSOR' | 'ALUNO';
       ativo: number;
+      email_verificado_em: string | null;
       deletado_em: string | null;
     }>(
       `SELECT u.*, p.nome as perfil_nome 
@@ -41,6 +71,17 @@ export async function login(req: AuthenticatedRequest, res: Response) {
     const match = await bcrypt.compare(senha, user.senha_hash);
     if (!match) {
       return res.status(401).json({ message: 'Credenciais inválidas. Verifique e-mail e senha.' });
+    }
+
+    // Só barra depois de a senha conferir: antes disso, a resposta revelaria a
+    // qualquer um se aquele e-mail tem conta no portal. `codigo` permite à tela
+    // de login oferecer o reenvio do link em vez de só mostrar o erro.
+    if (!user.email_verificado_em) {
+      return res.status(403).json({
+        codigo: 'EMAIL_NAO_VERIFICADO',
+        message:
+          'Seu e-mail ainda não foi validado. Abra a mensagem que enviamos no seu cadastro e clique no link de confirmação.'
+      });
     }
 
     const payload = {
@@ -136,5 +177,171 @@ export async function changePassword(req: AuthenticatedRequest, res: Response) {
     return res.json({ message: 'Senha alterada com sucesso.' });
   } catch (err) {
     return res.status(500).json({ message: 'Erro ao alterar senha.' });
+  }
+}
+
+// --- VALIDAÇÃO DE E-MAIL ----------------------------------------------------
+
+/**
+ * PUBLIC: confirma o e-mail a partir do token do link.
+ *
+ * É POST, e não GET, de propósito: antivírus e pré-visualizadores de e-mail
+ * abrem links por conta própria, e um GET que consome o token gastaria a
+ * validação antes de o aluno clicar. A página só dispara este POST.
+ */
+export async function verificarEmail(req: Request, res: Response) {
+  try {
+    const { token } = req.body;
+    const valido = await conferirToken(String(token || ''), 'VERIFICACAO_EMAIL');
+
+    if (!valido) {
+      return res.status(400).json({
+        codigo: 'TOKEN_INVALIDO',
+        message: 'Este link de validação é inválido, já foi usado ou expirou. Peça um novo na tela de login.'
+      });
+    }
+
+    await runAsync(
+      `UPDATE usuarios SET email_verificado_em = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = ? AND email_verificado_em IS NULL`,
+      [valido.usuario_id]
+    );
+    await consumirToken(valido.id);
+    await logAudit(valido.usuario_id, 'VALIDAR_EMAIL', 'usuarios', valido.usuario_id, { email: valido.email });
+
+    return res.json({
+      message: 'E-mail validado com sucesso! Agora você já pode entrar no portal.',
+      email: valido.email
+    });
+  } catch (err) {
+    console.error('Erro ao validar e-mail:', err);
+    return res.status(500).json({ message: 'Erro ao validar o e-mail.' });
+  }
+}
+
+/** PUBLIC: reenvia o link de validação. Resposta única, para não revelar cadastros. */
+export async function reenviarVerificacao(req: Request, res: Response) {
+  const resposta = 'Se este e-mail estiver cadastrado e pendente de validação, enviamos um novo link.';
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Informe o e-mail do cadastro.' });
+
+    const user = await getAsync<{ id: number; nome: string; email: string; email_verificado_em: string | null }>(
+      `SELECT id, nome, email, email_verificado_em FROM usuarios
+        WHERE LOWER(email) = LOWER(?) AND deletado_em IS NULL`,
+      [email]
+    );
+
+    if (user && !user.email_verificado_em) {
+      let enviado = false;
+      try {
+        enviado = await enviarLinkVerificacao(user.id, user.nome, user.email);
+      } catch (erroEnvio) {
+        // Falha do provedor não é erro do aluno: responde algo que ele possa
+        // agir a respeito, em vez do 500 genérico.
+        console.error('Falha ao reenviar validação de e-mail:', erroEnvio);
+        return res.status(502).json({
+          message:
+            'O serviço de e-mail não respondeu agora. Tente novamente em alguns minutos — se persistir, procure a coordenação.'
+        });
+      }
+
+      if (!enviado) {
+        return res.status(503).json({
+          message: 'O envio de e-mails ainda não está configurado no portal. Procure a coordenação.'
+        });
+      }
+      await logAudit(user.id, 'REENVIAR_VALIDACAO_EMAIL', 'usuarios', user.id, { email: user.email });
+    }
+
+    return res.json({ message: resposta });
+  } catch (err) {
+    console.error('Erro ao reenviar validação de e-mail:', err);
+    return res.status(500).json({ message: 'Erro ao reenviar o link de validação.' });
+  }
+}
+
+// --- RECUPERAÇÃO DE SENHA ---------------------------------------------------
+
+/**
+ * PUBLIC: dispara o e-mail de redefinição de senha.
+ *
+ * Responde sempre a mesma coisa, com ou sem conta correspondente: uma resposta
+ * diferente para e-mail inexistente entregaria a qualquer um a lista de quem
+ * estuda aqui.
+ */
+export async function solicitarRecuperacaoSenha(req: Request, res: Response) {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Informe o e-mail do seu cadastro.' });
+
+    if (!emailConfigurado()) {
+      return res.status(503).json({
+        message: 'A recuperação de senha por e-mail ainda não está configurada no portal. Procure a coordenação.'
+      });
+    }
+
+    const user = await getAsync<{ id: number; nome: string; email: string; ativo: number }>(
+      `SELECT id, nome, email, ativo FROM usuarios WHERE LOWER(email) = LOWER(?) AND deletado_em IS NULL`,
+      [email]
+    );
+
+    if (user?.ativo) {
+      const token = await emitirToken(user.id, 'RECUPERACAO_SENHA');
+      const link = `${APP_URL}/#/redefinir-senha?token=${token}`;
+      const msg = montarEmailRecuperacao(user.nome, link, VALIDADE_MINUTOS.RECUPERACAO_SENHA);
+
+      try {
+        await enviarEmail({ ...msg, para: user.email });
+        await logAudit(user.id, 'SOLICITAR_RECUPERACAO_SENHA', 'usuarios', user.id, { email: user.email });
+      } catch (erroEnvio) {
+        // Falha do provedor é problema nosso, não do aluno — registra e mantém
+        // a resposta neutra para não expor a existência do cadastro.
+        console.error('Falha ao enviar e-mail de recuperação:', erroEnvio);
+      }
+    }
+
+    return res.json({ message: RESPOSTA_RECUPERACAO });
+  } catch (err) {
+    console.error('Erro ao solicitar recuperação de senha:', err);
+    return res.status(500).json({ message: 'Erro ao processar o pedido de recuperação.' });
+  }
+}
+
+/** PUBLIC: troca a senha a partir do token recebido por e-mail. */
+export async function redefinirSenha(req: Request, res: Response) {
+  try {
+    const { token, novaSenha } = req.body;
+
+    if (!novaSenha || String(novaSenha).length < 6) {
+      return res.status(400).json({ message: 'A nova senha deve ter no mínimo 6 caracteres.' });
+    }
+
+    const valido = await conferirToken(String(token || ''), 'RECUPERACAO_SENHA');
+    if (!valido) {
+      return res.status(400).json({
+        codigo: 'TOKEN_INVALIDO',
+        message: 'Este link de redefinição é inválido, já foi usado ou expirou. Peça um novo na tela de login.'
+      });
+    }
+
+    const hash = await bcrypt.hash(String(novaSenha), 10);
+    // Quem chegou até aqui provou que tem acesso à caixa de entrada, então a
+    // troca de senha também vale como validação do e-mail.
+    await runAsync(
+      `UPDATE usuarios
+          SET senha_hash = ?,
+              email_verificado_em = COALESCE(email_verificado_em, CURRENT_TIMESTAMP),
+              atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [hash, valido.usuario_id]
+    );
+    await consumirToken(valido.id);
+    await logAudit(valido.usuario_id, 'REDEFINIR_SENHA', 'usuarios', valido.usuario_id, { email: valido.email });
+
+    return res.json({ message: 'Senha redefinida com sucesso! Já pode entrar com a nova senha.' });
+  } catch (err) {
+    console.error('Erro ao redefinir senha:', err);
+    return res.status(500).json({ message: 'Erro ao redefinir a senha.' });
   }
 }

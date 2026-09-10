@@ -1,4 +1,4 @@
-import { runAsync } from '../config/db';
+import { getAsync, runAsync } from '../config/db';
 
 // schema.sql já cria as tabelas no formato final; o único ajuste que não dá para expressar
 // em CREATE TABLE IF NOT EXISTS é este índice único (parte da chave depende de COALESCE).
@@ -55,6 +55,52 @@ export async function runMigrations() {
   // A coordenadoria pode excluir um cadastro de estudante; como no resto do
   // schema, a exclusão é lógica e o registro pode ser restaurado.
   await runAsync(`ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS deletado_em TIMESTAMPTZ DEFAULT NULL`);
+
+  // --- Validacao de e-mail e recuperacao de senha ---------------------------
+  //
+  // A coluna nasce nula (= nao verificado), mas as contas que ja existiam antes
+  // desta trava precisam ser dispensadas: exigir a validacao delas trancaria
+  // 101 alunos no meio do semestre. O backfill roda UMA unica vez, no boot em
+  // que a coluna e criada — repetir a cada startup marcaria como verificado
+  // justamente quem acabou de se cadastrar e ainda nao clicou no link.
+  const colunaVerificacao = await getAsync<{ existe: string }>(
+    `SELECT 1 as existe FROM information_schema.columns
+      WHERE table_name = 'usuarios' AND column_name = 'email_verificado_em'`
+  );
+  if (!colunaVerificacao) {
+    await runAsync(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email_verificado_em TIMESTAMPTZ DEFAULT NULL`);
+    const dispensadas = await runAsync(
+      `UPDATE usuarios SET email_verificado_em = COALESCE(criado_em, CURRENT_TIMESTAMP)
+        WHERE email_verificado_em IS NULL`
+    );
+    console.log(`Validacao de e-mail: ${dispensadas.changes} conta(s) pre-existente(s) marcada(s) como verificada(s).`);
+  }
+
+  // Trava de matricula duplicada no autocadastro. O controller ja recusa antes
+  // de inserir; este indice e a garantia no banco contra corrida entre dois
+  // cadastros simultaneos. Em try/catch porque a base de producao ja tem uma
+  // matricula repetida de antes da trava — enquanto ela existir o indice nao e
+  // criado, e a checagem do controller segue valendo. Resolvido o duplicado,
+  // o proximo boot cria o indice sozinho.
+  try {
+    await runAsync(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_pre_cadastro_matricula_unica
+         ON pre_cadastros (LOWER(matricula))
+       WHERE deletado_em IS NULL AND matricula IS NOT NULL AND matricula != ''`
+    );
+  } catch (err) {
+    const dups = await getAsync<{ total: string }>(
+      `SELECT COUNT(*) as total FROM (
+         SELECT LOWER(matricula) FROM pre_cadastros
+          WHERE deletado_em IS NULL AND matricula IS NOT NULL AND matricula != ''
+          GROUP BY LOWER(matricula) HAVING COUNT(*) > 1
+       ) d`
+    ).catch(() => undefined);
+    console.warn(
+      `Nao foi possivel criar idx_pre_cadastro_matricula_unica: ${dups?.total ?? '?'} matricula(s) duplicada(s) ` +
+        'na base. A checagem no controller continua barrando cadastros novos.'
+    );
+  }
 
   // O semestre corrente é 2026/2. Bancos montados na primeira carga ficaram com o
   // período nomeado '2026/1' — renomear a linha existente (em vez de criar outra)

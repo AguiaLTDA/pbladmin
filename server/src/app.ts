@@ -5,6 +5,7 @@ import path from 'path';
 import apiRouter from './routes/api';
 import { initAndSeedDb } from './db/seed';
 import { runMigrations } from './db/migrate';
+import { APP_URL, emailConfigurado, motivoEmailIndisponivel } from './services/email';
 import { importarHorarioAcademico } from './services/horarioImport';
 
 dotenv.config();
@@ -46,6 +47,23 @@ async function startServer() {
       `📅 Horário acadêmico importado: ${grade.aulas} aulas, ${grade.turmas} turmas novas, ` +
         `${grade.professores} docentes (${grade.professoresCriados} criados), ${grade.vinculos} vínculos.`
     );
+
+    // Diagnostico do e-mail transacional: sem ele o autocadastro volta a liberar
+    // acesso sem validar e a recuperacao de senha responde indisponivel — melhor
+    // saber disso na subida do que pelo aluno que nao recebeu o link.
+    if (!emailConfigurado()) {
+      console.warn(
+        `⚠️  E-mail transacional desligado (${motivoEmailIndisponivel()}): cadastro sem validacao ` +
+          'por e-mail e recuperacao de senha indisponivel.'
+      );
+    } else if (!process.env.APP_URL) {
+      console.warn(
+        `⚠️  APP_URL nao definida: os links enviados por e-mail vao apontar para ${APP_URL}, ` +
+          'que nao serve para o aluno em producao. Defina APP_URL com a URL publica do portal.'
+      );
+    } else {
+      console.log(`✉️  E-mail transacional ativo. Links apontando para ${APP_URL}`);
+    }
 
     app.listen(PORT, () => {
       console.log(`=======================================================`);

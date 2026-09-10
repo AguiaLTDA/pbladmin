@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   senha_hash TEXT NOT NULL,
   perfil_id INTEGER NOT NULL,
   ativo INTEGER DEFAULT 1,
+  email_verificado_em TIMESTAMPTZ DEFAULT NULL, -- nulo = e-mail ainda nao confirmado pelo link
   deletado_em TIMESTAMPTZ DEFAULT NULL,
   criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   atualizado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -489,3 +490,25 @@ CREATE TABLE IF NOT EXISTS pre_cadastros (
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
   FOREIGN KEY (aprovado_por) REFERENCES usuarios(id)
 );
+
+-- 28. Tokens de e-mail (validacao de cadastro e redefinicao de senha)
+-- Guarda apenas o SHA-256 do token; o valor em claro so existe no link enviado
+-- ao aluno, entao vazar esta tabela nao permite validar contas nem trocar senhas.
+CREATE TABLE IF NOT EXISTS tokens_email (
+  id SERIAL PRIMARY KEY,
+  usuario_id INTEGER NOT NULL,
+  tipo TEXT NOT NULL, -- 'VERIFICACAO_EMAIL' ou 'RECUPERACAO_SENHA'
+  token_hash TEXT NOT NULL,
+  expira_em TIMESTAMPTZ NOT NULL,
+  usado_em TIMESTAMPTZ DEFAULT NULL,
+  criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tokens_email_hash ON tokens_email(token_hash);
+CREATE INDEX IF NOT EXISTS idx_tokens_email_usuario ON tokens_email(usuario_id, tipo);
+
+-- Busca de duplicidade de matricula no autocadastro. Nao e UNIQUE: a base ja
+-- tem matricula repetida de antes desta trava (ver migrate.ts, que tenta criar
+-- o indice unico e avisa quando os duplicados impedem).
+CREATE INDEX IF NOT EXISTS idx_pre_cadastro_matricula ON pre_cadastros(LOWER(matricula));

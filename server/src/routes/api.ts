@@ -33,6 +33,24 @@ const preCadastroLimiter = rateLimit({
 });
 router.post('/public/pre-cadastro', preCadastroLimiter, preCadastroCtrl.criarPreCadastro);
 
+// --- VALIDAÇÃO DE E-MAIL E RECUPERAÇÃO DE SENHA (público, sem autenticação) ---
+// Limite mais apertado que o do cadastro: aqui cada requisição dispara um e-mail
+// para um endereço de terceiro, então o teto protege tanto a caixa de entrada do
+// aluno quanto a cota do provedor. Vale por IP, como os demais.
+const emailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Muitos pedidos de e-mail. Aguarde alguns minutos e tente novamente.' }
+});
+
+router.post('/public/recuperar-senha', emailLimiter, authCtrl.solicitarRecuperacaoSenha);
+router.post('/public/reenviar-verificacao', emailLimiter, authCtrl.reenviarVerificacao);
+// Não consome cota de e-mail: só confere o token que o aluno recebeu.
+router.post('/public/verificar-email', authCtrl.verificarEmail);
+router.post('/public/redefinir-senha', authCtrl.redefinirSenha);
+
 router.get('/admin/pre-cadastros', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.listarPreCadastros);
 // Antes das rotas com ':id' para 'excluidos' não ser interpretado como um id.
 router.get('/admin/pre-cadastros/excluidos', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.listarPreCadastrosExcluidos);

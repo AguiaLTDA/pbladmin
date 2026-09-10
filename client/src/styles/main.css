@@ -913,6 +913,13 @@ textarea.form-control {
 
 /* ---------- Formulário de acesso (fundo claro) ---------- */
 
+/* Telas auxiliares de acesso (recuperar senha, redefinir, validar e-mail):
+   mesmo cartao do login, sem a coluna institucional e mais estreito. */
+.login-shell-simples {
+  grid-template-columns: 1fr;
+  max-width: 480px;
+}
+
 .login-acesso {
   display: flex;
   flex-direction: column;
