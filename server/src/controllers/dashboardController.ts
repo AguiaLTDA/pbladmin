@@ -39,6 +39,22 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
          GROUP BY c.id`
       );
 
+      // Grupos por curso: o grupo pertence a uma turma, e a turma a um curso.
+      // Alunos contados via matriculas.grupo_id, ignorando contas excluídas.
+      const gruposPorCurso = await queryAsync(
+        `SELECT c.nome as curso,
+                COUNT(DISTINCT g.id) as total_grupos,
+                COUNT(DISTINCT u.id) as total_alunos
+         FROM grupos g
+         JOIN turmas t ON g.turma_id = t.id AND t.deletado_em IS NULL
+         JOIN cursos c ON t.curso_id = c.id
+         LEFT JOIN matriculas m ON m.grupo_id = g.id AND m.deletado_em IS NULL
+         LEFT JOIN usuarios u ON m.usuario_id = u.id AND u.deletado_em IS NULL
+         WHERE g.deletado_em IS NULL AND g.ativo = 1
+         GROUP BY c.id, c.nome
+         ORDER BY COUNT(DISTINCT g.id) DESC, c.nome ASC`
+      );
+
       // Alunos relacionados = todos os alunos com matrícula ativa (base institucional).
       const alunosRelacionados = await getAsync<{ count: number }>(
         `SELECT COUNT(DISTINCT usuario_id) as count FROM matriculas WHERE deletado_em IS NULL`
@@ -65,7 +81,8 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
           entregasNoPrazo: entregasPrazo?.count || 0,
           entregasComAtraso: entregasAtraso?.count || 0
         },
-        porCurso
+        porCurso,
+        gruposPorCurso
       });
     }
 

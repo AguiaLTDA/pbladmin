@@ -31,6 +31,7 @@ interface DashboardData {
     entregasComAtraso: number;
   };
   porCurso: Array<{ curso: string; total_atividades: number }>;
+  gruposPorCurso?: Array<{ curso: string; total_grupos: number; total_alunos: number }>;
 }
 
 interface Props {
@@ -156,29 +157,49 @@ export const DashboardAdminView: React.FC<Props> = ({ navigate }) => {
           <div className="card-header">
             <span className="card-title flex items-center gap-2">
               <TrendingUp size={18} color="#2563eb" />
-              Distribuição por Curso
+              Grupos por Curso
             </span>
           </div>
 
+          <p className="text-muted text-sm mb-3">
+            Grupos PBL ativos, agrupados pelo curso da turma a que pertencem.
+          </p>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            {data?.porCurso?.map((c, i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                <div className="flex justify-between text-sm">
-                  <span className="font-bold">{c.curso}</span>
-                  <span className="text-muted">{c.total_atividades} atividades</span>
-                </div>
-                <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      height: '100%',
-                      width: `${Math.min(c.total_atividades * 20, 100)}%`,
-                      background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
-                      borderRadius: '4px'
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
+            {!data?.gruposPorCurso?.length ? (
+              <span className="text-muted text-sm">Nenhum grupo cadastrado ainda.</span>
+            ) : (
+              data.gruposPorCurso.map((c, i) => {
+                const grupos = Number(c.total_grupos || 0);
+                const alunos = Number(c.total_alunos || 0);
+                const maxGrupos = Math.max(
+                  ...data.gruposPorCurso!.map((x) => Number(x.total_grupos || 0)),
+                  1
+                );
+
+                return (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <div className="flex justify-between text-sm">
+                      <span className="font-bold">{c.curso}</span>
+                      <span className="text-muted">
+                        {grupos} {grupos === 1 ? 'grupo' : 'grupos'} • {alunos}{' '}
+                        {alunos === 1 ? 'aluno' : 'alunos'}
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${Math.round((grupos / maxGrupos) * 100)}%`,
+                          background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+                          borderRadius: '4px'
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 

@@ -192,6 +192,11 @@ export const supabaseService = {
         { curso: 'Análise e Desenvolvimento de Sistemas', total_atividades: 1 },
         { curso: 'Engenharia de Produção', total_atividades: 1 }
       ],
+      gruposPorCurso: [
+        { curso: 'Administração e Ciências Contábeis', total_grupos: 3, total_alunos: 12 },
+        { curso: 'Análise e Desenvolvimento de Sistemas', total_grupos: 2, total_alunos: 9 },
+        { curso: 'Engenharia de Produção', total_grupos: 1, total_alunos: 4 }
+      ],
       // Campos usados pelos painéis de professor e aluno
       totalPbls: 3,
       emAnalise: 1,
