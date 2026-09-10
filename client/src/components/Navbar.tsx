@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, User as UserIcon } from 'lucide-react';
+import { Bell, User as UserIcon, Menu } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
 import { NotificationItem } from '../types';
@@ -7,9 +7,12 @@ import { NotificationItem } from '../types';
 interface NavbarProps {
   title: string;
   navigate: (path: string) => void;
+  /** Abre a gaveta de navegação no mobile. Ausente = botão não aparece. */
+  onAbrirMenu?: () => void;
+  menuAberto?: boolean;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ title, navigate }) => {
+export const Navbar: React.FC<NavbarProps> = ({ title, navigate, onAbrirMenu, menuAberto = false }) => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -33,6 +36,20 @@ export const Navbar: React.FC<NavbarProps> = ({ title, navigate }) => {
 
   return (
     <header className="top-navbar">
+      {/* Único acesso ao menu no mobile, onde a barra lateral fica fora da
+          tela. O CSS o esconde a partir de 769px, onde a barra é fixa. */}
+      {onAbrirMenu && (
+        <button
+          type="button"
+          onClick={onAbrirMenu}
+          className="top-navbar-menu-toggle"
+          aria-label={menuAberto ? 'Fechar menu de navegação' : 'Abrir menu de navegação'}
+          aria-expanded={menuAberto}
+        >
+          <Menu size={22} />
+        </button>
+      )}
+
       <h1 className="top-navbar-title">{title}</h1>
 
       <div className="top-navbar-actions">

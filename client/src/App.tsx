@@ -56,12 +56,17 @@ export const App: React.FC = () => {
   const { user, isAuthenticated, loading } = useAuth();
   const [currentRoute, setCurrentRoute] = useState<string>(() => lerHash().rota);
   const [routeParams, setRouteParams] = useState<URLSearchParams>(() => lerHash().params);
+  // Gaveta de navegação do mobile. No desktop a barra lateral é fixa e este
+  // estado não tem efeito — o CSS ignora a classe `open` acima de 768px.
+  const [menuAberto, setMenuAberto] = useState(false);
 
   useEffect(() => {
     const handleHashChange = () => {
       const { rota, params } = lerHash();
       setCurrentRoute(rota);
       setRouteParams(params);
+      // Voltar/avançar do navegador também tem de fechar a gaveta.
+      setMenuAberto(false);
     };
 
     window.addEventListener('hashchange', handleHashChange);
@@ -74,6 +79,16 @@ export const App: React.FC = () => {
     setCurrentRoute(corte >= 0 ? path.slice(0, corte) : path);
     setRouteParams(new URLSearchParams(corte >= 0 ? path.slice(corte + 1) : ''));
   };
+
+  // Esc fecha a gaveta: é o gesto esperado de qualquer painel sobreposto.
+  useEffect(() => {
+    if (!menuAberto) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuAberto(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuAberto]);
 
   // Redirect after login if on /login
   useEffect(() => {
@@ -206,9 +221,30 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      <Sidebar currentRoute={currentRoute} navigate={navigate} />
+      <Sidebar
+        currentRoute={currentRoute}
+        navigate={navigate}
+        aberto={menuAberto}
+        onFechar={() => setMenuAberto(false)}
+      />
+
+      {/* Véu por cima do conteúdo enquanto a gaveta está aberta: escurece o
+          fundo e dá o gesto de "tocar fora para fechar". */}
+      {menuAberto && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setMenuAberto(false)}
+          role="presentation"
+        />
+      )}
+
       <div className="main-wrapper">
-        <Navbar title={getPageTitle()} navigate={navigate} />
+        <Navbar
+          title={getPageTitle()}
+          navigate={navigate}
+          onAbrirMenu={() => setMenuAberto((v) => !v)}
+          menuAberto={menuAberto}
+        />
         <main className="main-content">{renderContent()}</main>
       </div>
     </div>

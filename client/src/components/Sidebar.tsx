@@ -24,14 +24,25 @@ import { MedalhaContexto } from './MedalhaContexto';
 interface SidebarProps {
   currentRoute: string;
   navigate: (path: string) => void;
+  /** No mobile a barra vive fora da tela e só entra quando isto é true. */
+  aberto?: boolean;
+  /** Fecha a gaveta — chamado ao navegar e ao tocar fora dela. */
+  onFechar?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate, aberto = false, onFechar }) => {
   const { user, logout } = useAuth();
   if (!user) return null;
 
   // Sem error boundary na árvore, qualquer campo ausente aqui derruba a
   // aplicação inteira em tela branca. Daí os valores de segurança.
+  // No mobile, tocar num item precisa levar para a rota E fechar a gaveta —
+  // senão o conteúdo abre atrás de um painel que continua cobrindo a tela.
+  const irPara = (path: string) => {
+    navigate(path);
+    onFechar?.();
+  };
+
   const role = user.perfilNome;
   const nomeExibicao = user.nome || 'Usuário';
   const perfilExibicao = role || 'INDEFINIDO';
@@ -70,7 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
   if (role === 'PROFESSOR') navItems = getProfessorItems();
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${aberto ? ' open' : ''}`}>
       <div className="sidebar-header">
         <BrandLogo variante="escura" tamanho="md" />
         <span className="sidebar-header-modulo">Portal PBL</span>
@@ -87,7 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate }) => {
               href={`#${item.path}`}
               onClick={(e) => {
                 e.preventDefault();
-                navigate(item.path);
+                irPara(item.path);
               }}
               className={`nav-item ${isActive ? 'active' : ''}`}
             >

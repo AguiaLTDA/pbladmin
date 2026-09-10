@@ -311,6 +311,36 @@ a:hover {
   color: var(--primary);
 }
 
+/* Botão de menu: só existe no mobile, onde a barra lateral sai da tela. */
+.top-navbar-menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin-right: 0.75rem;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-surface);
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.top-navbar-menu-toggle:hover {
+  background: var(--primary-light);
+}
+
+/* Véu sobre o conteúdo com a gaveta aberta. Fica sob a barra (z-index 40) e
+   acima do resto, para capturar o toque de "fechar". */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 23, 16, 0.55);
+  z-index: 39;
+}
+
 .top-navbar-actions {
   display: flex;
   align-items: center;
@@ -767,9 +797,35 @@ textarea.form-control {
   }
   .sidebar.open {
     transform: translateX(0);
+    box-shadow: 0 0 40px rgba(4, 23, 16, 0.5);
   }
   .main-wrapper {
     margin-left: 0;
+  }
+  /* Sem estes dois, a barra lateral fica inalcançável no celular: ela vive
+     fora da tela e nada mais no layout a traz de volta. */
+  .top-navbar-menu-toggle {
+    display: inline-flex;
+  }
+  .sidebar-backdrop {
+    display: block;
+  }
+  .top-navbar {
+    padding: 0 1rem;
+  }
+  .top-navbar-title {
+    font-size: 1.05rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .top-navbar-actions {
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+  .main-content {
+    padding: 1rem;
   }
 }
 
