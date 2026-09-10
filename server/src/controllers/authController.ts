@@ -320,7 +320,11 @@ export async function redefinirSenha(req: Request, res: Response) {
       return res.status(400).json({ message: 'A nova senha deve ter no mínimo 6 caracteres.' });
     }
 
-    const valido = await conferirToken(String(token || ''), 'RECUPERACAO_SENHA');
+    // Aceita os dois links que levam a definir senha: a recuperação pedida pelo
+    // próprio usuário e o convite de primeiro acesso enviado pela coordenação.
+    const valido =
+      (await conferirToken(String(token || ''), 'RECUPERACAO_SENHA')) ||
+      (await conferirToken(String(token || ''), 'PRIMEIRO_ACESSO'));
     if (!valido) {
       return res.status(400).json({
         codigo: 'TOKEN_INVALIDO',

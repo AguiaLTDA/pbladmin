@@ -120,10 +120,17 @@ export async function resetUserPassword(req: AuthenticatedRequest, res: Response
         WHERE usuario_id = ? AND tipo = 'RECUPERACAO_SENHA' AND usado_em IS NULL`,
       [user.id]
     );
-    await runAsync('UPDATE usuarios SET senha_hash = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?', [
-      hash,
-      user.id
-    ]);
+    // Marca o e-mail como validado se ainda nao estava: a coordenacao confere a
+    // identidade pessoalmente ao entregar a senha. Sem isto a senha temporaria
+    // seria inutil — o login barraria o usuario por e-mail nao validado.
+    await runAsync(
+      `UPDATE usuarios
+          SET senha_hash = ?,
+              email_verificado_em = COALESCE(email_verificado_em, CURRENT_TIMESTAMP),
+              atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [hash, user.id]
+    );
 
     // A senha em claro não vai para a auditoria — só o registro de que houve reset.
     await logAudit(req.user?.id || null, 'REDEFINIR_SENHA_USUARIO', 'usuarios', String(user.id), {

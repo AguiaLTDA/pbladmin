@@ -179,3 +179,24 @@ export function montarEmailRecuperacao(nome: string, link: string, minutosValida
     texto
   };
 }
+
+export function montarEmailPrimeiroAcesso(nome: string, link: string, diasValidade: number): Mensagem {
+  const primeiroNome = nome.trim().split(/\s+/)[0] || 'docente';
+  const corpo = `
+    <p style="margin:0 0 12px;line-height:1.6">Olá, ${esc(primeiroNome)}. Sua conta no Portal PBL da UNIVC
+    está pronta, vinculada a este e-mail.</p>
+    <p style="margin:0 0 12px;line-height:1.6">Para o primeiro acesso, clique no botão abaixo e defina a
+    sua senha. O link vale por ${diasValidade} dias e só pode ser usado uma vez.</p>
+    <p style="margin:0;line-height:1.6">No portal você acompanha as entregas das suas turmas, lança notas
+    e consulta o seu arquivo orientador. Se o link expirar, use "Esqueci minha senha" na tela de login.</p>`;
+  const texto =
+    `Ola, ${primeiroNome}. Sua conta no Portal PBL da UNIVC esta pronta. Defina sua senha de primeiro ` +
+    `acesso em: ${link} (valido por ${diasValidade} dias, uso unico). Se expirar, use "Esqueci minha senha".`;
+  return {
+    para: '',
+    nomeDestinatario: nome,
+    assunto: 'Seu acesso ao Portal PBL — defina sua senha',
+    html: moldura('Bem-vindo(a) ao Portal PBL', corpo, 'Definir minha senha', link),
+    texto
+  };
+}

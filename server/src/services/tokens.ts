@@ -9,14 +9,19 @@
 import crypto from 'crypto';
 import { getAsync, runAsync } from '../config/db';
 
-export type TipoToken = 'VERIFICACAO_EMAIL' | 'RECUPERACAO_SENHA';
+export type TipoToken = 'VERIFICACAO_EMAIL' | 'RECUPERACAO_SENHA' | 'PRIMEIRO_ACESSO';
 
 /** Validade de cada tipo, em minutos. */
 export const VALIDADE_MINUTOS: Record<TipoToken, number> = {
   // O aluno pode se cadastrar e só abrir o e-mail no dia seguinte.
   VERIFICACAO_EMAIL: 48 * 60,
   // Janela curta: é o que dá acesso a trocar a senha da conta.
-  RECUPERACAO_SENHA: 60
+  RECUPERACAO_SENHA: 60,
+  // Convite de primeiro acesso: a conta nasce com senha aleatória que ninguém
+  // conhece, e este link é a única porta de entrada. Uma hora não serve para
+  // uma turma de docentes que pode só abrir o e-mail dias depois — e, expirado,
+  // o próprio "Esqueci minha senha" resolve, já que o e-mail agora é real.
+  PRIMEIRO_ACESSO: 7 * 24 * 60
 };
 
 function hashDoToken(token: string): string {
