@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { queryAsync, runAsync, getAsync } from '../config/db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
@@ -89,6 +90,54 @@ export async function toggleUserStatus(req: AuthenticatedRequest, res: Response)
     return res.json({ message: `Usuário ${newStatus ? 'ativado' : 'desativado'} com sucesso.` });
   } catch (err) {
     return res.status(500).json({ message: 'Erro ao alterar status do usuário.' });
+  }
+}
+
+/**
+ * ADMIN: gera uma senha temporária para um usuário e a devolve UMA vez.
+ *
+ * É o caminho de acesso dos docentes: as contas deles nascem da importação da
+ * grade, com senha aleatória que ninguém conhece, e o e-mail derivado
+ * (`@pbl.edu.br`) não é uma caixa real — então o fluxo de "esqueci minha senha"
+ * não os alcança. Quem repassa a senha é a coordenação, pessoalmente.
+ */
+export async function resetUserPassword(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const user = await getAsync<{ id: number; nome: string; email: string }>(
+      'SELECT id, nome, email FROM usuarios WHERE id = ? AND deletado_em IS NULL',
+      [id]
+    );
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado.' });
+
+    const senhaTemporaria = crypto.randomBytes(9).toString('base64url');
+    const hash = await bcrypt.hash(senhaTemporaria, 10);
+
+    // Invalida links de recuperação pendentes: quem tem a senha nova em mão não
+    // deve continuar com um link antigo circulando por e-mail.
+    await runAsync(
+      `UPDATE tokens_email SET usado_em = CURRENT_TIMESTAMP
+        WHERE usuario_id = ? AND tipo = 'RECUPERACAO_SENHA' AND usado_em IS NULL`,
+      [user.id]
+    );
+    await runAsync('UPDATE usuarios SET senha_hash = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?', [
+      hash,
+      user.id
+    ]);
+
+    // A senha em claro não vai para a auditoria — só o registro de que houve reset.
+    await logAudit(req.user?.id || null, 'REDEFINIR_SENHA_USUARIO', 'usuarios', String(user.id), {
+      email: user.email
+    });
+
+    return res.json({
+      senhaTemporaria,
+      email: user.email,
+      message: `Senha temporária gerada para ${user.nome}. Repasse ao usuário — ela não será exibida de novo.`
+    });
+  } catch (err) {
+    console.error('Erro ao redefinir senha do usuário:', err);
+    return res.status(500).json({ message: 'Erro ao redefinir a senha do usuário.' });
   }
 }
 

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { getAsync, queryAsync, runAsync } from '../config/db';
 import {
@@ -91,7 +92,12 @@ export async function importarHorarioAcademico(
   await runAsync(`DELETE FROM horarios_academicos`);
   await runAsync(`DELETE FROM vinculos_professores WHERE origem = 'HORARIO'`);
 
-  const senhaPadrao = await bcrypt.hash('prof123', 10);
+  // Sem senha compartilhada: cada docente criado pela importacao recebe uma
+  // senha aleatoria que ninguem conhece. O acesso dele e liberado pela
+  // coordenacao em Gestao de Usuarios > Redefinir senha, que gera e mostra uma
+  // senha temporaria. Antes disto todos nasciam com a mesma senha, fixa em um
+  // repositorio publico.
+  const senhaDoDocente = async () => bcrypt.hash(crypto.randomBytes(12).toString('base64url'), 10);
 
   const cacheCurso = new Map<string, number>();
   const cacheDisciplina = new Map<string, number>();
@@ -198,7 +204,7 @@ export async function importarHorarioAcademico(
           // nao passa pelo autocadastro, entao nasce validada.
           `INSERT INTO usuarios (nome, email, senha_hash, perfil_id, ativo, email_verificado_em)
            VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)`,
-          [nome, email, senhaPadrao, PERFIL_PROFESSOR]
+          [nome, email, await senhaDoDocente(), PERFIL_PROFESSOR]
         );
         row = { id: ins.lastID };
         stats.professoresCriados++;

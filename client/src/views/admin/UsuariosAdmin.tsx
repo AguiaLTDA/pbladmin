@@ -3,7 +3,7 @@ import { apiRequest } from '../../services/api';
 import { MedalhaContexto } from '../../components/MedalhaContexto';
 import { User, PerfilRole } from '../../types';
 import { useToast } from '../../context/ToastContext';
-import { Users, UserPlus, Search, ShieldCheck, CheckCircle, XCircle } from 'lucide-react';
+import { Users, UserPlus, Search, ShieldCheck, CheckCircle, XCircle, KeyRound, Copy } from 'lucide-react';
 
 export const UsuariosAdminView: React.FC = () => {
   const { showToast } = useToast();
@@ -37,6 +37,9 @@ export const UsuariosAdminView: React.FC = () => {
     fetchUsers();
   }, [perfilFiltro]);
 
+  const [resetandoId, setResetandoId] = useState<number | null>(null);
+  const [senhaGerada, setSenhaGerada] = useState<{ nome: string; email: string; senha: string } | null>(null);
+
   const handleToggleStatus = async (id: number, currentName: string) => {
     try {
       const res = await apiRequest(`/academic/users/${id}/toggle-status`, { method: 'PUT' });
@@ -44,6 +47,39 @@ export const UsuariosAdminView: React.FC = () => {
       fetchUsers();
     } catch (err: any) {
       showToast(err.message, 'error');
+    }
+  };
+
+  /**
+   * Gera uma senha temporária e a mostra numa faixa fixa.
+   *
+   * É o caminho de acesso dos docentes: a conta deles vem da importação da grade
+   * com senha que ninguém conhece, e o e-mail derivado (@pbl.edu.br) não é caixa
+   * real, então "esqueci minha senha" não os alcança. A senha aparece uma única
+   * vez — a coordenação copia e repassa.
+   */
+  const handleResetarSenha = async (u: User) => {
+    if (
+      !window.confirm(
+        `Gerar uma senha temporária para ${u.nome}? A senha atual deixa de funcionar na hora, ` +
+          'e a nova aparece uma única vez para você copiar.'
+      )
+    ) {
+      return;
+    }
+
+    setResetandoId(u.id);
+    try {
+      const res = await apiRequest<{ senhaTemporaria: string; email: string; message: string }>(
+        `/academic/users/${u.id}/resetar-senha`,
+        { method: 'POST' }
+      );
+      setSenhaGerada({ nome: u.nome, email: res.email, senha: res.senhaTemporaria });
+      showToast(res.message, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao redefinir a senha.', 'error');
+    } finally {
+      setResetandoId(null);
     }
   };
 
@@ -156,17 +192,72 @@ export const UsuariosAdminView: React.FC = () => {
                   </td>
                   <td>{u.criado_em ? new Date(u.criado_em).toLocaleDateString('pt-BR') : '-'}</td>
                   <td style={{ textAlign: 'right' }}>
-                    <button
-                      onClick={() => handleToggleStatus(u.id, u.nome)}
-                      className={`btn btn-sm ${u.ativo ? 'btn-danger' : 'btn-success'}`}
-                    >
-                      {u.ativo ? 'Desativar' : 'Ativar'}
-                    </button>
+                    <div className="flex gap-2 justify-end" style={{ flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => handleResetarSenha(u)}
+                        disabled={resetandoId === u.id}
+                        className="btn btn-sm btn-secondary"
+                        title="Gerar uma senha temporária para repassar a este usuário"
+                      >
+                        <KeyRound size={14} />
+                        {resetandoId === u.id ? 'Gerando…' : 'Redefinir senha'}
+                      </button>
+                      <button
+                        onClick={() => handleToggleStatus(u.id, u.nome)}
+                        className={`btn btn-sm ${u.ativo ? 'btn-danger' : 'btn-success'}`}
+                      >
+                        {u.ativo ? 'Desativar' : 'Ativar'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Senha temporária recém-gerada. Fica fixa (e não num toast que
+          desaparece) porque este é o único momento em que ela existe legível. */}
+      {senhaGerada && (
+        <div className="card mb-4" style={{ background: '#fffbeb', border: '1px solid #fef3c7' }}>
+          <div className="flex items-center gap-2 mb-2">
+            <KeyRound size={18} color="#b45309" />
+            <strong style={{ color: '#b45309' }}>Senha temporária de {senhaGerada.nome}</strong>
+          </div>
+          <p className="text-sm text-muted" style={{ marginTop: 0 }}>
+            Repasse ao usuário e peça que ele a troque no primeiro acesso, em Perfil. Esta senha
+            não será exibida novamente.
+          </p>
+          <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+            <code
+              style={{
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '6px',
+                padding: '0.5rem 0.75rem',
+                fontSize: '1rem',
+                fontWeight: 700,
+                letterSpacing: '0.03em'
+              }}
+            >
+              {senhaGerada.senha}
+            </code>
+            <button
+              onClick={() => {
+                navigator.clipboard
+                  ?.writeText(`${senhaGerada.email} / ${senhaGerada.senha}`)
+                  .then(() => showToast('E-mail e senha copiados.', 'success'))
+                  .catch(() => showToast('Não foi possível copiar — selecione e copie manualmente.', 'warning'));
+              }}
+              className="btn btn-sm btn-secondary"
+            >
+              <Copy size={14} /> Copiar
+            </button>
+            <button onClick={() => setSenhaGerada(null)} className="btn btn-sm btn-secondary">
+              Já anotei, ocultar
+            </button>
+          </div>
         </div>
       )}
 

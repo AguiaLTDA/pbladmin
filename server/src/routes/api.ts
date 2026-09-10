@@ -55,6 +55,7 @@ router.post('/public/redefinir-senha', authCtrl.redefinirSenha);
 router.get('/admin/pre-cadastros', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.listarPreCadastros);
 // Antes das rotas com ':id' para 'excluidos' não ser interpretado como um id.
 router.get('/admin/pre-cadastros/excluidos', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.listarPreCadastrosExcluidos);
+router.put('/admin/pre-cadastros/:id', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.atualizarPreCadastro);
 router.delete('/admin/pre-cadastros/:id', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.excluirPreCadastro);
 router.post('/admin/pre-cadastros/:id/restaurar', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.restaurarPreCadastro);
 router.post('/admin/pre-cadastros/:id/aprovar', authenticateToken, requireRole('ADMIN'), preCadastroCtrl.aprovarPreCadastro);
@@ -64,6 +65,9 @@ router.post('/admin/pre-cadastros/:id/rejeitar', authenticateToken, requireRole(
 router.get('/academic/users', authenticateToken, requireRole('ADMIN'), academicCtrl.listUsers);
 router.post('/academic/users', authenticateToken, requireRole('ADMIN'), academicCtrl.createUser);
 router.put('/academic/users/:id/toggle-status', authenticateToken, requireRole('ADMIN'), academicCtrl.toggleUserStatus);
+// Docente nao recebe e-mail de recuperacao (o `@pbl.edu.br` derivado nao existe
+// como caixa), entao a coordenacao gera uma senha temporaria e repassa na mao.
+router.post('/academic/users/:id/resetar-senha', authenticateToken, requireRole('ADMIN'), academicCtrl.resetUserPassword);
 
 router.get('/academic/courses', authenticateToken, academicCtrl.listCourses);
 router.post('/academic/courses', authenticateToken, requireRole('ADMIN'), academicCtrl.createCourse);

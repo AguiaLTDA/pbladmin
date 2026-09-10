@@ -33,3 +33,6 @@ pbl1prof/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Listas de credenciais geradas para distribuicao — nunca versionar.
+credenciais*.txt

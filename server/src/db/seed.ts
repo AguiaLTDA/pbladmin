@@ -2,6 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { execAsync, runAsync, getAsync } from '../config/db';
+import crypto from 'crypto';
+
+/** Senha inicial aleatoria (~12 caracteres), legivel para ditar ao usuario. */
+function senhaAleatoria(): string {
+  return crypto.randomBytes(9).toString('base64url');
+}
 
 export async function initAndSeedDb() {
   console.log('--- Starting Database Initialization & Seeding ---');
@@ -32,9 +38,16 @@ export async function initAndSeedDb() {
   // Explicit ids above don't advance the identity sequence, so resync it before any future auto-generated insert.
   await runAsync(`SELECT setval(pg_get_serial_sequence('perfis', 'id'), (SELECT MAX(id) FROM perfis))`);
 
-  const passwordHashAdmin = await bcrypt.hash('admin123', 10);
-  const passwordHashProf = await bcrypt.hash('prof123', 10);
-  const passwordHashAluno = await bcrypt.hash('aluno123', 10);
+  // Senhas sorteadas na carga inicial, nunca fixas no codigo: este repositorio e
+  // publico, e uma senha escrita aqui e uma senha publicada. Os valores gerados
+  // sao impressos uma unica vez no fim do seed, para quem sobe a instancia
+  // anotar e trocar no primeiro acesso.
+  const senhaAdmin = senhaAleatoria();
+  const senhaProf = senhaAleatoria();
+  const senhaAluno = senhaAleatoria();
+  const passwordHashAdmin = await bcrypt.hash(senhaAdmin, 10);
+  const passwordHashProf = await bcrypt.hash(senhaProf, 10);
+  const passwordHashAluno = await bcrypt.hash(senhaAluno, 10);
 
   // 2. Seed Admin
   const adminResult = await runAsync(
@@ -361,8 +374,11 @@ export async function initAndSeedDb() {
   );
 
   console.log('--- Database Initialization & Seeding Complete! ---');
-  console.log('Credentials Summary:');
-  console.log('Admin: admin@pbl.edu.br / admin123');
-  console.log('Professor: prof.jussara@pbl.edu.br / prof123');
-  console.log('Student: aluno.ketlly@pbl.edu.br / aluno123');
+  console.log('');
+  console.log('*** SENHAS INICIAIS — anote agora, elas nao sao gravadas em lugar nenhum ***');
+  console.log(`Admin:     admin@pbl.edu.br        / ${senhaAdmin}`);
+  console.log(`Professor: prof.jussara@pbl.edu.br / ${senhaProf}`);
+  console.log(`Aluno:     aluno.ketlly@pbl.edu.br / ${senhaAluno}`);
+  console.log('Troque a senha do admin no primeiro acesso (Perfil > alterar senha).');
+  console.log('');
 }
