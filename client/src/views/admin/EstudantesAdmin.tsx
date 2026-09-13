@@ -16,7 +16,8 @@ import {
   Trash2,
   RotateCcw,
   AlertTriangle,
-  Pencil
+  Pencil,
+  User as UserIcon
 } from 'lucide-react';
 
 /**
@@ -55,6 +56,9 @@ export const EstudantesAdminView: React.FC = () => {
   const [busca, setBusca] = useState('');
   const [cursoFiltro, setCursoFiltro] = useState('');
   const [statusFiltro, setStatusFiltro] = useState('');
+  // '' = todos | 'SEM' = sem grupo PBL | 'COM' = já em algum grupo.
+  const [vinculoFiltro, setVinculoFiltro] = useState('');
+  const [detalhes, setDetalhes] = useState<StudentRegistration | null>(null);
   const [credenciaisGeradas, setCredenciaisGeradas] = useState<{ email: string; senhaTemporaria: string } | null>(
     null
   );
@@ -87,6 +91,16 @@ export const EstudantesAdminView: React.FC = () => {
   useEffect(() => {
     carregar();
   }, []);
+
+  // Esc fecha o painel de detalhes, como em qualquer diálogo sobreposto.
+  useEffect(() => {
+    if (!detalhes) return;
+    const aoTeclar = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') setDetalhes(null);
+    };
+    window.addEventListener('keydown', aoTeclar);
+    return () => window.removeEventListener('keydown', aoTeclar);
+  }, [detalhes]);
 
   const handleEditar = async (dados: StudentRegistrationInput) => {
     if (!editando) return;
@@ -192,17 +206,28 @@ export const EstudantesAdminView: React.FC = () => {
     }
   };
 
+  // Quantos aparecem no filtro de "sem grupo" — vai no rótulo da opção, para a
+  // coordenação enxergar o tamanho da fila sem precisar filtrar para descobrir.
+  const totalSemGrupo = useMemo(
+    () => estudantes.filter((e) => situacaoGrupo(e).alerta).length,
+    [estudantes]
+  );
+
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return estudantes.filter((e) => {
       if (cursoFiltro && e.curso !== cursoFiltro) return false;
       if (statusFiltro && e.status !== statusFiltro) return false;
+      // Mesma função que decide o alerta ao lado do nome: filtro e ícone nunca
+      // podem discordar sobre quem está sem grupo.
+      if (vinculoFiltro === 'SEM' && !situacaoGrupo(e).alerta) return false;
+      if (vinculoFiltro === 'COM' && !e.grupos_nomes) return false;
       if (!termo) return true;
       return [e.nome, e.email, e.matricula, e.turma].some((campo) =>
         String(campo || '').toLowerCase().includes(termo)
       );
     });
-  }, [estudantes, busca, cursoFiltro, statusFiltro]);
+  }, [estudantes, busca, cursoFiltro, statusFiltro, vinculoFiltro]);
 
   const exportarCsv = () => {
     const colunas = [
@@ -303,6 +328,19 @@ export const EstudantesAdminView: React.FC = () => {
             </select>
           </div>
 
+          <div style={{ minWidth: '210px' }}>
+            <select
+              className="form-control"
+              value={vinculoFiltro}
+              onChange={(e) => setVinculoFiltro(e.target.value)}
+              aria-label="Filtrar por vínculo com grupo PBL"
+            >
+              <option value="">Com e sem grupo</option>
+              <option value="SEM">Sem grupo ({totalSemGrupo})</option>
+              <option value="COM">Já em um grupo</option>
+            </select>
+          </div>
+
           <div style={{ minWidth: '240px' }}>
             <select
               className="form-control"
@@ -354,7 +392,16 @@ export const EstudantesAdminView: React.FC = () => {
                 <tr key={e.id}>
                   <td className="font-bold">
                     <span className="flex items-center gap-2">
-                      {e.nome}
+                      {/* <button> e não <div> clicável: abre um diálogo, então
+                          precisa responder a teclado e ser anunciado como ação. */}
+                      <button
+                        type="button"
+                        className="botao-link"
+                        onClick={() => setDetalhes(e)}
+                        title={`Ver os dados de contato de ${e.nome}`}
+                      >
+                        {e.nome}
+                      </button>
                       {grupo.alerta && (
                         <span
                           title={grupo.titulo}
@@ -438,6 +485,82 @@ export const EstudantesAdminView: React.FC = () => {
       )}
 
       {/* Modal de edição do cadastro */}
+      {detalhes && (
+        <div className="modal-overlay" onClick={() => setDetalhes(null)}>
+          {/* Para o clique dentro do cartão não fechar junto com o do fundo. */}
+          <div className="modal-container" onClick={(ev) => ev.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="font-bold flex items-center gap-2">
+                <UserIcon size={20} color="var(--primary)" />
+                {detalhes.nome}
+              </h3>
+              <button onClick={() => setDetalhes(null)} className="btn btn-sm btn-secondary">
+                Fechar
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {situacaoGrupo(detalhes).alerta && (
+                <div
+                  className="card mb-4"
+                  style={{ background: '#fffbeb', border: '1px solid #fef3c7' }}
+                >
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={18} color="#b45309" />
+                    <span className="text-sm" style={{ color: '#b45309' }}>
+                      {situacaoGrupo(detalhes).titulo}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <dl className="lista-detalhes">
+                <dt>E-mail</dt>
+                <dd>
+                  <a href={`mailto:${detalhes.email}`}>{detalhes.email}</a>
+                </dd>
+
+                <dt>Telefone</dt>
+                <dd>
+                  {detalhes.telefone ? (
+                    <a href={`tel:${String(detalhes.telefone).replace(/\D/g, '')}`}>{detalhes.telefone}</a>
+                  ) : (
+                    <span className="text-muted">não informado</span>
+                  )}
+                </dd>
+
+                <dt>Curso</dt>
+                <dd>{detalhes.curso || <span className="text-muted">não informado</span>}</dd>
+
+                <dt>Período</dt>
+                <dd>{detalhes.periodo || <span className="text-muted">não informado</span>}</dd>
+
+                <dt>Turma informada</dt>
+                <dd>{detalhes.turma || <span className="text-muted">não informada</span>}</dd>
+
+                <dt>Matrícula</dt>
+                <dd>{detalhes.matricula || <span className="text-muted">não informada</span>}</dd>
+
+                <dt>CPF</dt>
+                <dd>{detalhes.cpf || <span className="text-muted">não informado</span>}</dd>
+
+                <dt>Grupo PBL</dt>
+                <dd>
+                  {detalhes.grupos_nomes || <span className="text-muted">ainda sem grupo</span>}
+                </dd>
+
+                <dt>Cadastrado em</dt>
+                <dd>
+                  {detalhes.criado_em
+                    ? new Date(detalhes.criado_em).toLocaleString('pt-BR')
+                    : <span className="text-muted">-</span>}
+                </dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editando && (
         <div className="modal-overlay">
           <div className="modal-container">
