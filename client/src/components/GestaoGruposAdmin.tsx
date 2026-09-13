@@ -3,7 +3,18 @@ import { apiRequest } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { GrupoOption, GrupoMembro, TurmaOption } from '../types';
 import { MAX_INTEGRANTES_GRUPO } from '../constants/academico';
-import { Plus, Trash2, Users, Search, UserPlus, UserMinus, ChevronDown, ChevronRight, Filter } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  Users,
+  Search,
+  UserPlus,
+  UserMinus,
+  ChevronDown,
+  ChevronRight,
+  Filter,
+  UserX
+} from 'lucide-react';
 
 interface GestaoGruposAdminProps {
   grupos: GrupoOption[];
@@ -34,6 +45,9 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
   const [buscando, setBuscando] = useState(false);
 
   const [turmaFiltro, setTurmaFiltro] = useState<number | ''>('');
+  // Grupo vazio é um problema a resolver, não um estado normal: ou ninguém entrou
+  // ainda, ou os integrantes saíram e ele virou casca. Daí o filtro próprio.
+  const [ocupacaoFiltro, setOcupacaoFiltro] = useState<'' | 'vazios' | 'com_vagas' | 'lotados'>('');
 
   // Só as turmas que de fato têm grupo — evita um seletor gigante com opções vazias.
   const turmasComGrupos = useMemo(() => {
@@ -44,10 +58,39 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
     return Array.from(mapa, ([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   }, [grupos]);
 
-  const gruposFiltrados = useMemo(
+  const totalDe = (g: GrupoOption) => Number(g.total_integrantes || 0);
+
+  const gruposDaTurma = useMemo(
     () => (turmaFiltro === '' ? grupos : grupos.filter((g) => g.turma_id === Number(turmaFiltro))),
     [grupos, turmaFiltro]
   );
+
+  // Contadores calculados sobre a turma já escolhida: o "3 vazios" se refere ao
+  // que está à vista, não ao total da instituição.
+  const contagem = useMemo(() => {
+    let vazios = 0;
+    let comVagas = 0;
+    let lotados = 0;
+    gruposDaTurma.forEach((g) => {
+      const total = totalDe(g);
+      if (total === 0) vazios++;
+      else if (total >= MAX_INTEGRANTES_GRUPO) lotados++;
+      else comVagas++;
+    });
+    return { vazios, comVagas, lotados };
+  }, [gruposDaTurma]);
+
+  const gruposFiltrados = useMemo(() => {
+    if (ocupacaoFiltro === '') return gruposDaTurma;
+    return gruposDaTurma.filter((g) => {
+      const total = totalDe(g);
+      if (ocupacaoFiltro === 'vazios') return total === 0;
+      if (ocupacaoFiltro === 'lotados') return total >= MAX_INTEGRANTES_GRUPO;
+      return total > 0 && total < MAX_INTEGRANTES_GRUPO;
+    });
+  }, [gruposDaTurma, ocupacaoFiltro]);
+
+  const algumFiltroAtivo = turmaFiltro !== '' || ocupacaoFiltro !== '';
 
   const carregarMembros = (grupoId: number) => {
     setCarregandoMembrosId(grupoId);
@@ -187,28 +230,75 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
             </select>
           </div>
 
+          <div className="flex items-center gap-2" style={{ minWidth: '240px' }}>
+            <select
+              className="form-control"
+              value={ocupacaoFiltro}
+              onChange={(e) => setOcupacaoFiltro(e.target.value as typeof ocupacaoFiltro)}
+            >
+              <option value="">Qualquer ocupação ({gruposDaTurma.length})</option>
+              <option value="vazios">Vazios — sem integrantes ({contagem.vazios})</option>
+              <option value="com_vagas">Com vagas ({contagem.comVagas})</option>
+              <option value="lotados">Lotados ({contagem.lotados})</option>
+            </select>
+          </div>
+
           <span className="text-muted text-sm">
             Exibindo {gruposFiltrados.length} de {grupos.length} grupo(s).
           </span>
 
-          {turmaFiltro !== '' && (
-            <button onClick={() => setTurmaFiltro('')} className="btn btn-secondary btn-sm">
-              Limpar filtro
+          {algumFiltroAtivo && (
+            <button
+              onClick={() => {
+                setTurmaFiltro('');
+                setOcupacaoFiltro('');
+              }}
+              className="btn btn-secondary btn-sm"
+            >
+              Limpar filtros
             </button>
           )}
         </div>
+
+        {/* Atalho para o caso que motiva a varredura: grupos sem ninguém dentro.
+            Só aparece quando existem, e some assim que o filtro já está aplicado. */}
+        {contagem.vazios > 0 && ocupacaoFiltro !== 'vazios' && (
+          <button
+            onClick={() => setOcupacaoFiltro('vazios')}
+            className="btn btn-secondary btn-sm"
+            style={{ marginTop: '0.75rem', color: '#b45309', borderColor: '#fcd34d', background: '#fffbeb' }}
+          >
+            <UserX size={14} />
+            {contagem.vazios === 1
+              ? 'Ver 1 grupo vazio'
+              : `Ver os ${contagem.vazios} grupos vazios`}
+            {turmaFiltro !== '' && ' desta turma'}
+          </button>
+        )}
       </div>
 
       {gruposFiltrados.length === 0 ? (
         <div className="card text-center py-8">
           <Users size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
           <h3 className="font-bold">
-            {turmaFiltro === '' ? 'Nenhum grupo cadastrado' : 'Nenhum grupo nesta turma'}
+            {ocupacaoFiltro === 'vazios'
+              ? 'Nenhum grupo vazio'
+              : ocupacaoFiltro !== ''
+                ? 'Nenhum grupo nesta faixa de ocupação'
+                : turmaFiltro === ''
+                  ? 'Nenhum grupo cadastrado'
+                  : 'Nenhum grupo nesta turma'}
           </h3>
           <p className="text-muted text-sm">
-            {turmaFiltro === ''
-              ? 'Crie um grupo aqui ou deixe que os próprios alunos se organizem pelo portal deles.'
-              : 'Escolha outra turma no filtro ou crie um grupo para esta turma.'}
+            {ocupacaoFiltro === 'vazios'
+              ? turmaFiltro === ''
+                ? 'Todos os grupos têm pelo menos um integrante.'
+                : 'Todos os grupos desta turma têm pelo menos um integrante.'
+              : ocupacaoFiltro !== ''
+                ? 'Ajuste os filtros de turma ou de ocupação para ver outros grupos.'
+                : turmaFiltro === ''
+                  ? 'Crie um grupo aqui ou deixe que os próprios alunos se organizem pelo portal deles.'
+                  : 'Escolha outra turma no filtro ou crie um grupo para esta turma.'}
           </p>
         </div>
       ) : (
@@ -238,8 +328,13 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
                     </td>
                     <td>{g.turma_nome}</td>
                     <td>
-                      {Number(g.total_integrantes || 0)}/{MAX_INTEGRANTES_GRUPO}
-                      {Number(g.total_integrantes || 0) >= MAX_INTEGRANTES_GRUPO && (
+                      {totalDe(g)}/{MAX_INTEGRANTES_GRUPO}
+                      {totalDe(g) === 0 && (
+                        <span className="grupo-vazio-selo">
+                          <UserX size={12} /> vazio
+                        </span>
+                      )}
+                      {totalDe(g) >= MAX_INTEGRANTES_GRUPO && (
                         <span className="text-muted text-sm"> — lotado</span>
                       )}
                     </td>
