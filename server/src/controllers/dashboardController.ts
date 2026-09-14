@@ -165,13 +165,16 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
     }
 
     if (user.perfilNome === 'ALUNO') {
+      // Materiais informativos (atalho "enviar arquivo para grupo") ficam fora
+      // destes contadores — não são atividade avaliativa com prazo/entrega.
       const activities = await queryAsync<any>(
         `SELECT a.id, pub.prazo_entrega, ent.status as entrega_status
          FROM alunos_segmentados als
          JOIN atividades_pbl a ON als.atividade_id = a.id
          JOIN publicacoes pub ON a.id = pub.atividade_id
          LEFT JOIN entregas ent ON pub.id = ent.publicacao_id AND ent.aluno_id = ? AND ent.deletado_em IS NULL
-         WHERE als.aluno_id = ? AND a.status = 'PUBLICADO' AND a.deletado_em IS NULL`,
+         WHERE als.aluno_id = ? AND a.status = 'PUBLICADO' AND a.deletado_em IS NULL
+           AND COALESCE(a.natureza, 'AVALIATIVA') != 'INFORMATIVA'`,
         [user.id, user.id]
       );
 

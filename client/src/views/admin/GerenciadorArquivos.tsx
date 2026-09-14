@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest, getDownloadUrl } from '../../services/api';
 import { FileItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
-import { FolderOpen, Upload, Download, Trash2, FileText, Search, ShieldCheck, Send } from 'lucide-react';
+import { FolderOpen, Upload, Download, Trash2, FileText, Search, ShieldCheck, Send, Users } from 'lucide-react';
 import { DirecionarArquivoModal } from '../../components/DirecionarArquivoModal';
+import { EnviarArquivoGrupoModal } from '../../components/EnviarArquivoGrupoModal';
 
 export const GerenciadorArquivosView: React.FC = () => {
   const { showToast } = useToast();
@@ -12,6 +13,7 @@ export const GerenciadorArquivosView: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState('');
   const [arquivoParaDirecionar, setArquivoParaDirecionar] = useState<FileItem | null>(null);
+  const [arquivoParaGrupo, setArquivoParaGrupo] = useState<FileItem | null>(null);
 
   const fetchFiles = () => {
     setLoading(true);
@@ -158,6 +160,13 @@ export const GerenciadorArquivosView: React.FC = () => {
                       >
                         <Send size={14} /> Direcionar
                       </button>
+                      <button
+                        onClick={() => setArquivoParaGrupo(f)}
+                        className="btn btn-secondary btn-sm"
+                        title="Atalho: publica direto para os alunos de um grupo PBL"
+                      >
+                        <Users size={14} /> Enviar para Grupo
+                      </button>
                       <a
                         href={getDownloadUrl(f.id)}
                         target="_blank"
@@ -189,6 +198,15 @@ export const GerenciadorArquivosView: React.FC = () => {
           nomeArquivo={arquivoParaDirecionar.nome_original}
           onClose={() => setArquivoParaDirecionar(null)}
           onDirecionado={fetchFiles}
+        />
+      )}
+
+      {arquivoParaGrupo && (
+        <EnviarArquivoGrupoModal
+          arquivoId={arquivoParaGrupo.id}
+          nomeArquivo={arquivoParaGrupo.nome_original}
+          onClose={() => setArquivoParaGrupo(null)}
+          onEnviado={fetchFiles}
         />
       )}
     </div>

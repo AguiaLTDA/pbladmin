@@ -16,7 +16,7 @@ export async function getStudentActivities(req: AuthenticatedRequest, res: Respo
     const { statusFiltro } = req.query; // 'PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDA', 'ATRASADA'
 
     let sql = `
-      SELECT a.id, a.codigo_unico, a.titulo, c.nome as curso_nome, d.nome as disciplina_nome,
+      SELECT a.id, a.codigo_unico, a.titulo, a.natureza, c.nome as curso_nome, d.nome as disciplina_nome,
              p.nome as professor_nome, pub.id as publicacao_id, pub.data_disponibilizacao,
              pub.prazo_entrega, pub.status_publicacao,
              ent.id as entrega_id, ent.status as entrega_status, ent.data_envio, ent.comprovante_hash,
@@ -45,6 +45,12 @@ export async function getStudentActivities(req: AuthenticatedRequest, res: Respo
         estadoAluno = 'EM_ANDAMENTO';
       } else if (prazo < now && !item.entrega_status) {
         estadoAluno = 'ATRASADA';
+      }
+
+      // Material informativo (atalho "enviar para grupo"): sem entrega própria,
+      // não faz sentido tratar como pendente/atrasada — é só um aviso de leitura.
+      if (item.natureza === 'INFORMATIVA' && !item.entrega_status) {
+        estadoAluno = 'INFORMATIVA';
       }
 
       return {

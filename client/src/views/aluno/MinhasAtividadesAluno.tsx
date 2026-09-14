@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
-import { GraduationCap, Clock, CheckCircle2, AlertTriangle, ArrowRight, Eye, Calendar } from 'lucide-react';
+import { GraduationCap, Clock, CheckCircle2, AlertTriangle, ArrowRight, Eye, Calendar, Info } from 'lucide-react';
 
 interface Props {
   navigate: (path: string) => void;
@@ -53,6 +53,7 @@ export const MinhasAtividadesAlunoView: React.FC<Props> = ({ navigate }) => {
             <option value="EM_ANDAMENTO">Em Andamento (Rascunho)</option>
             <option value="CONCLUIDA">Entregas Concluídas</option>
             <option value="ATRASADA">Atrasadas</option>
+            <option value="INFORMATIVA">Materiais Informativos</option>
           </select>
         </div>
       </div>
@@ -71,6 +72,7 @@ export const MinhasAtividadesAlunoView: React.FC<Props> = ({ navigate }) => {
             const isConcluida = act.estadoAluno === 'CONCLUIDA';
             const isAtrasada = act.estadoAluno === 'ATRASADA';
             const isEmAndamento = act.estadoAluno === 'EM_ANDAMENTO';
+            const isInformativa = act.estadoAluno === 'INFORMATIVA';
 
             return (
               <div
@@ -78,7 +80,7 @@ export const MinhasAtividadesAlunoView: React.FC<Props> = ({ navigate }) => {
                 className="card flex flex-col justify-between"
                 style={{
                   borderTop: `4px solid ${
-                    isConcluida ? '#10b981' : isAtrasada ? '#ef4444' : isEmAndamento ? '#f59e0b' : '#3b82f6'
+                    isConcluida ? '#10b981' : isAtrasada ? '#ef4444' : isEmAndamento ? '#f59e0b' : isInformativa ? '#8b5cf6' : '#3b82f6'
                   }`
                 }}
               >
@@ -90,11 +92,11 @@ export const MinhasAtividadesAlunoView: React.FC<Props> = ({ navigate }) => {
                     <span
                       className="status-badge"
                       style={{
-                        background: isConcluida ? '#dcfce7' : isAtrasada ? '#fee2e2' : isEmAndamento ? '#fef3c7' : '#e0f2fe',
-                        color: isConcluida ? '#15803d' : isAtrasada ? '#b91c1c' : isEmAndamento ? '#b45309' : '#0369a1'
+                        background: isConcluida ? '#dcfce7' : isAtrasada ? '#fee2e2' : isEmAndamento ? '#fef3c7' : isInformativa ? '#ede9fe' : '#e0f2fe',
+                        color: isConcluida ? '#15803d' : isAtrasada ? '#b91c1c' : isEmAndamento ? '#b45309' : isInformativa ? '#6d28d9' : '#0369a1'
                       }}
                     >
-                      {act.estadoAluno}
+                      {isInformativa ? 'MATERIAL' : act.estadoAluno}
                     </span>
                   </div>
 
@@ -110,10 +112,17 @@ export const MinhasAtividadesAlunoView: React.FC<Props> = ({ navigate }) => {
                 </div>
 
                 <div>
-                  <div className="flex items-center gap-1 text-sm text-muted mb-4 p-2" style={{ background: 'var(--bg-main)', borderRadius: '6px' }}>
-                    <Calendar size={16} />
-                    <span>Prazo de Entrega: <strong>{new Date(act.prazo_entrega).toLocaleString('pt-BR')}</strong></span>
-                  </div>
+                  {isInformativa ? (
+                    <div className="flex items-center gap-1 text-sm mb-4 p-2" style={{ background: '#ede9fe', color: '#6d28d9', borderRadius: '6px' }}>
+                      <Info size={16} />
+                      <span>Material de apoio — não é necessário enviar resposta.</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-sm text-muted mb-4 p-2" style={{ background: 'var(--bg-main)', borderRadius: '6px' }}>
+                      <Calendar size={16} />
+                      <span>Prazo de Entrega: <strong>{new Date(act.prazo_entrega).toLocaleString('pt-BR')}</strong></span>
+                    </div>
+                  )}
 
                   {act.nota_total !== undefined && act.liberado_aluno === 1 && (
                     <div className="p-2 mb-3" style={{ background: '#dcfce7', borderRadius: '6px', color: '#15803d', fontWeight: 'bold', fontSize: '0.85rem' }}>
@@ -127,7 +136,7 @@ export const MinhasAtividadesAlunoView: React.FC<Props> = ({ navigate }) => {
                     style={{ width: '100%' }}
                   >
                     <Eye size={16} />
-                    Abrir Atividade & Entregar
+                    {isInformativa ? 'Ver Material' : 'Abrir Atividade & Entregar'}
                   </button>
                 </div>
               </div>

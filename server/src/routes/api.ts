@@ -191,6 +191,9 @@ router.get('/files/:id/direcionamentos', authenticateToken, requireRole('ADMIN')
 router.post('/files/:id/direcionamentos', authenticateToken, requireRole('ADMIN'), fileCtrl.direcionarArquivo);
 router.delete('/files/direcionamentos/:direcionamentoId', authenticateToken, requireRole('ADMIN'), fileCtrl.removerDirecionamento);
 
+// Atalho: publica o arquivo para um grupo, criando/segmentando/publicando uma atividade mínima por trás dos panos.
+router.post('/files/:id/enviar-para-grupo', authenticateToken, requireRole('ADMIN'), fileCtrl.enviarArquivoParaGrupo);
+
 // --- DASHBOARD & REPORTS ---
 router.get('/dashboard', authenticateToken, dashCtrl.getDashboardData);
 router.get('/reports/general', authenticateToken, requireRole('ADMIN'), reportCtrl.getGeneralReport);

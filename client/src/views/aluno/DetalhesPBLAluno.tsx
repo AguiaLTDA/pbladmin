@@ -13,7 +13,8 @@ import {
   ArrowLeft,
   ShieldCheck,
   Paperclip,
-  Trash2
+  Trash2,
+  Info
 } from 'lucide-react';
 
 interface Props {
@@ -63,6 +64,9 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
   const { atividade, versao, etapas, arquivos, entrega, feedback } = data;
 
   const isFinalSubmitted = entrega && (entrega.status === 'ENVIADO' || entrega.status === 'ATRASADO');
+  // Atalho "enviar arquivo para grupo": material de apoio, sem entrega esperada
+  // (a menos que o aluno já tenha respondido mesmo assim — aí mantém a entrega visível).
+  const isInformativa = atividade.natureza === 'INFORMATIVA' && !entrega;
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -134,7 +138,13 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
       <div className="card mb-4">
         <div className="flex justify-between items-center mb-2">
           <span className="font-bold text-sm" style={{ color: 'var(--primary)' }}>{atividade.curso_nome} • {atividade.disciplina_nome}</span>
-          <span className="text-sm text-muted">Prazo de Entrega: <strong>{new Date(atividade.prazo_entrega).toLocaleString('pt-BR')}</strong></span>
+          {isInformativa ? (
+            <span className="pill-tag" style={{ background: '#ede9fe', color: '#6d28d9' }}>
+              <Info size={12} /> Material informativo
+            </span>
+          ) : (
+            <span className="text-sm text-muted">Prazo de Entrega: <strong>{new Date(atividade.prazo_entrega).toLocaleString('pt-BR')}</strong></span>
+          )}
         </div>
         <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{atividade.titulo}</h2>
         <span className="text-sm text-muted">Professor Responsável: {atividade.professor_nome}</span>
@@ -191,7 +201,26 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
         </div>
       )}
 
-      {/* Instruções do PBL */}
+      {/* Instruções do PBL — material informativo mostra só o aviso + os arquivos */}
+      {isInformativa ? (
+        <div className="card mb-4">
+          {versao?.instrucoes_gerais && (
+            <p className="text-sm mb-3" style={{ whiteSpace: 'pre-line' }}>{versao.instrucoes_gerais}</p>
+          )}
+          <h4 className="font-bold mb-2">Materiais de Apoio ({arquivos.length})</h4>
+          {arquivos.map((f: any) => (
+            <div key={f.id} className="flex items-center justify-between p-2 mb-1" style={{ background: 'var(--bg-main)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+              <div className="flex items-center gap-2 text-sm">
+                <FileText size={16} color="var(--primary)" />
+                <span>{f.nome_original}</span>
+              </div>
+              <a href={getDownloadUrl(f.id)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
+                <Download size={14} /> Baixar
+              </a>
+            </div>
+          ))}
+        </div>
+      ) : (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }} className="mb-4">
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div>
@@ -249,8 +278,21 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
           </div>
         </div>
       </div>
+      )}
 
-      {/* Área de Resposta & Submissão do Aluno */}
+      {/* Área de Resposta & Submissão do Aluno — não existe para material informativo */}
+      {isInformativa ? (
+        <div className="card" style={{ background: '#ede9fe', border: '1px solid #c4b5fd' }}>
+          <div className="flex items-center gap-2 font-bold" style={{ color: '#6d28d9' }}>
+            <Info size={20} />
+            Material informativo
+          </div>
+          <p className="text-sm mt-1" style={{ color: '#6d28d9' }}>
+            Este é um material de apoio disponibilizado pela coordenação. Não é necessário enviar resposta ou
+            realizar entrega — basta consultar o(s) arquivo(s) acima.
+          </p>
+        </div>
+      ) : (
       <div className="card">
         <h3 className="font-bold mb-2 flex items-center gap-2">
           <Send size={20} color="var(--primary)" />
@@ -331,6 +373,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };

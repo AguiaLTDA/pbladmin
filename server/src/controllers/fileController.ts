@@ -6,6 +6,7 @@ import { queryAsync, runAsync, getAsync } from '../config/db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
 import { uploadToDrive, downloadFromDrive } from '../services/googleDrive';
+import { calculateAudiencePreview, saveSegmentationAndTargetStudents } from '../services/segmentation';
 
 // Arquivos ficam em buffer só até serem enviados ao Google Drive — nada é gravado em disco local.
 const storage = multer.memoryStorage();
@@ -524,5 +525,142 @@ export async function setInstitutionalFile(req: AuthenticatedRequest, res: Respo
   } catch (err) {
     console.error('Erro ao definir arquivo institucional:', err);
     return res.status(500).json({ message: 'Erro ao definir o arquivo institucional.' });
+  }
+}
+
+/**
+ * Atalho "Enviar arquivo para o grupo": em vez de o admin montar uma atividade
+ * PBL inteira só para carregar um PDF, isto cria por trás dos panos uma
+ * atividade mínima (RASCUNHO efêmero), anexa o arquivo, segmenta por esse
+ * grupo e já publica — assim o material aparece imediatamente em "Materiais
+ * de Apoio" na tela de detalhes da atividade para cada aluno do grupo.
+ *
+ * Efeito colateral aceito conscientemente (explicado ao admin na tela): isso
+ * cria uma linha real em atividades_pbl, então ela aparece nos relatórios e
+ * nas listagens como qualquer outra atividade. O título e o código levam um
+ * prefixo (ver ROTULO_MATERIAL/PREFIXO_CODIGO) só para ficar reconhecível.
+ */
+const ROTULO_MATERIAL = 'Material';
+const PREFIXO_CODIGO = 'MAT';
+
+export async function enviarArquivoParaGrupo(req: AuthenticatedRequest, res: Response) {
+  try {
+    const adminId = req.user?.id;
+    const { id } = req.params;
+    const { grupoId } = req.body;
+    if (!adminId) return res.status(401).json({ message: 'Não autenticado.' });
+    if (!grupoId) return res.status(400).json({ message: 'Selecione o grupo de destino.' });
+
+    const arquivo = await getAsync<{ id: number; nome_original: string }>(
+      `SELECT id, nome_original FROM arquivos WHERE id = ? AND deletado_em IS NULL`,
+      [id]
+    );
+    if (!arquivo) return res.status(404).json({ message: 'Arquivo não encontrado.' });
+
+    const grupo = await getAsync<{ id: number; nome: string; turma_id: number; turma_nome: string; periodo_letivo_id: number }>(
+      `SELECT g.id, g.nome, g.turma_id, t.nome as turma_nome, t.periodo_letivo_id
+       FROM grupos g
+       JOIN turmas t ON g.turma_id = t.id
+       WHERE g.id = ? AND g.ativo = 1 AND g.deletado_em IS NULL AND t.deletado_em IS NULL`,
+      [grupoId]
+    );
+    if (!grupo) return res.status(404).json({ message: 'Grupo não encontrado.' });
+
+    // Precisa de um professor+disciplina reais para preencher a atividade —
+    // usa o primeiro vínculo ativo da turma do grupo (a turma deve ter pelo
+    // menos um docente vinculado antes de usar este atalho).
+    const vinculo = await getAsync<{ professor_id: number; disciplina_id: number; disciplina_nome: string; curso_id: number }>(
+      `SELECT vp.usuario_id as professor_id, vp.disciplina_id, d.nome as disciplina_nome, d.curso_id
+       FROM vinculos_professores vp
+       JOIN disciplinas d ON vp.disciplina_id = d.id
+       WHERE vp.turma_id = ? AND vp.ativo = 1 AND vp.disciplina_id IS NOT NULL
+       ORDER BY vp.id ASC LIMIT 1`,
+      [grupo.turma_id]
+    );
+    if (!vinculo) {
+      return res.status(400).json({
+        message: `A turma "${grupo.turma_nome}" ainda não tem professor/disciplina vinculados. Vincule antes de enviar um arquivo para este grupo.`
+      });
+    }
+
+    // Confere ANTES de criar qualquer linha — assim, se o grupo estiver vazio,
+    // não sobra atividade/versão/anexo órfão para desfazer.
+    const preview = await calculateAudiencePreview([{ entidadeTipo: 'grupo', entidadeId: grupo.id, acao: 'INCLUIR' }]);
+    if (preview.totalAlunosUnicos === 0) {
+      return res.status(400).json({ message: `O grupo "${grupo.nome}" ainda não tem alunos matriculados.` });
+    }
+
+    const codigoUnico = `PBL-${PREFIXO_CODIGO}-${Date.now().toString(36).toUpperCase()}`;
+    const titulo = `${ROTULO_MATERIAL}: ${arquivo.nome_original} — ${grupo.nome}`;
+
+    const atRes = await runAsync(
+      `INSERT INTO atividades_pbl (codigo_unico, titulo, curso_id, disciplina_id, professor_id, periodo_letivo_id, status, natureza, versao_atual)
+       VALUES (?, ?, ?, ?, ?, ?, 'RASCUNHO', 'INFORMATIVA', 1)`,
+      [codigoUnico, titulo, vinculo.curso_id, vinculo.disciplina_id, vinculo.professor_id, grupo.periodo_letivo_id]
+    );
+    const atividadeId = atRes.lastID;
+
+    const verRes = await runAsync(
+      `INSERT INTO versoes_atividades (atividade_id, numero_versao, instrucoes_gerais, observacoes_internas_admin, criado_por)
+       VALUES (?, 1, ?, ?, ?)`,
+      [
+        atividadeId,
+        `Este é um material de apoio disponibilizado pela coordenação para o grupo "${grupo.nome}". Não é necessário responder ou enviar entrega — basta consultar o(s) arquivo(s) em "Materiais de Apoio".`,
+        `Atividade gerada automaticamente pelo atalho "Enviar arquivo para grupo" (arquivo #${arquivo.id}). Não requer avaliação.`,
+        adminId
+      ]
+    );
+
+    await runAsync(
+      `INSERT INTO arquivos_atividades (versao_atividade_id, arquivo_id, aprovado_pelo_admin, versao_material)
+       VALUES (?, ?, 1, 'v1')`,
+      [verRes.lastID, arquivo.id]
+    );
+
+    // Já confirmamos acima que o grupo tem gente — isto só persiste a segmentação e
+    // resolve alunos_segmentados (recalcula a mesma audiência da checagem anterior).
+    const audience = await saveSegmentationAndTargetStudents(atividadeId, 'GRUPO', [
+      { entidadeTipo: 'grupo', entidadeId: grupo.id, acao: 'INCLUIR' }
+    ]);
+
+    const agora = new Date();
+    const prazoDistante = new Date(agora.getTime());
+    prazoDistante.setFullYear(prazoDistante.getFullYear() + 5); // material sem prazo real — só evita marcar "atrasado".
+
+    const pubRes = await runAsync(
+      `INSERT INTO publicacoes (atividade_id, data_disponibilizacao, prazo_entrega, publicado_por, status_publicacao)
+       VALUES (?, ?, ?, ?, 'PUBLICADO')`,
+      [atividadeId, agora.toISOString(), prazoDistante.toISOString(), adminId]
+    );
+
+    await runAsync(`UPDATE atividades_pbl SET status = 'PUBLICADO', atualizado_em = CURRENT_TIMESTAMP WHERE id = ?`, [
+      atividadeId
+    ]);
+
+    for (const aluno of audience.alunosIncluidos) {
+      await runAsync(`INSERT INTO notificacoes (usuario_id, titulo, mensagem, link) VALUES (?, ?, ?, ?)`, [
+        aluno.id,
+        'Novo material disponível',
+        `A coordenação disponibilizou "${arquivo.nome_original}" para o grupo ${grupo.nome}.`,
+        `/aluno/atividade/${atividadeId}`
+      ]);
+    }
+
+    await logAudit(adminId, 'ENVIAR_ARQUIVO_PARA_GRUPO', 'atividades_pbl', atividadeId, {
+      arquivoId: arquivo.id,
+      grupoId: grupo.id,
+      publicacaoId: pubRes.lastID,
+      totalAlunos: audience.totalAlunosUnicos
+    });
+
+    return res.status(201).json({
+      message: `Material publicado para ${audience.totalAlunosUnicos} aluno(s) do grupo "${grupo.nome}".`,
+      atividadeId,
+      codigoUnico,
+      totalAlunos: audience.totalAlunosUnicos
+    });
+  } catch (err) {
+    console.error('Erro ao enviar arquivo para o grupo:', err);
+    return res.status(500).json({ message: 'Erro ao enviar o arquivo para o grupo.' });
   }
 }

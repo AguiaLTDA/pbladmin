@@ -205,6 +205,10 @@ CREATE TABLE IF NOT EXISTS atividades_pbl (
   periodo_letivo_id INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'RASCUNHO',
   -- RASCUNHO, ENVIADO_ANALISE, EM_ANALISE, AJUSTES_SOLICITADOS, REENVIADO, APROVADO, AGENDADO, PUBLICADO, SUSPENSO, ENCERRADO, ARQUIVADO, REPROVADO
+  -- 'AVALIATIVA' = atividade PBL normal (gera entrega/nota). 'INFORMATIVA' = atalho
+  -- "enviar arquivo para grupo" (ver fileController.enviarArquivoParaGrupo): carrega
+  -- só um material de apoio, sem entrega esperada — telas do aluno tratam diferente.
+  natureza TEXT DEFAULT 'AVALIATIVA',
   versao_atual INTEGER DEFAULT 1,
   deletado_em TIMESTAMPTZ DEFAULT NULL,
   criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,

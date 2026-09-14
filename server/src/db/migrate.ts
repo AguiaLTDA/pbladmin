@@ -115,4 +115,7 @@ export async function runMigrations() {
       WHERE nome = '2026/1'
         AND NOT EXISTS (SELECT 1 FROM periodos_letivos p2 WHERE p2.nome = '2026/2')`
   );
+
+  // Bancos criados antes do atalho "enviar arquivo para grupo" não têm esta coluna.
+  await runAsync(`ALTER TABLE atividades_pbl ADD COLUMN IF NOT EXISTS natureza TEXT DEFAULT 'AVALIATIVA'`);
 }
