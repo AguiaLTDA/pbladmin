@@ -37,7 +37,8 @@ import { MinhasAtividadesAlunoView } from './views/aluno/MinhasAtividadesAluno';
 import { CalendarioPrazosAlunoView } from './views/aluno/CalendarioPrazosAluno';
 import { DetalhesPBLAlunoView } from './views/aluno/DetalhesPBLAluno';
 import { MeuGrupoAlunoView } from './views/aluno/MeuGrupoAluno';
-import { ContextosAlunosAdminView } from './views/admin/ContextosAlunosAdmin';
+import { PanoramaContextosAlunos } from './components/PanoramaContextosAlunos';
+import { AlunosRelacionadosProfessorView } from './views/professor/AlunosRelacionadosProfessor';
 import { ContextoAlunoView } from './views/aluno/ContextoAluno';
 
 /**
@@ -160,7 +161,7 @@ export const App: React.FC = () => {
       }
       if (currentRoute === '/admin/usuarios') return <UsuariosAdminView />;
       if (currentRoute === '/admin/estudantes') return <EstudantesAdminView />;
-      if (currentRoute === '/admin/contextos') return <ContextosAlunosAdminView />;
+      if (currentRoute === '/admin/contextos') return <PanoramaContextosAlunos />;
       if (currentRoute === '/admin/academic') return <AcademicAdminView />;
       // Mesma tela do professor: para o ADMIN ela habilita exclusão/restauração de entregas.
       if (currentRoute === '/admin/entregas') return <EntregasProfessorView />;
@@ -175,6 +176,9 @@ export const App: React.FC = () => {
     // entregas e cuida do próprio arquivo orientador.
     if (role === 'PROFESSOR') {
       if (currentRoute === '/professor/dashboard') return <DashboardProfessorView navigate={navigate} />;
+      if (currentRoute === '/professor/alunos') return <AlunosRelacionadosProfessorView />;
+      if (currentRoute === '/professor/grupos')
+        return <AlunosRelacionadosProfessorView abaInicial="grupos" />;
       if (currentRoute === '/professor/entregas') return <EntregasProfessorView />;
       if (currentRoute === '/professor/turmas') return <MinhasTurmasProfessorView />;
       if (currentRoute === '/professor/arquivo-orientador') return <ArquivoOrientadorProfessorView />;

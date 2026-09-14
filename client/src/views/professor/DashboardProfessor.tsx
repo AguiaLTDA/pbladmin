@@ -65,25 +65,39 @@ export const DashboardProfessorView: React.FC<Props> = ({ navigate }) => {
           </div>
         </div>
 
-        <div className="kpi-card" style={{ '--kpi-color': '#0891b2', '--kpi-bg': '#cffafe' } as React.CSSProperties}>
+        <button
+          type="button"
+          onClick={() => navigate('/professor/alunos')}
+          className="kpi-card kpi-card-clicavel"
+          style={{ '--kpi-color': '#0891b2', '--kpi-bg': '#cffafe' } as React.CSSProperties}
+          title="Ver a lista de alunos das suas turmas e o contexto profissional de cada um"
+        >
           <div className="kpi-icon-wrapper">
             <GraduationCap size={24} />
           </div>
           <div>
             <div className="kpi-value">{k?.alunosRelacionados || 0}</div>
             <div className="kpi-label">Alunos Relacionados</div>
+            <div className="kpi-acao">Ver lista <ArrowRight size={12} /></div>
           </div>
-        </div>
+        </button>
 
-        <div className="kpi-card" style={{ '--kpi-color': '#4f46e5', '--kpi-bg': '#e0e7ff' } as React.CSSProperties}>
+        <button
+          type="button"
+          onClick={() => navigate('/professor/grupos')}
+          className="kpi-card kpi-card-clicavel"
+          style={{ '--kpi-color': '#4f46e5', '--kpi-bg': '#e0e7ff' } as React.CSSProperties}
+          title="Ver os grupos PBL das suas turmas e quem já preencheu o contexto"
+        >
           <div className="kpi-icon-wrapper">
             <Layers size={24} />
           </div>
           <div>
             <div className="kpi-value">{k?.gruposRelacionados || 0}</div>
             <div className="kpi-label">Grupos Relacionados</div>
+            <div className="kpi-acao">Ver grupos <ArrowRight size={12} /></div>
           </div>
-        </div>
+        </button>
 
         <div className="kpi-card" style={{ '--kpi-color': '#d97706', '--kpi-bg': '#fef3c7' } as React.CSSProperties}>
           <div className="kpi-icon-wrapper">

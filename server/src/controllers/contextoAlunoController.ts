@@ -275,6 +275,20 @@ export async function listarContextos(req: AuthenticatedRequest, res: Response) 
     const condicoes: string[] = ['u.deletado_em IS NULL', 'm.deletado_em IS NULL', "p.nome = 'ALUNO'"];
     const params: any[] = [];
 
+    // O contexto é um relato pessoal. A coordenação enxerga a instituição
+    // inteira; o docente, apenas os alunos das turmas que ele leciona — do
+    // contrário este endpoint entregaria a um professor o relato de alunos com
+    // quem ele não tem nenhum vínculo.
+    if (req.user?.perfilNome === 'PROFESSOR') {
+      condicoes.push(
+        `m.turma_id IN (
+           SELECT vp.turma_id FROM vinculos_professores vp
+            WHERE vp.usuario_id = ? AND vp.ativo = 1
+         )`
+      );
+      params.push(req.user.id);
+    }
+
     if (cursoId) {
       condicoes.push('t.curso_id = ?');
       params.push(Number(cursoId));

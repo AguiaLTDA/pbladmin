@@ -7,13 +7,14 @@ import {
   Download,
   Filter,
   Loader2,
+  Layers,
   Search,
   Users
 } from 'lucide-react';
-import { apiRequest } from '../../services/api';
-import { useToast } from '../../context/ToastContext';
-import { ContextoAlunoResumo, PanoramaContextos } from '../../types';
-import { MedalhaContexto } from '../../components/MedalhaContexto';
+import { apiRequest } from '../services/api';
+import { useToast } from '../context/ToastContext';
+import { ContextoAlunoResumo, PanoramaContextos } from '../types';
+import { MedalhaContexto } from './MedalhaContexto';
 
 const PERGUNTAS: { campo: keyof ContextoAlunoResumo; titulo: string }[] = [
   { campo: 'dailyTasks', titulo: 'O que faz no dia a dia do trabalho' },
@@ -34,11 +35,32 @@ const PORTES: Record<string, string> = {
 
 type Situacao = '' | 'completo' | 'incompleto' | 'sem_resposta';
 
-export const ContextosAlunosAdminView: React.FC = () => {
+interface PanoramaContextosProps {
+  titulo?: string;
+  descricao?: string;
+  /** Aba inicial — o dashboard do professor entra direto na que o KPI representa. */
+  abaInicial?: 'alunos' | 'grupos';
+}
+
+/**
+ * Painel de contextos profissionais, compartilhado por dois portais.
+ *
+ * O recorte de quem aparece é decidido no servidor, não aqui: a coordenação
+ * recebe a instituição inteira e o docente apenas os alunos das turmas que
+ * leciona. A tela é a mesma porque a pergunta é a mesma — quem respondeu, o que
+ * respondeu e como isso se distribui por curso, turma e grupo.
+ */
+export const PanoramaContextosAlunos: React.FC<PanoramaContextosProps> = ({
+  titulo = 'Contexto Profissional dos Alunos',
+  descricao = 'O que os estudantes relatam sobre a própria realidade de trabalho, para orientar a escrita dos casos PBL. Segmentado por curso, turma e grupo.',
+  abaInicial = 'alunos'
+}) => {
   const { showToast } = useToast();
   const [dados, setDados] = useState<PanoramaContextos | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [expandidoId, setExpandidoId] = useState<number | null>(null);
+  const [aba, setAba] = useState<'alunos' | 'grupos'>(abaInicial);
+  const [grupoExpandido, setGrupoExpandido] = useState<number | null>(null);
 
   const [cursoFiltro, setCursoFiltro] = useState<number | ''>('');
   const [turmaFiltro, setTurmaFiltro] = useState<number | ''>('');
@@ -137,6 +159,49 @@ export const ContextosAlunosAdminView: React.FC = () => {
     [filtrados]
   );
 
+  /**
+   * Visão por grupo, derivada do mesmo recorte filtrado — não de outra consulta.
+   * Alunos sem grupo ficam de fora desta aba de propósito: a pergunta aqui é
+   * "como está o grupo", e eles aparecem na aba de alunos.
+   */
+  const gruposAgregados = useMemo(() => {
+    const mapa = new Map<number, {
+      id: number;
+      nome: string;
+      turmaNome: string;
+      cursoNome: string;
+      membros: ContextoAlunoResumo[];
+    }>();
+
+    filtrados.forEach((a) => {
+      if (!a.grupoId) return;
+      const atual = mapa.get(a.grupoId) || {
+        id: a.grupoId,
+        nome: a.grupoNome || `Grupo #${a.grupoId}`,
+        turmaNome: a.turmaNome,
+        cursoNome: a.cursoNome,
+        membros: []
+      };
+      atual.membros.push(a);
+      mapa.set(a.grupoId, atual);
+    });
+
+    return Array.from(mapa.values())
+      .map((g) => ({
+        ...g,
+        completos: g.membros.filter((m) => m.completed).length,
+        membros: g.membros.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+      }))
+      .sort(
+        (a, b) =>
+          a.cursoNome.localeCompare(b.cursoNome, 'pt-BR') ||
+          a.turmaNome.localeCompare(b.turmaNome, 'pt-BR') ||
+          a.nome.localeCompare(b.nome, 'pt-BR')
+      );
+  }, [filtrados]);
+
+  const semGrupo = useMemo(() => filtrados.filter((a) => !a.grupoId).length, [filtrados]);
+
   const limparFiltros = () => {
     setCursoFiltro('');
     setTurmaFiltro('');
@@ -191,11 +256,8 @@ export const ContextosAlunosAdminView: React.FC = () => {
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
-          <h2 style={{ fontSize: '1.4rem' }}>Contexto Profissional dos Alunos</h2>
-          <p className="text-muted text-sm">
-            O que os estudantes relatam sobre a própria realidade de trabalho, para orientar a escrita
-            dos casos PBL. Segmentado por curso, turma e grupo.
-          </p>
+          <h2 style={{ fontSize: '1.4rem' }}>{titulo}</h2>
+          <p className="text-muted text-sm">{descricao}</p>
         </div>
 
         <button onClick={exportarCsv} className="btn btn-secondary" disabled={filtrados.length === 0}>
@@ -327,7 +389,143 @@ export const ContextosAlunosAdminView: React.FC = () => {
         </div>
       </div>
 
-      {filtrados.length === 0 ? (
+      {/* As duas leituras do mesmo recorte: por aluno e por grupo. Os filtros
+          acima valem para as duas, então trocar de aba não perde o contexto. */}
+      <div className="flex gap-2 mb-4" style={{ flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setAba('alunos')}
+          className={`btn btn-sm ${aba === 'alunos' ? 'btn-primary' : 'btn-secondary'}`}
+        >
+          <Users size={15} /> Alunos ({filtrados.length})
+        </button>
+        <button
+          onClick={() => setAba('grupos')}
+          className={`btn btn-sm ${aba === 'grupos' ? 'btn-primary' : 'btn-secondary'}`}
+        >
+          <Layers size={15} /> Grupos ({gruposAgregados.length})
+        </button>
+      </div>
+
+      {aba === 'grupos' ? (
+        gruposAgregados.length === 0 ? (
+          <div className="card text-center py-8">
+            <Layers size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
+            <h3 className="font-bold">Nenhum grupo neste recorte</h3>
+            <p className="text-muted text-sm">
+              {semGrupo > 0
+                ? `${semGrupo} aluno(s) do recorte ainda não entraram em nenhum grupo PBL — eles aparecem na aba Alunos.`
+                : 'Ajuste os filtros de curso, turma ou situação para ver outros grupos.'}
+            </p>
+          </div>
+        ) : (
+          <>
+            {semGrupo > 0 && (
+              <div className="text-muted text-sm mb-2">
+                {semGrupo} aluno(s) do recorte ainda não entraram em nenhum grupo e não aparecem
+                nesta aba.
+              </div>
+            )}
+
+            <div className="table-responsive">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Grupo PBL</th>
+                    <th>Curso / Turma</th>
+                    <th>Integrantes</th>
+                    <th>Contexto Completo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gruposAgregados.map((g) => (
+                    <React.Fragment key={g.id}>
+                      <tr>
+                        <td>
+                          <button
+                            onClick={() => setGrupoExpandido(grupoExpandido === g.id ? null : g.id)}
+                            className="flex items-center gap-2 font-bold"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit', textAlign: 'left' }}
+                          >
+                            {grupoExpandido === g.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            {g.nome}
+                          </button>
+                        </td>
+                        <td>
+                          <div>{g.cursoNome}</div>
+                          <div className="text-muted text-sm">{g.turmaNome}</div>
+                        </td>
+                        <td>{g.membros.length}</td>
+                        <td>
+                          {g.completos} de {g.membros.length}
+                          {g.completos === g.membros.length && g.membros.length > 0 && (
+                            <MedalhaContexto completo tamanho={13} />
+                          )}
+                          {g.completos === 0 && (
+                            <span className="text-muted text-sm"> — ninguém respondeu</span>
+                          )}
+                        </td>
+                      </tr>
+
+                      {grupoExpandido === g.id && (
+                        <tr>
+                          <td colSpan={4} style={{ background: 'var(--bg-main)' }}>
+                            <div style={{ padding: '0.5rem 0.25rem' }}>
+                              {g.membros.map((m) => (
+                                <div key={m.id} style={{ marginBottom: '0.9rem' }}>
+                                  <button
+                                    onClick={() => setExpandidoId(expandidoId === m.id ? null : m.id)}
+                                    className="flex items-center gap-2 font-bold text-sm"
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit', textAlign: 'left' }}
+                                    title={m.respondeu ? 'Ver as respostas' : 'Este aluno ainda não respondeu'}
+                                  >
+                                    {expandidoId === m.id ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                                    {m.nome}
+                                    <MedalhaContexto completo={m.completed} tamanho={12} />
+                                    <span className="text-muted" style={{ fontWeight: 400 }}>
+                                      {m.respondidas} de {dados?.totalPerguntas ?? 6}
+                                      {m.workSector ? ` · ${m.workSector}` : ''}
+                                    </span>
+                                  </button>
+
+                                  {expandidoId === m.id && (
+                                    <div style={{ marginTop: '0.5rem', paddingLeft: '1.25rem' }}>
+                                      {m.respondeu ? (
+                                        PERGUNTAS.map((pergunta) => {
+                                          const resposta = String(m[pergunta.campo] || '').trim();
+                                          return (
+                                            <div key={pergunta.campo} style={{ marginBottom: '0.7rem' }}>
+                                              <div className="font-bold text-sm">{pergunta.titulo}</div>
+                                              {resposta ? (
+                                                <div className="text-sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                                                  {resposta}
+                                                </div>
+                                              ) : (
+                                                <div className="text-muted text-sm">Não respondeu esta pergunta.</div>
+                                              )}
+                                            </div>
+                                          );
+                                        })
+                                      ) : (
+                                        <div className="text-muted text-sm">
+                                          Ainda não preencheu o Contexto Profissional.
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )
+      ) : filtrados.length === 0 ? (
         <div className="card text-center py-8">
           <Briefcase size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
           <h3 className="font-bold">

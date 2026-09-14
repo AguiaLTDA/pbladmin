@@ -64,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate, aberto
   const getProfessorItems = () => [
     { path: '/professor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/professor/turmas', label: 'Minhas Turmas & Horário', icon: CalendarDays },
+    { path: '/professor/alunos', label: 'Alunos & Grupos', icon: Briefcase },
     { path: '/professor/entregas', label: 'Acompanhamento & Entregas', icon: Award },
     { path: '/professor/arquivo-orientador', label: 'Arquivo Orientador', icon: BookOpen },
     { path: '/professor/materiais', label: 'Materiais Recebidos', icon: FolderOpen }
