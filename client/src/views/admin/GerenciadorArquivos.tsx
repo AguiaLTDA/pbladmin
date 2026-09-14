@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { apiRequest, getDownloadUrl } from '../../services/api';
 import { FileItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { TIPOS_DOCUMENTO, rotuloTipoDocumento } from '../../constants/academico';
 import { FolderOpen, Upload, Download, Trash2, FileText, Search, ShieldCheck, Send, Users, Filter, CheckCircle2 } from 'lucide-react';
 import { DirecionarArquivoModal } from '../../components/DirecionarArquivoModal';
 import { EnviarArquivoGrupoModal } from '../../components/EnviarArquivoGrupoModal';
@@ -14,6 +15,10 @@ export const GerenciadorArquivosView: React.FC = () => {
   const [progresso, setProgresso] = useState<{ feito: number; total: number } | null>(null);
   const [search, setSearch] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('');
+  // Tipo aplicado ao lote que está subindo. Fica fora do handler para o usuário
+  // escolher antes de abrir o seletor de arquivos.
+  const [tipoUpload, setTipoUpload] = useState('');
+  const [tipoFiltro, setTipoFiltro] = useState('');
   const [destinoFiltro, setDestinoFiltro] = useState<'' | 'direcionado' | 'sem_destino'>('');
   const [turmaFiltro, setTurmaFiltro] = useState<number | ''>('');
   const [arquivoParaDirecionar, setArquivoParaDirecionar] = useState<FileItem | null>(null);
@@ -50,6 +55,7 @@ export const GerenciadorArquivosView: React.FC = () => {
     for (const file of selecionados) {
       const formData = new FormData();
       formData.append('file', file);
+      if (tipoUpload) formData.append('tipoDocumento', tipoUpload);
       try {
         await apiRequest('/files/upload', { method: 'POST', body: formData });
         enviados++;
@@ -128,23 +134,51 @@ export const GerenciadorArquivosView: React.FC = () => {
           (f.grupos_destino || []).some((g) => g.toLowerCase().includes(termo))
       )
       .filter((f) => categoriaFiltro === '' || f.categoria === categoriaFiltro)
+      .filter((f) =>
+        tipoFiltro === ''
+          ? true
+          : tipoFiltro === 'SEM_TIPO'
+            ? !f.tipo_documento
+            : f.tipo_documento === tipoFiltro
+      )
       .filter((f) => {
         if (destinoFiltro === 'direcionado') return totalDirecionamentos(f) > 0;
         if (destinoFiltro === 'sem_destino') return totalDirecionamentos(f) === 0;
         return true;
       })
       .filter((f) => turmaFiltro === '' || (f.turmas_destino_ids || []).includes(Number(turmaFiltro)));
-  }, [files, search, categoriaFiltro, destinoFiltro, turmaFiltro]);
+  }, [files, search, categoriaFiltro, tipoFiltro, destinoFiltro, turmaFiltro]);
 
   const semDestino = useMemo(() => files.filter((f) => totalDirecionamentos(f) === 0).length, [files]);
 
-  const algumFiltro = search !== '' || categoriaFiltro !== '' || destinoFiltro !== '' || turmaFiltro !== '';
+  const semTipo = useMemo(() => files.filter((f) => !f.tipo_documento).length, [files]);
+
+  const algumFiltro =
+    search !== '' || categoriaFiltro !== '' || tipoFiltro !== '' || destinoFiltro !== '' || turmaFiltro !== '';
 
   const limparFiltros = () => {
     setSearch('');
     setCategoriaFiltro('');
+    setTipoFiltro('');
     setDestinoFiltro('');
     setTurmaFiltro('');
+  };
+
+  /** Reclassifica um arquivo já enviado, sem precisar subir de novo. */
+  const alterarTipo = async (arquivo: FileItem, tipo: string) => {
+    try {
+      await apiRequest(`/files/${arquivo.id}/tipo-documento`, {
+        method: 'PUT',
+        body: JSON.stringify({ tipoDocumento: tipo || null })
+      });
+      // Atualiza só a linha alterada: recarregar a lista inteira faria a tabela
+      // piscar e perder a posição da rolagem no meio de uma reclassificação.
+      setFiles((atuais) =>
+        atuais.map((f) => (f.id === arquivo.id ? { ...f, tipo_documento: tipo || null } : f))
+      );
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível alterar o tipo.', 'error');
+    }
   };
 
   return (
@@ -157,7 +191,25 @@ export const GerenciadorArquivosView: React.FC = () => {
           </p>
         </div>
 
-        <label className="btn btn-primary cursor-pointer">
+        <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+          {/* O tipo é escolhido ANTES de abrir o seletor de arquivos, porque
+              vale para o lote inteiro — perguntar por arquivo tornaria o envio
+              de quinze PDFs insuportável. */}
+          <select
+            className="form-control"
+            style={{ minWidth: '200px' }}
+            value={tipoUpload}
+            onChange={(e) => setTipoUpload(e.target.value)}
+            disabled={uploading}
+            title="Tipo aplicado a todos os arquivos deste envio"
+          >
+            <option value="">Tipo do documento (opcional)</option>
+            {TIPOS_DOCUMENTO.map((t) => (
+              <option key={t.valor} value={t.valor}>{t.rotulo}</option>
+            ))}
+          </select>
+
+          <label className="btn btn-primary cursor-pointer">
           <Upload size={18} />
           {uploading
             ? `Enviando ${progresso?.feito ?? 0} de ${progresso?.total ?? 0}...`
@@ -169,7 +221,8 @@ export const GerenciadorArquivosView: React.FC = () => {
             style={{ display: 'none' }}
             disabled={uploading}
           />
-        </label>
+          </label>
+        </div>
       </div>
 
       <div className="card mb-4" style={{ padding: '0.85rem 1rem' }}>
@@ -197,6 +250,19 @@ export const GerenciadorArquivosView: React.FC = () => {
             {categorias.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
+          </select>
+
+          <select
+            className="form-control"
+            style={{ minWidth: '190px' }}
+            value={tipoFiltro}
+            onChange={(e) => setTipoFiltro(e.target.value)}
+          >
+            <option value="">Todos os tipos</option>
+            {TIPOS_DOCUMENTO.map((t) => (
+              <option key={t.valor} value={t.valor}>{t.rotulo}</option>
+            ))}
+            <option value="SEM_TIPO">Sem tipo definido ({semTipo})</option>
           </select>
 
           <select
@@ -261,6 +327,7 @@ export const GerenciadorArquivosView: React.FC = () => {
             <thead>
               <tr>
                 <th>Nome do Arquivo</th>
+                <th>Tipo do Documento</th>
                 <th>Categoria</th>
                 <th>Tamanho</th>
                 <th>Hash MD5 (Auditoria)</th>
@@ -278,6 +345,22 @@ export const GerenciadorArquivosView: React.FC = () => {
                       <FileText size={16} color="var(--primary)" />
                       <span>{f.nome_original}</span>
                     </div>
+                  </td>
+                  <td>
+                    {/* Editável na própria linha: errar o rótulo num lote de
+                        quinze é comum, e corrigir não deveria custar um reenvio. */}
+                    <select
+                      className="form-control"
+                      style={{ fontSize: '0.78rem', padding: '0.25rem 0.4rem', minWidth: '150px' }}
+                      value={f.tipo_documento || ''}
+                      onChange={(e) => alterarTipo(f, e.target.value)}
+                      title={rotuloTipoDocumento(f.tipo_documento)}
+                    >
+                      <option value="">Sem tipo</option>
+                      {TIPOS_DOCUMENTO.map((t) => (
+                        <option key={t.valor} value={t.valor}>{t.rotulo}</option>
+                      ))}
+                    </select>
                   </td>
                   <td>
                     <span className="btn btn-sm btn-secondary" style={{ padding: '0.15rem 0.4rem', fontSize: '0.7rem' }}>

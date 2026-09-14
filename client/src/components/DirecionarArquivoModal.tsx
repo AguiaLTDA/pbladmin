@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { GrupoOption, DirecionamentoArquivo, TurmaOption } from '../types';
-import { Send, Trash2, UserCheck, Users, BookOpen, Loader2 } from 'lucide-react';
+import { Send, Trash2, UserCheck, Users, BookOpen, Loader2, CheckSquare } from 'lucide-react';
 
 interface CursoOpcao {
   id: number;
@@ -227,9 +227,30 @@ export const DirecionarArquivoModal: React.FC<DirecionarArquivoModalProps> = ({
           {cursoId !== '' && (
             <>
               <div className="form-group">
-                <label className="form-label">
-                  Turmas {turmasEscolhidas.length === 0 && '(nenhuma marcada = todas as turmas do curso)'}
-                </label>
+                <div className="flex items-center justify-between gap-2" style={{ flexWrap: 'wrap' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>
+                    Turmas {turmasEscolhidas.length === 0 && '(nenhuma marcada = todas as turmas do curso)'}
+                  </label>
+
+                  {turmasDoCurso.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTurmasEscolhidas(
+                          turmasEscolhidas.length === turmasDoCurso.length
+                            ? []
+                            : turmasDoCurso.map((t) => t.id)
+                        )
+                      }
+                      className="btn btn-secondary btn-sm"
+                    >
+                      <CheckSquare size={13} />
+                      {turmasEscolhidas.length === turmasDoCurso.length
+                        ? 'Desmarcar todas'
+                        : `Marcar todas (${turmasDoCurso.length})`}
+                    </button>
+                  )}
+                </div>
                 {turmasDoCurso.length === 0 ? (
                   <span className="text-muted text-sm">Este curso não tem turmas ativas.</span>
                 ) : (
@@ -250,7 +271,28 @@ export const DirecionarArquivoModal: React.FC<DirecionarArquivoModalProps> = ({
 
               {grupos.length > 0 && (
                 <div className="form-group">
-                  <label className="form-label">Grupos das turmas marcadas (opcional)</label>
+                  <div className="flex items-center justify-between gap-2" style={{ flexWrap: 'wrap' }}>
+                    <label className="form-label" style={{ marginBottom: 0 }}>
+                      Grupos das turmas marcadas (opcional)
+                    </label>
+
+                    {grupos.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setGruposEscolhidos(
+                            gruposEscolhidos.length === grupos.length ? [] : grupos.map((g) => g.id)
+                          )
+                        }
+                        className="btn btn-secondary btn-sm"
+                      >
+                        <CheckSquare size={13} />
+                        {gruposEscolhidos.length === grupos.length
+                          ? 'Desmarcar todos'
+                          : `Marcar todos (${grupos.length})`}
+                      </button>
+                    )}
+                  </div>
                   <div className="flex" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
                     {grupos.map((g) => (
                       <label key={g.id} className="flex items-center gap-2 cursor-pointer text-sm">

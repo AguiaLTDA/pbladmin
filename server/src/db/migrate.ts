@@ -118,4 +118,9 @@ export async function runMigrations() {
 
   // Bancos criados antes do atalho "enviar arquivo para grupo" não têm esta coluna.
   await runAsync(`ALTER TABLE atividades_pbl ADD COLUMN IF NOT EXISTS natureza TEXT DEFAULT 'AVALIATIVA'`);
+
+  // Papel do documento no ciclo do PBL, escolhido por quem envia. Fica separado
+  // de `categoria`, que é derivada do MIME e responde outra pergunta.
+  await runAsync(`ALTER TABLE arquivos ADD COLUMN IF NOT EXISTS tipo_documento TEXT DEFAULT NULL`);
+  await runAsync(`CREATE INDEX IF NOT EXISTS idx_arquivos_tipo_documento ON arquivos(tipo_documento)`);
 }

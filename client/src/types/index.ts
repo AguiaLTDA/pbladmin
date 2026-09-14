@@ -99,6 +99,8 @@ export interface FileItem {
   tamanho_bytes: number;
   mime_type: string;
   categoria: string;
+  /** Papel do documento no ciclo do PBL, escolhido no upload. */
+  tipo_documento?: string | null;
   hash_md5?: string;
   enviado_por_nome?: string;
   aprovado_pelo_admin?: number;

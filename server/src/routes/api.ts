@@ -196,6 +196,7 @@ router.post('/files/:id/enviar-para-grupo', authenticateToken, requireRole('ADMI
 
 // Sinal na tela de envio: quais grupos ja receberam material e o que receberam.
 router.get('/files/grupos-com-material', authenticateToken, requireRole('ADMIN'), fileCtrl.listarGruposComMaterial);
+router.put('/files/:id/tipo-documento', authenticateToken, requireRole('ADMIN'), fileCtrl.definirTipoDocumento);
 
 // Comentarios publicos do docente sobre um material, lidos pela turma.
 router.get('/files/:id/comentarios', authenticateToken, fileCtrl.listarComentariosMaterial);

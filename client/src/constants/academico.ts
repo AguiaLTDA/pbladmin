@@ -106,3 +106,18 @@ export const PERIODOS_DISPONIVEIS = [
   '9º Período',
   '10º Período'
 ];
+
+/**
+ * Tipos de documento do repositório. Espelha server/src/config/tiposDocumento.ts
+ * — os dois lados precisam concordar sobre os valores gravados.
+ */
+export const TIPOS_DOCUMENTO = [
+  { valor: 'INFORMATIVO', rotulo: 'Informativo' },
+  { valor: 'PBL_1', rotulo: 'PBL 1' },
+  { valor: 'ORIENTACAO_ESCRITO', rotulo: 'Orientação — Escrito' },
+  { valor: 'FEEDBACK', rotulo: 'Feedback' },
+  { valor: 'PBL_ORAL', rotulo: 'PBL Oral' }
+] as const;
+
+export const rotuloTipoDocumento = (valor?: string | null): string =>
+  TIPOS_DOCUMENTO.find((t) => t.valor === valor)?.rotulo || 'Sem tipo';

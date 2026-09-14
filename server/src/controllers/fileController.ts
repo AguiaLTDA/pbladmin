@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import crypto from 'crypto';
 import { queryAsync, runAsync, getAsync } from '../config/db';
+import { normalizarTipoDocumento } from '../config/tiposDocumento';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
 import { uploadToDrive, downloadFromDrive } from '../services/googleDrive';
@@ -55,18 +56,22 @@ export async function uploadFile(req: AuthenticatedRequest, res: Response) {
 
     const hashMd5 = crypto.createHash('md5').update(buffer).digest('hex');
     const category = getCategoryFromMime(mimetype, originalname);
+    // Campo de texto do mesmo formulário multipart. Valor fora da lista vira
+    // null em silêncio: o arquivo sobe e a coordenação classifica depois, em vez
+    // de perder o upload por causa de um rótulo.
+    const tipoDocumento = normalizarTipoDocumento((req.body || {}).tipoDocumento);
 
     const ext = path.extname(originalname);
     const driveFilename = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
     const driveFileId = await uploadToDrive(buffer, driveFilename, mimetype);
 
     const resIns = await runAsync(
-      `INSERT INTO arquivos (nome_original, caminho_armazenado, tamanho_bytes, mime_type, categoria, hash_md5, enviado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [originalname, driveFileId, size, mimetype, category, hashMd5, userId]
+      `INSERT INTO arquivos (nome_original, caminho_armazenado, tamanho_bytes, mime_type, categoria, tipo_documento, hash_md5, enviado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [originalname, driveFileId, size, mimetype, category, tipoDocumento, hashMd5, userId]
     );
 
-    await logAudit(userId, 'UPLOAD_ARQUIVO', 'arquivos', resIns.lastID, { originalname, size, category });
+    await logAudit(userId, 'UPLOAD_ARQUIVO', 'arquivos', resIns.lastID, { originalname, size, category, tipoDocumento });
 
     return res.status(201).json({
       id: resIns.lastID,
@@ -1016,5 +1021,39 @@ export async function excluirComentarioMaterial(req: AuthenticatedRequest, res: 
   } catch (err) {
     console.error('Erro ao excluir comentário:', err);
     return res.status(500).json({ message: 'Erro ao remover o comentário.' });
+  }
+}
+
+/**
+ * Reclassifica o tipo de um documento já enviado. Errar o rótulo no upload é
+ * comum num lote de quinze arquivos; sem isto, a correção exigiria apagar e
+ * subir de novo, perdendo o hash e a data de envio originais.
+ */
+export async function definirTipoDocumento(req: AuthenticatedRequest, res: Response) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ message: 'Não autenticado.' });
+
+    const { id } = req.params;
+    const tipo = normalizarTipoDocumento(req.body?.tipoDocumento);
+
+    // null é um valor legítimo aqui: serve para desclassificar um arquivo.
+    if (req.body?.tipoDocumento && !tipo) {
+      return res.status(400).json({ message: 'Tipo de documento inválido.' });
+    }
+
+    const arquivo = await getAsync<{ id: number }>(
+      `SELECT id FROM arquivos WHERE id = ? AND deletado_em IS NULL`,
+      [id]
+    );
+    if (!arquivo) return res.status(404).json({ message: 'Arquivo não encontrado.' });
+
+    await runAsync(`UPDATE arquivos SET tipo_documento = ? WHERE id = ?`, [tipo, id]);
+    await logAudit(userId, 'DEFINIR_TIPO_DOCUMENTO', 'arquivos', String(id), { tipoDocumento: tipo });
+
+    return res.json({ message: 'Tipo de documento atualizado.', tipoDocumento: tipo });
+  } catch (err) {
+    console.error('Erro ao definir tipo de documento:', err);
+    return res.status(500).json({ message: 'Erro ao atualizar o tipo de documento.' });
   }
 }
