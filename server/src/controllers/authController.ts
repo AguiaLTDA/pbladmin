@@ -52,10 +52,13 @@ export async function login(req: AuthenticatedRequest, res: Response) {
       ativo: number;
       email_verificado_em: string | null;
       deletado_em: string | null;
+      contexto_completo: boolean | null;
     }>(
-      `SELECT u.*, p.nome as perfil_nome 
-       FROM usuarios u 
-       JOIN perfis p ON u.perfil_id = p.id 
+      `SELECT u.*, p.nome as perfil_nome,
+              (ca.completed_at IS NOT NULL) as contexto_completo
+       FROM usuarios u
+       JOIN perfis p ON u.perfil_id = p.id
+       LEFT JOIN contexto_aluno ca ON ca.usuario_id = u.id
        WHERE LOWER(u.email) = LOWER(?) AND u.deletado_em IS NULL`,
       [email]
     );
@@ -103,7 +106,8 @@ export async function login(req: AuthenticatedRequest, res: Response) {
         nome: user.nome,
         email: user.email,
         perfilId: user.perfil_id,
-        perfilNome: user.perfil_nome
+        perfilNome: user.perfil_nome,
+        contextoCompleto: !!user.contexto_completo
       }
     });
   } catch (err: any) {

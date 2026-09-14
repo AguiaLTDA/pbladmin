@@ -7,6 +7,12 @@ interface AuthContextType {
   token: string | null;
   login: (email: string, senha: string) => Promise<void>;
   logout: () => void;
+  /**
+   * Relê o perfil do servidor. Usado por telas que alteram algo exibido no
+   * cabeçalho — hoje a medalha de Contexto Completo —, para o reflexo ser
+   * imediato em vez de depender de o usuário recarregar a página.
+   */
+  refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
   loading: boolean;
 }
@@ -51,6 +57,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('pbl_user_data', JSON.stringify(data.usuario));
   };
 
+  const refreshUser = async () => {
+    if (!localStorage.getItem('pbl_auth_token')) return;
+    try {
+      const u = await apiRequest<User>('/auth/profile');
+      setUser(u);
+      localStorage.setItem('pbl_user_data', JSON.stringify(u));
+    } catch {
+      // Falha aqui é cosmética: o cabeçalho continua com o dado anterior e a
+      // próxima carga da página corrige. Derrubar a sessão seria pior.
+    }
+  };
+
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -59,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: !!token, loading }}>
+    <AuthContext.Provider value={{ user, token, login, logout, refreshUser, isAuthenticated: !!token, loading }}>
       {children}
     </AuthContext.Provider>
   );

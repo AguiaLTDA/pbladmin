@@ -3,6 +3,7 @@ import { Bell, User as UserIcon, Menu } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
 import { NotificationItem } from '../types';
+import { MedalhaContexto } from './MedalhaContexto';
 
 interface NavbarProps {
   title: string;
@@ -141,6 +142,7 @@ export const Navbar: React.FC<NavbarProps> = ({ title, navigate, onAbrirMenu, me
         >
           <UserIcon size={16} />
           <span>{user?.nome.split(' ')[0]}</span>
+          <MedalhaContexto completo={user?.contextoCompleto} tamanho={14} />
         </button>
       </div>
     </header>

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Award, Briefcase, Loader2, Save } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { ContextoAluno, ContextoAlunoInput } from '../../types';
 import { MedalhaContexto } from '../../components/MedalhaContexto';
 
@@ -61,6 +62,7 @@ const vazio: ContextoAlunoInput = {
 
 export const ContextoAlunoView: React.FC = () => {
   const { showToast } = useToast();
+  const { refreshUser } = useAuth();
   const [form, setForm] = useState<ContextoAlunoInput>(vazio);
   const [contexto, setContexto] = useState<ContextoAluno | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -120,6 +122,12 @@ export const ContextoAlunoView: React.FC = () => {
         body: JSON.stringify(form)
       });
       setContexto(salvo);
+
+      // Ganhar ou perder a medalha muda o cabeçalho e a barra lateral, que leem
+      // do perfil autenticado — sem esta releitura o aluno veria o toast da
+      // conquista e nenhuma medalha ao lado do próprio nome.
+      if (salvo.ganhouMedalha || salvo.perdeuMedalha) await refreshUser();
+
       if (salvo.ganhouMedalha) {
         showToast(`Medalha conquistada: ${salvo.medalha?.titulo}!`, 'success');
       } else if (salvo.perdeuMedalha) {
