@@ -233,9 +233,23 @@ export async function deleteFile(req: AuthenticatedRequest, res: Response) {
 // LIST FILES IN FILE MANAGER (ADMIN)
 export async function listAllFiles(req: AuthenticatedRequest, res: Response) {
   try {
-    const files = await queryAsync(
+    // Os destinos vêm agregados para a tela poder filtrar por turma/grupo e
+    // sinalizar o que já foi distribuído, sem uma consulta por linha.
+    const files = await queryAsync<any>(
       `SELECT ar.*, u.nome as enviado_por_nome,
-              (SELECT COUNT(*) FROM arquivos_direcionados ad WHERE ad.arquivo_id = ar.id) as total_direcionamentos
+              (SELECT COUNT(*) FROM arquivos_direcionados ad WHERE ad.arquivo_id = ar.id) as total_direcionamentos,
+              (SELECT COUNT(DISTINCT ad.turma_id) FROM arquivos_direcionados ad
+                WHERE ad.arquivo_id = ar.id AND ad.turma_id IS NOT NULL) as total_turmas,
+              (SELECT COUNT(DISTINCT ad.grupo_id) FROM arquivos_direcionados ad
+                WHERE ad.arquivo_id = ar.id AND ad.grupo_id IS NOT NULL) as total_grupos,
+              (SELECT COALESCE(json_agg(DISTINCT t.nome), '[]'::json) FROM arquivos_direcionados ad
+                 JOIN turmas t ON ad.turma_id = t.id
+                WHERE ad.arquivo_id = ar.id) as turmas_destino,
+              (SELECT COALESCE(json_agg(DISTINCT g.nome), '[]'::json) FROM arquivos_direcionados ad
+                 JOIN grupos g ON ad.grupo_id = g.id
+                WHERE ad.arquivo_id = ar.id) as grupos_destino,
+              (SELECT COALESCE(json_agg(DISTINCT ad.turma_id), '[]'::json) FROM arquivos_direcionados ad
+                WHERE ad.arquivo_id = ar.id AND ad.turma_id IS NOT NULL) as turmas_destino_ids
        FROM arquivos ar
        JOIN usuarios u ON ar.enviado_por = u.id
        WHERE ar.deletado_em IS NULL
@@ -258,11 +272,7 @@ export async function direcionarArquivo(req: AuthenticatedRequest, res: Response
   try {
     const adminId = req.user?.id;
     const { id } = req.params;
-    const { professorIds, turmaIds, disciplinaIds, grupoIds, observacao } = req.body;
-
-    if (!Array.isArray(professorIds) || professorIds.length === 0) {
-      return res.status(400).json({ message: 'Selecione pelo menos um professor.' });
-    }
+    const { professorIds, cursoIds, turmaIds, disciplinaIds, grupoIds, observacao } = req.body;
 
     const arquivo = await getAsync<{ id: number; nome_original: string }>(
       `SELECT id, nome_original FROM arquivos WHERE id = ? AND deletado_em IS NULL`,
@@ -270,7 +280,45 @@ export async function direcionarArquivo(req: AuthenticatedRequest, res: Response
     );
     if (!arquivo) return res.status(404).json({ message: 'Arquivo não encontrado.' });
 
-    const turmas: number[] = Array.isArray(turmaIds) ? turmaIds.map(Number) : [];
+    let turmas: number[] = Array.isArray(turmaIds) ? turmaIds.map(Number) : [];
+
+    // Curso escolhido sem turma = todas as turmas ativas daquele curso. Evita
+    // que distribuir para um curso inteiro vire a seleção manual de oito turmas.
+    const cursos: number[] = Array.isArray(cursoIds) ? cursoIds.map(Number) : [];
+    if (cursos.length > 0 && turmas.length === 0) {
+      const doCurso = await queryAsync<{ id: number }>(
+        `SELECT id FROM turmas WHERE curso_id = ANY(?) AND deletado_em IS NULL AND ativo = 1`,
+        [cursos]
+      );
+      turmas = doCurso.map((t) => t.id);
+    }
+
+    // O critério de entrada passou a ser curso/turma: o docente é consequência do
+    // vínculo, não uma escolha que a coordenação precise fazer antes. Informar
+    // professorIds continua valendo como refinamento — útil para direcionar a um
+    // docente específico de uma turma com vários.
+    let destinatarios: number[] = Array.isArray(professorIds) ? professorIds.map(Number) : [];
+
+    if (destinatarios.length === 0) {
+      if (turmas.length === 0) {
+        return res.status(400).json({ message: 'Escolha ao menos um curso ou uma turma de destino.' });
+      }
+      const docentes = await queryAsync<{ usuario_id: number }>(
+        `SELECT DISTINCT vp.usuario_id
+           FROM vinculos_professores vp
+           JOIN usuarios u ON u.id = vp.usuario_id AND u.deletado_em IS NULL
+          WHERE vp.turma_id = ANY(?) AND vp.ativo = 1`,
+        [turmas]
+      );
+      destinatarios = docentes.map((d) => d.usuario_id);
+
+      if (destinatarios.length === 0) {
+        return res.status(400).json({
+          message: 'Nenhum docente ativo está vinculado às turmas escolhidas. Vincule um professor antes de direcionar.'
+        });
+      }
+    }
+
     const disciplinas: number[] = Array.isArray(disciplinaIds) ? disciplinaIds.map(Number) : [];
     const grupos: number[] = Array.isArray(grupoIds) ? grupoIds.map(Number) : [];
 
@@ -278,7 +326,7 @@ export async function direcionarArquivo(req: AuthenticatedRequest, res: Response
     let jaExistiam = 0;
     const ignorados: string[] = [];
 
-    for (const professorIdBruto of professorIds) {
+    for (const professorIdBruto of destinatarios) {
       const professorId = Number(professorIdBruto);
 
       const professor = await getAsync<{ id: number; nome: string }>(
@@ -547,7 +595,7 @@ export async function enviarArquivoParaGrupo(req: AuthenticatedRequest, res: Res
   try {
     const adminId = req.user?.id;
     const { id } = req.params;
-    const { grupoId } = req.body;
+    const { grupoId, substituir } = req.body;
     if (!adminId) return res.status(401).json({ message: 'Não autenticado.' });
     if (!grupoId) return res.status(400).json({ message: 'Selecione o grupo de destino.' });
 
@@ -588,6 +636,29 @@ export async function enviarArquivoParaGrupo(req: AuthenticatedRequest, res: Res
     const preview = await calculateAudiencePreview([{ entidadeTipo: 'grupo', entidadeId: grupo.id, acao: 'INCLUIR' }]);
     if (preview.totalAlunosUnicos === 0) {
       return res.status(400).json({ message: `O grupo "${grupo.nome}" ainda não tem alunos matriculados.` });
+    }
+
+    // Material anterior do mesmo grupo. Reenviar sem tratar isso acumularia
+    // atividades informativas e o aluno veria dois materiais concorrentes, sem
+    // saber qual vale.
+    const anteriores = await queryAsync<{ id: number; titulo: string }>(
+      `SELECT DISTINCT a.id, a.titulo
+         FROM atividades_pbl a
+         JOIN segmentacoes seg ON seg.atividade_id = a.id
+         JOIN segmentacao_regras sr ON sr.segmentacao_id = seg.id
+        WHERE a.natureza = 'INFORMATIVA' AND a.deletado_em IS NULL
+          AND sr.entidade_tipo = 'grupo' AND sr.entidade_id = ? AND sr.acao = 'INCLUIR'`,
+      [grupo.id]
+    );
+
+    if (anteriores.length > 0 && !substituir) {
+      return res.status(409).json({
+        codigo: 'GRUPO_JA_TEM_MATERIAL',
+        message:
+          `O grupo "${grupo.nome}" já recebeu ${anteriores.length} material(is). ` +
+          'Reenvie com a opção de substituir para trocar, ou mantenha os dois conscientemente.',
+        materiaisAtuais: anteriores.map((a) => a.titulo)
+      });
     }
 
     const codigoUnico = `PBL-${PREFIXO_CODIGO}-${Date.now().toString(36).toUpperCase()}`;
@@ -689,6 +760,30 @@ export async function enviarArquivoParaGrupo(req: AuthenticatedRequest, res: Res
       ]);
     }
 
+    // Só agora, com a nova publicada, as anteriores saem de cena: inverter a
+    // ordem deixaria o grupo momentaneamente sem material se algo falhasse.
+    let substituidas = 0;
+    if (substituir && anteriores.length > 0) {
+      for (const antiga of anteriores) {
+        await runAsync(
+          `UPDATE atividades_pbl SET status = 'SUSPENSO', deletado_em = CURRENT_TIMESTAMP,
+                  atualizado_em = CURRENT_TIMESTAMP
+            WHERE id = ? AND deletado_em IS NULL`,
+          [antiga.id]
+        );
+        await runAsync(
+          `UPDATE publicacoes SET status_publicacao = 'SUSPENSO' WHERE atividade_id = ?`,
+          [antiga.id]
+        );
+        substituidas++;
+      }
+      await logAudit(adminId, 'SUBSTITUIR_MATERIAL_GRUPO', 'grupos', grupo.id, {
+        grupoId: grupo.id,
+        removidas: anteriores.map((a) => a.id),
+        novaAtividadeId: atividadeId
+      });
+    }
+
     await logAudit(adminId, 'ENVIAR_ARQUIVO_PARA_GRUPO', 'atividades_pbl', atividadeId, {
       arquivoId: arquivo.id,
       grupoId: grupo.id,
@@ -703,14 +798,223 @@ export async function enviarArquivoParaGrupo(req: AuthenticatedRequest, res: Res
 
     return res.status(201).json({
       message:
-        `Material publicado para ${audience.totalAlunosUnicos} aluno(s) do grupo "${grupo.nome}".` + parteDocente,
+        `Material publicado para ${audience.totalAlunosUnicos} aluno(s) do grupo "${grupo.nome}".` +
+        parteDocente +
+        (substituidas > 0 ? ` ${substituidas} material(is) anterior(es) do grupo foram substituídos.` : ''),
       atividadeId,
       codigoUnico,
       totalAlunos: audience.totalAlunosUnicos,
-      totalDocentes: docentesDaTurma.length
+      totalDocentes: docentesDaTurma.length,
+      substituidas
     });
   } catch (err) {
     console.error('Erro ao enviar arquivo para o grupo:', err);
     return res.status(500).json({ message: 'Erro ao enviar o arquivo para o grupo.' });
+  }
+}
+
+/**
+ * Quais grupos já receberam material, com o que receberam.
+ *
+ * Serve ao sinal na tela: antes de enviar, a coordenação precisa ver de relance
+ * que um grupo já foi atendido — sem isso, distribuir quinze arquivos por trinta
+ * grupos vira exercício de memória.
+ */
+export async function listarGruposComMaterial(_req: AuthenticatedRequest, res: Response) {
+  try {
+    const linhas = await queryAsync<any>(
+      `SELECT sr.entidade_id AS grupo_id,
+              a.id AS atividade_id, a.titulo, a.criado_em,
+              ar.id AS arquivo_id, ar.nome_original
+         FROM atividades_pbl a
+         JOIN segmentacoes seg ON seg.atividade_id = a.id
+         JOIN segmentacao_regras sr ON sr.segmentacao_id = seg.id
+         LEFT JOIN versoes_atividades va ON va.atividade_id = a.id
+         LEFT JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
+         LEFT JOIN arquivos ar ON ar.id = aa.arquivo_id AND ar.deletado_em IS NULL
+        WHERE a.natureza = 'INFORMATIVA' AND a.deletado_em IS NULL
+          AND sr.entidade_tipo = 'grupo' AND sr.acao = 'INCLUIR'
+        ORDER BY sr.entidade_id, a.criado_em DESC`
+    );
+
+    // Um grupo pode ter recebido mais de um material; a tela quer o resumo.
+    const porGrupo = new Map<number, { grupoId: number; total: number; materiais: any[] }>();
+    for (const l of linhas) {
+      const atual = porGrupo.get(l.grupo_id) || { grupoId: l.grupo_id, total: 0, materiais: [] };
+      atual.total++;
+      atual.materiais.push({
+        atividadeId: l.atividade_id,
+        titulo: l.titulo,
+        arquivoId: l.arquivo_id,
+        arquivoNome: l.nome_original,
+        criadoEm: l.criado_em
+      });
+      porGrupo.set(l.grupo_id, atual);
+    }
+
+    return res.json(Array.from(porGrupo.values()));
+  } catch (err) {
+    console.error('Erro ao listar grupos com material:', err);
+    return res.status(500).json({ message: 'Erro ao listar os grupos que já receberam material.' });
+  }
+}
+
+/**
+ * Quem alcança os comentários de um material: a coordenação, o docente vinculado
+ * à turma e o aluno matriculado nela. O aluno de outra turma não entra — o
+ * comentário é dirigido a uma turma específica, não ao arquivo em geral.
+ */
+async function podeVerComentarios(
+  user: { id: number; perfilNome: string },
+  turmaId: number
+): Promise<boolean> {
+  if (user.perfilNome === 'ADMIN') return true;
+
+  if (user.perfilNome === 'PROFESSOR') {
+    const vinculo = await getAsync<{ id: number }>(
+      `SELECT id FROM vinculos_professores WHERE usuario_id = ? AND turma_id = ? AND ativo = 1`,
+      [user.id, turmaId]
+    );
+    return !!vinculo;
+  }
+
+  const matricula = await getAsync<{ id: number }>(
+    `SELECT id FROM matriculas WHERE usuario_id = ? AND turma_id = ? AND deletado_em IS NULL`,
+    [user.id, turmaId]
+  );
+  return !!matricula;
+}
+
+export async function listarComentariosMaterial(req: AuthenticatedRequest, res: Response) {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Não autenticado.' });
+
+    const arquivoId = Number(req.params.id);
+    const turmaId = Number(req.query.turmaId);
+    if (!Number.isInteger(arquivoId) || !Number.isInteger(turmaId)) {
+      return res.status(400).json({ message: 'Informe o arquivo e a turma.' });
+    }
+
+    if (!(await podeVerComentarios(user, turmaId))) {
+      return res.status(403).json({ message: 'Você não tem vínculo com esta turma.' });
+    }
+
+    const comentarios = await queryAsync<any>(
+      `SELECT cm.id, cm.texto, cm.criado_em, cm.grupo_id, cm.autor_id,
+              u.nome AS autor_nome, p.nome AS autor_perfil, g.nome AS grupo_nome
+         FROM comentarios_material cm
+         JOIN usuarios u ON cm.autor_id = u.id
+         JOIN perfis p ON u.perfil_id = p.id
+         LEFT JOIN grupos g ON cm.grupo_id = g.id
+        WHERE cm.arquivo_id = ? AND cm.turma_id = ? AND cm.deletado_em IS NULL
+        ORDER BY cm.criado_em ASC`,
+      [arquivoId, turmaId]
+    );
+
+    return res.json(comentarios);
+  } catch (err) {
+    console.error('Erro ao listar comentários do material:', err);
+    return res.status(500).json({ message: 'Erro ao listar os comentários.' });
+  }
+}
+
+/** Só o docente da turma (e a coordenação) escreve; o aluno lê. */
+export async function comentarMaterial(req: AuthenticatedRequest, res: Response) {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Não autenticado.' });
+
+    const arquivoId = Number(req.params.id);
+    const { turmaId, grupoId, texto } = req.body;
+    const turma = Number(turmaId);
+
+    if (!Number.isInteger(arquivoId) || !Number.isInteger(turma)) {
+      return res.status(400).json({ message: 'Informe o arquivo e a turma.' });
+    }
+    const conteudo = String(texto || '').trim();
+    if (!conteudo) return res.status(400).json({ message: 'Escreva o comentário antes de publicar.' });
+    if (conteudo.length > 4000) {
+      return res.status(400).json({ message: 'O comentário deve ter no máximo 4000 caracteres.' });
+    }
+
+    if (user.perfilNome === 'PROFESSOR') {
+      const vinculo = await getAsync<{ id: number }>(
+        `SELECT id FROM vinculos_professores WHERE usuario_id = ? AND turma_id = ? AND ativo = 1`,
+        [user.id, turma]
+      );
+      if (!vinculo) return res.status(403).json({ message: 'Você não leciona nesta turma.' });
+    }
+
+    const arquivo = await getAsync<{ id: number; nome_original: string }>(
+      `SELECT id, nome_original FROM arquivos WHERE id = ? AND deletado_em IS NULL`,
+      [arquivoId]
+    );
+    if (!arquivo) return res.status(404).json({ message: 'Arquivo não encontrado.' });
+
+    const ins = await runAsync(
+      `INSERT INTO comentarios_material (arquivo_id, turma_id, grupo_id, autor_id, texto)
+       VALUES (?, ?, ?, ?, ?)`,
+      [arquivoId, turma, grupoId ? Number(grupoId) : null, user.id, conteudo]
+    );
+
+    // O comentário existe para ser lido: sem aviso, ficaria esperando o aluno
+    // reabrir por conta própria um material que ele já consultou.
+    const alunos = await queryAsync<{ usuario_id: number }>(
+      `SELECT DISTINCT usuario_id FROM matriculas
+        WHERE turma_id = ? AND deletado_em IS NULL` + (grupoId ? ' AND grupo_id = ?' : ''),
+      grupoId ? [turma, Number(grupoId)] : [turma]
+    );
+
+    for (const aluno of alunos) {
+      await runAsync(`INSERT INTO notificacoes (usuario_id, titulo, mensagem, link) VALUES (?, ?, ?, ?)`, [
+        aluno.usuario_id,
+        'Comentário do professor sobre um material',
+        `${user.nome} comentou sobre "${arquivo.nome_original}".`,
+        '/aluno/atividades'
+      ]);
+    }
+
+    await logAudit(user.id, 'COMENTAR_MATERIAL', 'comentarios_material', ins.lastID, {
+      arquivoId,
+      turmaId: turma,
+      grupoId: grupoId || null,
+      alunosNotificados: alunos.length
+    });
+
+    return res.status(201).json({
+      id: ins.lastID,
+      message: `Comentário publicado para ${alunos.length} aluno(s) da turma.`
+    });
+  } catch (err) {
+    console.error('Erro ao comentar material:', err);
+    return res.status(500).json({ message: 'Erro ao publicar o comentário.' });
+  }
+}
+
+/** O autor apaga o próprio comentário; a coordenação apaga qualquer um. */
+export async function excluirComentarioMaterial(req: AuthenticatedRequest, res: Response) {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Não autenticado.' });
+
+    const comentarioId = Number(req.params.comentarioId);
+    const comentario = await getAsync<{ id: number; autor_id: number }>(
+      `SELECT id, autor_id FROM comentarios_material WHERE id = ? AND deletado_em IS NULL`,
+      [comentarioId]
+    );
+    if (!comentario) return res.status(404).json({ message: 'Comentário não encontrado.' });
+
+    if (user.perfilNome !== 'ADMIN' && comentario.autor_id !== user.id) {
+      return res.status(403).json({ message: 'Você só pode remover os próprios comentários.' });
+    }
+
+    await runAsync(`UPDATE comentarios_material SET deletado_em = CURRENT_TIMESTAMP WHERE id = ?`, [comentarioId]);
+    await logAudit(user.id, 'EXCLUIR_COMENTARIO_MATERIAL', 'comentarios_material', comentarioId);
+
+    return res.json({ message: 'Comentário removido.' });
+  } catch (err) {
+    console.error('Erro ao excluir comentário:', err);
+    return res.status(500).json({ message: 'Erro ao remover o comentário.' });
   }
 }

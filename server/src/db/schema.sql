@@ -541,3 +541,25 @@ CREATE TABLE IF NOT EXISTS contexto_aluno (
 );
 
 CREATE INDEX IF NOT EXISTS idx_contexto_aluno_completo ON contexto_aluno(completed_at);
+
+-- 30. Comentarios publicos do docente sobre um material direcionado
+-- A coordenacao envia o material ao grupo/turma; o professor daquela turma
+-- comenta e o comentario fica visivel aos ALUNOS da mesma turma. Difere de
+-- `comentarios_orientadores` (sugestao privada do docente a coordenacao):
+-- aqui a audiencia e a turma, por isso "publico".
+CREATE TABLE IF NOT EXISTS comentarios_material (
+  id SERIAL PRIMARY KEY,
+  arquivo_id INTEGER NOT NULL,
+  turma_id INTEGER NOT NULL,
+  grupo_id INTEGER DEFAULT NULL, -- quando o material foi para um grupo especifico
+  autor_id INTEGER NOT NULL,
+  texto TEXT NOT NULL,
+  deletado_em TIMESTAMPTZ DEFAULT NULL,
+  criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (arquivo_id) REFERENCES arquivos(id),
+  FOREIGN KEY (turma_id) REFERENCES turmas(id),
+  FOREIGN KEY (grupo_id) REFERENCES grupos(id),
+  FOREIGN KEY (autor_id) REFERENCES usuarios(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_comentarios_material_alvo ON comentarios_material(arquivo_id, turma_id);

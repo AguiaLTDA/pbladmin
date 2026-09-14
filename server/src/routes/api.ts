@@ -194,6 +194,14 @@ router.delete('/files/direcionamentos/:direcionamentoId', authenticateToken, req
 // Atalho: publica o arquivo para um grupo, criando/segmentando/publicando uma atividade mínima por trás dos panos.
 router.post('/files/:id/enviar-para-grupo', authenticateToken, requireRole('ADMIN'), fileCtrl.enviarArquivoParaGrupo);
 
+// Sinal na tela de envio: quais grupos ja receberam material e o que receberam.
+router.get('/files/grupos-com-material', authenticateToken, requireRole('ADMIN'), fileCtrl.listarGruposComMaterial);
+
+// Comentarios publicos do docente sobre um material, lidos pela turma.
+router.get('/files/:id/comentarios', authenticateToken, fileCtrl.listarComentariosMaterial);
+router.post('/files/:id/comentarios', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), fileCtrl.comentarMaterial);
+router.delete('/files/comentarios/:comentarioId', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), fileCtrl.excluirComentarioMaterial);
+
 // --- DASHBOARD & REPORTS ---
 router.get('/dashboard', authenticateToken, dashCtrl.getDashboardData);
 router.get('/reports/general', authenticateToken, requireRole('ADMIN'), reportCtrl.getGeneralReport);
