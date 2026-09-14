@@ -646,18 +646,68 @@ export async function enviarArquivoParaGrupo(req: AuthenticatedRequest, res: Res
       ]);
     }
 
+    // O material chega ao aluno pela atividade publicada, mas o docente da turma
+    // não tinha por onde vê-lo: "Materiais Recebidos" lê arquivos_direcionados, e
+    // este atalho não gravava nada ali. Sem isto, o professor descobriria pelo
+    // aluno que a coordenação mandou algo para o grupo dele.
+    //
+    // Vale para TODOS os docentes ativos da turma, não só aquele cujo vínculo foi
+    // emprestado para preencher a atividade: todos lecionam para aquele grupo, e
+    // a checagem de download por disciplina alcançaria apenas um deles.
+    const docentesDaTurma = await queryAsync<{ usuario_id: number; disciplina_id: number | null }>(
+      `SELECT DISTINCT ON (vp.usuario_id) vp.usuario_id, vp.disciplina_id
+         FROM vinculos_professores vp
+         JOIN usuarios u ON u.id = vp.usuario_id AND u.deletado_em IS NULL
+        WHERE vp.turma_id = ? AND vp.ativo = 1
+        ORDER BY vp.usuario_id, vp.id ASC`,
+      [grupo.turma_id]
+    );
+
+    for (const docente of docentesDaTurma) {
+      await runAsync(
+        `INSERT INTO arquivos_direcionados
+           (arquivo_id, professor_id, curso_id, turma_id, disciplina_id, grupo_id, observacao, direcionado_por)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          arquivo.id,
+          docente.usuario_id,
+          vinculo.curso_id,
+          grupo.turma_id,
+          docente.disciplina_id,
+          grupo.id,
+          `Material enviado pela coordenação ao grupo "${grupo.nome}" da turma ${grupo.turma_nome}. ` +
+            'Os alunos do grupo já receberam este arquivo como material de apoio.',
+          adminId
+        ]
+      );
+
+      await runAsync(`INSERT INTO notificacoes (usuario_id, titulo, mensagem, link) VALUES (?, ?, ?, ?)`, [
+        docente.usuario_id,
+        'Material enviado a um grupo da sua turma',
+        `A coordenação disponibilizou "${arquivo.nome_original}" ao grupo ${grupo.nome} (${grupo.turma_nome}).`,
+        '/professor/materiais'
+      ]);
+    }
+
     await logAudit(adminId, 'ENVIAR_ARQUIVO_PARA_GRUPO', 'atividades_pbl', atividadeId, {
       arquivoId: arquivo.id,
       grupoId: grupo.id,
       publicacaoId: pubRes.lastID,
-      totalAlunos: audience.totalAlunosUnicos
+      totalAlunos: audience.totalAlunosUnicos,
+      docentesNotificados: docentesDaTurma.length
     });
 
+    const parteDocente = docentesDaTurma.length
+      ? ` ${docentesDaTurma.length} docente(s) da turma também receberam acesso ao material.`
+      : ' Nenhum docente ativo vinculado à turma foi encontrado para receber o material.';
+
     return res.status(201).json({
-      message: `Material publicado para ${audience.totalAlunosUnicos} aluno(s) do grupo "${grupo.nome}".`,
+      message:
+        `Material publicado para ${audience.totalAlunosUnicos} aluno(s) do grupo "${grupo.nome}".` + parteDocente,
       atividadeId,
       codigoUnico,
-      totalAlunos: audience.totalAlunosUnicos
+      totalAlunos: audience.totalAlunosUnicos,
+      totalDocentes: docentesDaTurma.length
     });
   } catch (err) {
     console.error('Erro ao enviar arquivo para o grupo:', err);
