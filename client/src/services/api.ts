@@ -230,6 +230,15 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
     return { usuarioId: 0, medalhas: [] } as unknown as T;
   }
 
+  if (endpoint.startsWith('/student/contexts')) {
+    return {
+      totalPerguntas: 6,
+      minimoParaMedalha: 4,
+      resumo: { alunos: 0, completos: 0, iniciados: 0, semResposta: 0 },
+      alunos: []
+    } as unknown as T;
+  }
+
   // Lista de Atividades do Aluno
   if (endpoint.includes('/submissions/student/activities')) {
     if (endpoint.match(/\/submissions\/student\/activities\/\d+/)) {

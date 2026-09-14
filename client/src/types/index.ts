@@ -468,3 +468,37 @@ export interface OrientadorReviewRow {
   arquivo_nome?: string;
   rotulo?: string;
 }
+
+/** Uma linha do panorama de contextos que a coordenação enxerga. */
+export interface ContextoAlunoResumo {
+  id: number;
+  nome: string;
+  email: string;
+  cursoId: number;
+  cursoNome: string;
+  turmaId: number;
+  turmaNome: string;
+  turmaCodigo: string;
+  grupoId: number | null;
+  grupoNome: string | null;
+  respondeu: boolean;
+  completed: boolean;
+  completedAt: string | null;
+  atualizadoEm: string | null;
+  respondidas: number;
+  workSector: string | null;
+  companySize: string | null;
+  dailyTasks: string;
+  workplaceChallenges: string;
+  relevantExperience: string;
+  keyLearnings: string;
+  courseConnection: string;
+  careerGoals: string;
+}
+
+export interface PanoramaContextos {
+  totalPerguntas: number;
+  minimoParaMedalha: number;
+  resumo: { alunos: number; completos: number; iniciados: number; semResposta: number };
+  alunos: ContextoAlunoResumo[];
+}

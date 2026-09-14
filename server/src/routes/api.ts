@@ -167,6 +167,8 @@ router.get('/student/context', authenticateToken, requireRole('ALUNO'), contexto
 router.post('/student/context', authenticateToken, requireRole('ALUNO'), contextoCtrl.salvarContexto);
 router.put('/student/context', authenticateToken, requireRole('ALUNO'), contextoCtrl.salvarContexto);
 router.get('/student/badges', authenticateToken, contextoCtrl.listarMedalhas);
+// Panorama para a coordenação e a docência, segmentado por curso, turma e grupo.
+router.get('/student/contexts', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), contextoCtrl.listarContextos);
 router.get('/student/:usuarioId/context', authenticateToken, contextoCtrl.getContextoDeAluno);
 router.get('/student/:usuarioId/badges', authenticateToken, contextoCtrl.listarMedalhas);
 

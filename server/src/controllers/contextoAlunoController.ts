@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { getAsync, runAsync } from '../config/db';
+import { getAsync, queryAsync, runAsync } from '../config/db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
 import {
@@ -258,3 +258,111 @@ export async function listarMedalhas(req: AuthenticatedRequest, res: Response) {
   }
 }
 
+
+/**
+ * Panorama dos contextos para a coordenação: um aluno por linha, com curso,
+ * turma e grupo, o estado do preenchimento e as respostas completas.
+ *
+ * Os filtros (curso, turma, grupo) são opcionais e se combinam. A consulta parte
+ * de `matriculas` — e não de `usuarios` — porque é a matrícula que carrega o
+ * vínculo com turma e grupo; alunos sem matrícula não aparecem aqui, de
+ * propósito, já que não há por onde segmentá-los.
+ */
+export async function listarContextos(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { cursoId, turmaId, grupoId, situacao, busca } = req.query;
+
+    const condicoes: string[] = ['u.deletado_em IS NULL', 'm.deletado_em IS NULL', "p.nome = 'ALUNO'"];
+    const params: any[] = [];
+
+    if (cursoId) {
+      condicoes.push('t.curso_id = ?');
+      params.push(Number(cursoId));
+    }
+    if (turmaId) {
+      condicoes.push('m.turma_id = ?');
+      params.push(Number(turmaId));
+    }
+    if (grupoId) {
+      condicoes.push('m.grupo_id = ?');
+      params.push(Number(grupoId));
+    }
+    if (situacao === 'completo') condicoes.push('ca.completed_at IS NOT NULL');
+    if (situacao === 'incompleto') condicoes.push('ca.completed_at IS NULL AND ca.id IS NOT NULL');
+    if (situacao === 'sem_resposta') condicoes.push('ca.id IS NULL');
+    if (busca) {
+      condicoes.push('(LOWER(u.nome) LIKE LOWER(?) OR LOWER(u.email) LIKE LOWER(?))');
+      params.push(`%${busca}%`, `%${busca}%`);
+    }
+
+    // Um aluno com mais de uma matrícula ativa apareceria repetido; DISTINCT ON
+    // mantém uma linha por aluno, a da matrícula mais recente.
+    const linhas = await queryAsync<any>(
+      `SELECT * FROM (
+         SELECT DISTINCT ON (u.id)
+                u.id, u.nome, u.email,
+                c.id AS curso_id, c.nome AS curso_nome,
+                t.id AS turma_id, t.nome AS turma_nome, t.codigo AS turma_codigo,
+                g.id AS grupo_id, g.nome AS grupo_nome,
+                ca.id AS contexto_id, ca.completed_at, ca.atualizado_em,
+                ca.work_sector, ca.company_size, ca.daily_tasks, ca.workplace_challenges,
+                ca.relevant_experience, ca.key_learnings, ca.course_connection, ca.career_goals
+           FROM matriculas m
+           JOIN usuarios u ON m.usuario_id = u.id
+           JOIN perfis p ON u.perfil_id = p.id
+           JOIN turmas t ON m.turma_id = t.id AND t.deletado_em IS NULL
+           JOIN cursos c ON t.curso_id = c.id
+           LEFT JOIN grupos g ON m.grupo_id = g.id AND g.deletado_em IS NULL
+           LEFT JOIN contexto_aluno ca ON ca.usuario_id = u.id
+          WHERE ${condicoes.join(' AND ')}
+          ORDER BY u.id, m.criado_em DESC
+       ) sub
+       ORDER BY curso_nome, turma_nome, nome`,
+      params
+    );
+
+    const alunos = linhas.map((l) => {
+      const respondidas = contarRespostas(l);
+      return {
+        id: l.id,
+        nome: l.nome,
+        email: l.email,
+        cursoId: l.curso_id,
+        cursoNome: l.curso_nome,
+        turmaId: l.turma_id,
+        turmaNome: l.turma_nome,
+        turmaCodigo: l.turma_codigo,
+        grupoId: l.grupo_id,
+        grupoNome: l.grupo_nome,
+        respondeu: !!l.contexto_id,
+        completed: !!l.completed_at,
+        completedAt: l.completed_at,
+        atualizadoEm: l.atualizado_em,
+        respondidas,
+        workSector: l.work_sector,
+        companySize: l.company_size,
+        dailyTasks: l.daily_tasks || '',
+        workplaceChallenges: l.workplace_challenges || '',
+        relevantExperience: l.relevant_experience || '',
+        keyLearnings: l.key_learnings || '',
+        courseConnection: l.course_connection || '',
+        careerGoals: l.career_goals || ''
+      };
+    });
+
+    return res.json({
+      totalPerguntas: TOTAL_PERGUNTAS_CONTEXTO,
+      minimoParaMedalha: MIN_RESPOSTAS_PARA_MEDALHA,
+      resumo: {
+        alunos: alunos.length,
+        completos: alunos.filter((a) => a.completed).length,
+        iniciados: alunos.filter((a) => a.respondeu && !a.completed).length,
+        semResposta: alunos.filter((a) => !a.respondeu).length
+      },
+      alunos
+    });
+  } catch (err) {
+    console.error('Erro ao listar contextos dos alunos:', err);
+    return res.status(500).json({ message: 'Erro ao listar os contextos dos alunos.' });
+  }
+}
