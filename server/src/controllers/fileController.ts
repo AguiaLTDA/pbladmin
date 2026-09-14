@@ -491,7 +491,7 @@ export async function listarMeusDirecionados(req: AuthenticatedRequest, res: Res
   try {
     const professorId = req.user?.id;
     const list = await queryAsync(
-      `SELECT ad.id, ad.observacao, ad.criado_em,
+      `SELECT ad.id, ad.observacao, ad.criado_em, ad.turma_id, ad.grupo_id,
               ar.id as arquivo_id, ar.nome_original, ar.tamanho_bytes, ar.mime_type, ar.categoria,
               c.nome as curso_nome, t.nome as turma_nome, t.codigo as turma_codigo,
               d.nome as disciplina_nome, g.nome as grupo_nome,

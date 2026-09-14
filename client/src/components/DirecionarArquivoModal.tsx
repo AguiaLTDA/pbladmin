@@ -1,14 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { ProfessorBindings, GrupoOption, DirecionamentoArquivo } from '../types';
-import { Send, Trash2, UserCheck, Users } from 'lucide-react';
+import { GrupoOption, DirecionamentoArquivo, TurmaOption } from '../types';
+import { Send, Trash2, UserCheck, Users, BookOpen, Loader2 } from 'lucide-react';
 
-interface Professor {
+interface CursoOpcao {
   id: number;
   nome: string;
-  email: string;
-  ativo?: number;
+  codigo?: string;
+}
+
+interface AulaGrade {
+  professor_id: number;
+  professor_nome: string;
+  disciplina_nome?: string;
 }
 
 interface DirecionarArquivoModalProps {
@@ -19,10 +24,14 @@ interface DirecionarArquivoModalProps {
 }
 
 /**
- * Direciona um arquivo do gerenciador a um ou mais docentes. Os alvos
- * (turma, disciplina, grupo) vêm dos vínculos reais de cada professor
- * escolhido — o servidor recusa alvo que não seja dele. O material fica
- * visível apenas ao destinatário.
+ * Direciona um arquivo do gerenciador a partir de <b>curso e turma</b>.
+ *
+ * O professor deixou de ser o critério de entrada: a coordenação pensa em "esta
+ * turma precisa deste material", não em "quais docentes eu marco". Os
+ * destinatários saem dos vínculos da grade — quem leciona na turma escolhida
+ * recebe —, e a tela mostra antes quem serão, para que a escolha não seja cega.
+ * O material fica visível a esses docentes; o que chega ao aluno continua vindo
+ * pela atividade publicada.
  */
 export const DirecionarArquivoModal: React.FC<DirecionarArquivoModalProps> = ({
   arquivoId,
@@ -32,16 +41,17 @@ export const DirecionarArquivoModal: React.FC<DirecionarArquivoModalProps> = ({
 }) => {
   const { showToast } = useToast();
 
-  const [professores, setProfessores] = useState<Professor[]>([]);
-  const [selecionados, setSelecionados] = useState<number[]>([]);
-  const [vinculos, setVinculos] = useState<ProfessorBindings | null>(null);
+  const [cursos, setCursos] = useState<CursoOpcao[]>([]);
+  const [turmas, setTurmas] = useState<TurmaOption[]>([]);
   const [grupos, setGrupos] = useState<GrupoOption[]>([]);
-  const [carregandoVinculos, setCarregandoVinculos] = useState(false);
 
+  const [cursoId, setCursoId] = useState<number | ''>('');
   const [turmasEscolhidas, setTurmasEscolhidas] = useState<number[]>([]);
-  const [disciplinasEscolhidas, setDisciplinasEscolhidas] = useState<number[]>([]);
   const [gruposEscolhidos, setGruposEscolhidos] = useState<number[]>([]);
   const [observacao, setObservacao] = useState('');
+
+  const [docentesPrevistos, setDocentesPrevistos] = useState<AulaGrade[]>([]);
+  const [carregandoDocentes, setCarregandoDocentes] = useState(false);
 
   const [existentes, setExistentes] = useState<DirecionamentoArquivo[]>([]);
   const [enviando, setEnviando] = useState(false);
@@ -53,34 +63,29 @@ export const DirecionarArquivoModal: React.FC<DirecionarArquivoModalProps> = ({
   };
 
   useEffect(() => {
-    apiRequest<Professor[]>('/academic/users?perfil=PROFESSOR')
-      .then((lista) => setProfessores(lista.filter((p) => p.ativo)))
-      .catch((err: any) => showToast(err.message || 'Erro ao listar professores.', 'error'));
+    apiRequest<CursoOpcao[]>('/academic/courses')
+      .then(setCursos)
+      .catch((err: any) => showToast(err.message || 'Erro ao listar cursos.', 'error'));
+    apiRequest<TurmaOption[]>('/academic/classes')
+      .then(setTurmas)
+      .catch(() => setTurmas([]));
     carregarExistentes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [arquivoId]);
 
-  // Os alvos disponíveis são os do ÚLTIMO professor marcado: com vários docentes
-  // selecionados, cada um recebe apenas as turmas que forem dele.
-  const professorReferencia = selecionados[selecionados.length - 1];
-
-  useEffect(() => {
-    if (!professorReferencia) {
-      setVinculos(null);
-      setGrupos([]);
-      return;
-    }
-    setCarregandoVinculos(true);
-    apiRequest<ProfessorBindings>(`/academic/my-bindings?professorId=${professorReferencia}`)
-      .then(setVinculos)
-      .catch(() => setVinculos(null))
-      .finally(() => setCarregandoVinculos(false));
-  }, [professorReferencia]);
+  const turmasDoCurso = useMemo(() => {
+    if (cursoId === '') return [];
+    const curso = cursos.find((c) => c.id === Number(cursoId));
+    // O endpoint de turmas devolve o nome do curso, não o id — comparar pelo
+    // nome é o que os dois lados têm em comum aqui.
+    return turmas.filter((t) => t.curso_nome === curso?.nome);
+  }, [turmas, cursos, cursoId]);
 
   // Grupos só existem por turma, então dependem das turmas marcadas.
   useEffect(() => {
     if (turmasEscolhidas.length === 0) {
       setGrupos([]);
+      setGruposEscolhidos([]);
       return;
     }
     Promise.all(
@@ -90,14 +95,54 @@ export const DirecionarArquivoModal: React.FC<DirecionarArquivoModalProps> = ({
     ).then((listas) => setGrupos(listas.flat()));
   }, [turmasEscolhidas]);
 
-  const alternar = (lista: number[], valor: number, set: (v: number[]) => void) => {
-    set(lista.includes(valor) ? lista.filter((v) => v !== valor) : [...lista, valor]);
-  };
+  /**
+   * Quem vai receber, mostrado antes do envio. Sem esta prévia, a coordenação
+   * escolheria uma turma sem saber se ela tem docente vinculado — e só
+   * descobriria pelo erro depois de clicar.
+   */
+  useEffect(() => {
+    if (turmasEscolhidas.length === 0) {
+      setDocentesPrevistos([]);
+      return;
+    }
+    setCarregandoDocentes(true);
+    Promise.all(
+      turmasEscolhidas.map((turmaId) =>
+        apiRequest<AulaGrade[]>(`/academic/schedule?turmaId=${turmaId}`).catch(() => [] as AulaGrade[])
+      )
+    )
+      .then((listas) => {
+        const mapa = new Map<number, AulaGrade>();
+        listas.flat().forEach((a) => {
+          if (a.professor_id && !mapa.has(a.professor_id)) mapa.set(a.professor_id, a);
+        });
+        setDocentesPrevistos(
+          Array.from(mapa.values()).sort((a, b) => a.professor_nome.localeCompare(b.professor_nome, 'pt-BR'))
+        );
+      })
+      .finally(() => setCarregandoDocentes(false));
+  }, [turmasEscolhidas]);
+
+  const alternar = (lista: number[], id: number, set: (v: number[]) => void) =>
+    set(lista.includes(id) ? lista.filter((x) => x !== id) : [...lista, id]);
 
   const handleDirecionar = async () => {
-    if (selecionados.length === 0) {
-      showToast('Selecione pelo menos um professor.', 'error');
+    if (cursoId === '' && turmasEscolhidas.length === 0) {
+      showToast('Escolha um curso ou marque ao menos uma turma.', 'error');
       return;
+    }
+
+    // Curso sem turma marcada alcança o curso inteiro — é uma decisão grande o
+    // bastante para merecer confirmação explícita.
+    if (turmasEscolhidas.length === 0) {
+      const curso = cursos.find((c) => c.id === Number(cursoId));
+      if (
+        !window.confirm(
+          `Nenhuma turma marcada: "${nomeArquivo}" será direcionado aos docentes de TODAS as turmas ativas de ${curso?.nome}. Confirma?`
+        )
+      ) {
+        return;
+      }
     }
 
     setEnviando(true);
@@ -105,9 +150,8 @@ export const DirecionarArquivoModal: React.FC<DirecionarArquivoModalProps> = ({
       const res = await apiRequest<{ message: string }>(`/files/${arquivoId}/direcionamentos`, {
         method: 'POST',
         body: JSON.stringify({
-          professorIds: selecionados,
+          cursoIds: cursoId === '' ? [] : [Number(cursoId)],
           turmaIds: turmasEscolhidas,
-          disciplinaIds: disciplinasEscolhidas,
           grupoIds: gruposEscolhidos,
           observacao: observacao.trim() || undefined
         })
@@ -154,111 +198,97 @@ export const DirecionarArquivoModal: React.FC<DirecionarArquivoModalProps> = ({
         </div>
 
         <div className="modal-body">
-          <p className="text-muted text-sm mb-3">
-            <strong>{nomeArquivo}</strong> — o arquivo fica visível apenas para os docentes escolhidos.
-            O material do aluno continua vindo pela atividade PBL publicada.
+          <p className="text-muted text-sm mb-4">
+            Enviando <strong>{nomeArquivo}</strong>. Escolha o <strong>curso</strong> e, se quiser
+            restringir, as <strong>turmas</strong>. Os docentes vinculados a essas turmas recebem o
+            material automaticamente — não é preciso selecioná-los.
           </p>
 
           <div className="form-group">
-            <label className="form-label required">Professores</label>
-            <div
-              style={{
-                maxHeight: '160px',
-                overflowY: 'auto',
-                border: '1px solid var(--border-color, #e5e7eb)',
-                borderRadius: '8px',
-                padding: '0.5rem'
+            <label className="form-label">Curso</label>
+            <select
+              className="form-control"
+              value={cursoId}
+              onChange={(e) => {
+                setCursoId(e.target.value ? Number(e.target.value) : '');
+                // As turmas marcadas pertencem ao curso anterior: mantê-las
+                // direcionaria para onde a coordenação não está olhando.
+                setTurmasEscolhidas([]);
+                setGruposEscolhidos([]);
               }}
             >
-              {professores.map((p) => (
-                <label
-                  key={p.id}
-                  className="flex items-center gap-2 cursor-pointer text-sm"
-                  style={{ padding: '0.2rem 0' }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selecionados.includes(p.id)}
-                    onChange={() => alternar(selecionados, p.id, setSelecionados)}
-                  />
-                  {p.nome}
-                  <span className="text-muted">({p.email})</span>
-                </label>
+              <option value="">-- Selecione o curso --</option>
+              {cursos.map((c) => (
+                <option key={c.id} value={c.id}>{c.nome}</option>
               ))}
-            </div>
+            </select>
           </div>
 
-          {selecionados.length > 0 && (
+          {cursoId !== '' && (
             <>
-              <div className="text-muted text-sm mb-2">
-                Alvos abaixo são os vínculos de <strong>{vinculos ? `${professores.find((p) => p.id === professorReferencia)?.nome}` : '...'}</strong>.
-                Cada docente selecionado recebe só as turmas que forem dele.
+              <div className="form-group">
+                <label className="form-label">
+                  Turmas {turmasEscolhidas.length === 0 && '(nenhuma marcada = todas as turmas do curso)'}
+                </label>
+                {turmasDoCurso.length === 0 ? (
+                  <span className="text-muted text-sm">Este curso não tem turmas ativas.</span>
+                ) : (
+                  <div className="flex" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+                    {turmasDoCurso.map((t) => (
+                      <label key={t.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input
+                          type="checkbox"
+                          checked={turmasEscolhidas.includes(t.id)}
+                          onChange={() => alternar(turmasEscolhidas, t.id, setTurmasEscolhidas)}
+                        />
+                        <BookOpen size={12} /> {t.nome}
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {carregandoVinculos ? (
-                <div className="text-muted text-sm mb-3">Carregando turmas e disciplinas...</div>
-              ) : (
-                <>
-                  <div className="form-group">
-                    <label className="form-label">Turmas</label>
-                    {vinculos?.turmas?.length ? (
-                      <div className="flex" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
-                        {vinculos.turmas.map((t) => (
-                          <label key={t.id} className="flex items-center gap-2 cursor-pointer text-sm">
-                            <input
-                              type="checkbox"
-                              checked={turmasEscolhidas.includes(t.id)}
-                              onChange={() => alternar(turmasEscolhidas, t.id, setTurmasEscolhidas)}
-                            />
-                            {t.nome} ({t.codigo})
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-muted text-sm">
-                        Este docente não tem turmas no horário — o arquivo irá sem turma específica.
-                      </span>
-                    )}
+              {grupos.length > 0 && (
+                <div className="form-group">
+                  <label className="form-label">Grupos das turmas marcadas (opcional)</label>
+                  <div className="flex" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {grupos.map((g) => (
+                      <label key={g.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input
+                          type="checkbox"
+                          checked={gruposEscolhidos.includes(g.id)}
+                          onChange={() => alternar(gruposEscolhidos, g.id, setGruposEscolhidos)}
+                        />
+                        <Users size={12} /> {g.nome}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quem receberá — mostrado antes de clicar, não depois do erro. */}
+              {turmasEscolhidas.length > 0 && (
+                <div className="card" style={{ padding: '0.75rem', marginBottom: '1rem' }}>
+                  <div className="font-bold text-sm mb-2 flex items-center gap-2">
+                    <UserCheck size={14} color="var(--primary)" />
+                    {carregandoDocentes
+                      ? 'Verificando quem leciona nestas turmas...'
+                      : `${docentesPrevistos.length} docente(s) receberão este material`}
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Disciplinas</label>
-                    {vinculos?.disciplinas?.length ? (
-                      <div className="flex" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
-                        {vinculos.disciplinas.map((d) => (
-                          <label key={d.id} className="flex items-center gap-2 cursor-pointer text-sm">
-                            <input
-                              type="checkbox"
-                              checked={disciplinasEscolhidas.includes(d.id)}
-                              onChange={() => alternar(disciplinasEscolhidas, d.id, setDisciplinasEscolhidas)}
-                            />
-                            {d.nome}
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-muted text-sm">Nenhuma disciplina vinculada.</span>
-                    )}
-                  </div>
-
-                  {grupos.length > 0 && (
-                    <div className="form-group">
-                      <label className="form-label">Grupos das turmas marcadas</label>
-                      <div className="flex" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
-                        {grupos.map((g) => (
-                          <label key={g.id} className="flex items-center gap-2 cursor-pointer text-sm">
-                            <input
-                              type="checkbox"
-                              checked={gruposEscolhidos.includes(g.id)}
-                              onChange={() => alternar(gruposEscolhidos, g.id, setGruposEscolhidos)}
-                            />
-                            <Users size={12} /> {g.nome}
-                          </label>
-                        ))}
-                      </div>
+                  {carregandoDocentes ? (
+                    <Loader2 size={14} className="animate-spin text-muted" />
+                  ) : docentesPrevistos.length === 0 ? (
+                    <div className="text-sm" style={{ color: '#b45309' }}>
+                      Nenhum docente está vinculado às turmas marcadas. Vincule um professor à turma
+                      antes de direcionar, senão o material não chega a ninguém.
+                    </div>
+                  ) : (
+                    <div className="text-muted text-sm">
+                      {docentesPrevistos.map((d) => d.professor_nome).join(' · ')}
                     </div>
                   )}
-                </>
+                </div>
               )}
 
               <div className="form-group">
@@ -303,7 +333,11 @@ export const DirecionarArquivoModal: React.FC<DirecionarArquivoModalProps> = ({
 
         <div className="modal-footer">
           <button type="button" onClick={onClose} className="btn btn-secondary">Fechar</button>
-          <button onClick={handleDirecionar} disabled={enviando} className="btn btn-primary">
+          <button
+            onClick={handleDirecionar}
+            disabled={enviando || cursoId === ''}
+            className="btn btn-primary"
+          >
             <Send size={16} /> {enviando ? 'Direcionando...' : 'Direcionar'}
           </button>
         </div>

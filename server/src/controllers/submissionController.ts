@@ -157,6 +157,16 @@ export async function getStudentActivityDetails(req: AuthenticatedRequest, res: 
       );
     }
 
+    // A turma do aluno acompanha a resposta porque os comentários do professor
+    // sobre um material são endereçados a uma turma, não à atividade: sem este
+    // id, a tela do aluno não teria como pedi-los.
+    const matricula = await getAsync<{ turma_id: number; grupo_id: number | null }>(
+      `SELECT turma_id, grupo_id FROM matriculas
+        WHERE usuario_id = ? AND deletado_em IS NULL
+        ORDER BY criado_em DESC LIMIT 1`,
+      [studentId]
+    );
+
     return res.json({
       atividade: act,
       versao: currentVersionRow,
@@ -164,7 +174,9 @@ export async function getStudentActivityDetails(req: AuthenticatedRequest, res: 
       arquivos,
       entrega,
       arquivosEntrega,
-      feedback
+      feedback,
+      turmaId: matricula?.turma_id ?? null,
+      grupoId: matricula?.grupo_id ?? null
     });
   } catch (err) {
     console.error('Error fetching student activity details:', err);

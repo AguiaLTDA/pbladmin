@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest, getDownloadUrl } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
+import { ComentariosMaterial } from '../../components/ComentariosMaterial';
 import {
   FileText,
   Download,
@@ -61,7 +62,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
     return <div className="p-4 text-center text-muted">Carregando detalhes da atividade PBL...</div>;
   }
 
-  const { atividade, versao, etapas, arquivos, entrega, feedback } = data;
+  const { atividade, versao, etapas, arquivos, entrega, feedback, turmaId, grupoId } = data;
 
   const isFinalSubmitted = entrega && (entrega.status === 'ENVIADO' || entrega.status === 'ATRASADO');
   // Atalho "enviar arquivo para grupo": material de apoio, sem entrega esperada
@@ -219,6 +220,18 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
               </a>
             </div>
           ))}
+
+          {/* O que o professor escreveu sobre este material para a turma. Um
+              bloco por arquivo, porque é ao arquivo que o comentário se refere. */}
+          {turmaId &&
+            arquivos.map((f: any) => (
+              <ComentariosMaterial
+                key={`coment-${f.id}`}
+                arquivoId={f.id}
+                turmaId={turmaId}
+                grupoId={grupoId ?? null}
+              />
+            ))}
         </div>
       ) : (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }} className="mb-4">

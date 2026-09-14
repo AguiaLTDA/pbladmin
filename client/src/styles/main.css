@@ -1248,3 +1248,28 @@ textarea.form-control {
   letter-spacing: 0.02em;
   color: var(--kpi-color, var(--primary));
 }
+
+/* Arquivo que ainda não foi distribuído a ninguém — o estado que trava a
+   distribuição e, por isso, precisa ser visível sem passar o olho na contagem. */
+.pill-tag-amber {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+/* Grupo que já recebeu material, na lista de seleção do envio. */
+.grupo-com-material {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #6ee7b7;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}

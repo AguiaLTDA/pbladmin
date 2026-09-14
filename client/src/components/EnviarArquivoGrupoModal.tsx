@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../services/api';
+import { GrupoComMaterial } from '../types';
 import { useToast } from '../context/ToastContext';
 import { GrupoOption } from '../types';
 import { Users, Send, AlertTriangle } from 'lucide-react';
@@ -37,6 +38,19 @@ export const EnviarArquivoGrupoModal: React.FC<EnviarArquivoGrupoModalProps> = (
   const [grupoId, setGrupoId] = useState<number | ''>('');
   const [carregandoGrupos, setCarregandoGrupos] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  // Quais grupos já receberam material — o sinal que evita distribuir duas vezes
+  // para o mesmo grupo e esquecer outro.
+  const [comMaterial, setComMaterial] = useState<Record<number, GrupoComMaterial>>({});
+
+  useEffect(() => {
+    apiRequest<GrupoComMaterial[]>('/files/grupos-com-material')
+      .then((lista) => {
+        const mapa: Record<number, GrupoComMaterial> = {};
+        lista.forEach((g) => (mapa[g.grupoId] = g));
+        setComMaterial(mapa);
+      })
+      .catch(() => setComMaterial({}));
+  }, []);
 
   useEffect(() => {
     apiRequest<TurmaOpcao[]>('/academic/classes')
@@ -65,7 +79,25 @@ export const EnviarArquivoGrupoModal: React.FC<EnviarArquivoGrupoModalProps> = (
     }
 
     const grupo = grupos.find((g) => g.id === grupoId);
-    if (
+    const jaRecebeu = comMaterial[Number(grupoId)];
+
+    // Quando o grupo já tem material, a pergunta muda: não é "confirma o envio",
+    // é "substitui o que está lá ou acrescenta mais um". Deixar isso implícito
+    // faria o aluno acumular materiais concorrentes sem saber qual vale.
+    let substituir = false;
+    if (jaRecebeu) {
+      const lista = jaRecebeu.materiais.map((m) => `• ${m.arquivoNome || m.titulo}`);
+      substituir = window.confirm(
+        [
+          `O grupo "${grupo?.nome}" já recebeu ${jaRecebeu.total} material(is):`,
+          '',
+          ...lista,
+          '',
+          'OK = SUBSTITUIR (o material anterior sai do portal do aluno).',
+          `Cancelar = ACRESCENTAR "${nomeArquivo}" e manter o que já está lá.`
+        ].join(String.fromCharCode(10))
+      );
+    } else if (
       !window.confirm(
         `Publicar "${nomeArquivo}" para o grupo "${grupo?.nome}"? Isso cria uma atividade PBL mínima (visível nos relatórios) só para carregar este material — os alunos do grupo verão o arquivo imediatamente em "Materiais de Apoio", sem entrega esperada.`
       )
@@ -77,7 +109,7 @@ export const EnviarArquivoGrupoModal: React.FC<EnviarArquivoGrupoModalProps> = (
     try {
       const res = await apiRequest<{ message: string }>(`/files/${arquivoId}/enviar-para-grupo`, {
         method: 'POST',
-        body: JSON.stringify({ grupoId })
+        body: JSON.stringify({ grupoId, substituir })
       });
       showToast(res.message, 'success');
       onEnviado();
@@ -146,9 +178,11 @@ export const EnviarArquivoGrupoModal: React.FC<EnviarArquivoGrupoModalProps> = (
                 {grupos.map((g) => {
                   // COUNT do Postgres chega como string — precisa converter antes de comparar.
                   const total = Number(g.total_integrantes || 0);
+                  const recebido = comMaterial[g.id];
                   return (
                     <option key={g.id} value={g.id}>
                       {g.nome} ({total} integrante{total === 1 ? '' : 's'})
+                      {recebido ? ` — já recebeu ${recebido.total} material(is)` : ''}
                     </option>
                   );
                 })}
@@ -156,6 +190,30 @@ export const EnviarArquivoGrupoModal: React.FC<EnviarArquivoGrupoModalProps> = (
             )}
             {turmaId && !carregandoGrupos && grupos.length === 0 && (
               <span className="text-muted text-sm">Nenhum grupo cadastrado nesta turma ainda.</span>
+            )}
+
+            {/* O aviso completo só aparece com o grupo escolhido: listar tudo o
+                que cada grupo já recebeu ocuparia a tela inteira. */}
+            {grupoId && comMaterial[Number(grupoId)] && (
+              <div
+                className="card"
+                style={{ marginTop: '0.75rem', padding: '0.75rem', borderLeft: '4px solid #047857' }}
+              >
+                <div className="font-bold text-sm" style={{ color: '#047857' }}>
+                  Este grupo já recebeu {comMaterial[Number(grupoId)].total} material(is)
+                </div>
+                <ul className="text-sm text-muted" style={{ paddingLeft: '1.1rem', margin: '0.35rem 0 0' }}>
+                  {comMaterial[Number(grupoId)].materiais.map((m) => (
+                    <li key={m.atividadeId}>
+                      {m.arquivoNome || m.titulo}
+                      {m.criadoEm && ` — ${new Date(m.criadoEm).toLocaleDateString('pt-BR')}`}
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-muted text-sm" style={{ marginTop: '0.4rem' }}>
+                  Ao enviar, você escolhe entre substituir o material anterior ou acrescentar este.
+                </div>
+              </div>
             )}
           </div>
         </div>

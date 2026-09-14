@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { apiRequest, getDownloadUrl } from '../../services/api';
 import { FileItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
-import { FolderOpen, Upload, Download, Trash2, FileText, Search, ShieldCheck, Send, Users } from 'lucide-react';
+import { FolderOpen, Upload, Download, Trash2, FileText, Search, ShieldCheck, Send, Users, Filter, CheckCircle2 } from 'lucide-react';
 import { DirecionarArquivoModal } from '../../components/DirecionarArquivoModal';
 import { EnviarArquivoGrupoModal } from '../../components/EnviarArquivoGrupoModal';
 
@@ -11,7 +11,11 @@ export const GerenciadorArquivosView: React.FC = () => {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [progresso, setProgresso] = useState<{ feito: number; total: number } | null>(null);
   const [search, setSearch] = useState('');
+  const [categoriaFiltro, setCategoriaFiltro] = useState('');
+  const [destinoFiltro, setDestinoFiltro] = useState<'' | 'direcionado' | 'sem_destino'>('');
+  const [turmaFiltro, setTurmaFiltro] = useState<number | ''>('');
   const [arquivoParaDirecionar, setArquivoParaDirecionar] = useState<FileItem | null>(null);
   const [arquivoParaGrupo, setArquivoParaGrupo] = useState<FileItem | null>(null);
 
@@ -27,26 +31,51 @@ export const GerenciadorArquivosView: React.FC = () => {
     fetchFiles();
   }, []);
 
+  /**
+   * Upload de vários arquivos, um de cada vez. Sequencial de propósito: em
+   * paralelo, um lote grande estouraria o limite de requisições e uma falha no
+   * meio deixaria dúvida sobre o que subiu. Assim cada arquivo tem sucesso ou
+   * erro próprio, e o que já subiu permanece.
+   */
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
+    const selecionados = Array.from(e.target.files || []);
+    if (selecionados.length === 0) return;
 
     setUploading(true);
-    try {
-      await apiRequest('/files/upload', {
-        method: 'POST',
-        body: formData
-      });
-      showToast(`Arquivo '${file.name}' enviado com sucesso!`, 'success');
-      fetchFiles();
-    } catch (err: any) {
-      showToast(err.message || 'Erro ao fazer upload.', 'error');
-    } finally {
-      setUploading(false);
+    setProgresso({ feito: 0, total: selecionados.length });
+
+    const falhas: string[] = [];
+    let enviados = 0;
+
+    for (const file of selecionados) {
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        await apiRequest('/files/upload', { method: 'POST', body: formData });
+        enviados++;
+      } catch (err: any) {
+        falhas.push(`${file.name}: ${err?.message || 'erro no envio'}`);
+      }
+      setProgresso({ feito: enviados + falhas.length, total: selecionados.length });
     }
+
+    if (enviados > 0) {
+      showToast(
+        selecionados.length === 1
+          ? `Arquivo '${selecionados[0].name}' enviado com sucesso!`
+          : `${enviados} de ${selecionados.length} arquivos enviados.`,
+        'success'
+      );
+    }
+    if (falhas.length > 0) {
+      showToast(`${falhas.length} arquivo(s) falharam: ${falhas[0]}`, 'error');
+    }
+
+    // Libera o mesmo arquivo para ser reenviado sem trocar de seleção.
+    e.target.value = '';
+    setUploading(false);
+    setProgresso(null);
+    fetchFiles();
   };
 
   const handleDelete = async (id: number, name: string) => {
@@ -61,10 +90,62 @@ export const GerenciadorArquivosView: React.FC = () => {
     }
   };
 
-  const filteredFiles = files.filter((f) =>
-    f.nome_original.toLowerCase().includes(search.toLowerCase()) ||
-    (f.categoria && f.categoria.toLowerCase().includes(search.toLowerCase()))
+  const totalDirecionamentos = (f: FileItem) => Number(f.total_direcionamentos || 0);
+
+  // As opções de categoria e turma vêm dos próprios arquivos carregados: nunca
+  // aparece no filtro um valor que não devolveria nenhuma linha.
+  const categorias = useMemo(
+    () =>
+      Array.from(new Set(files.map((f) => f.categoria).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b, 'pt-BR')
+      ),
+    [files]
   );
+
+  const turmasDestino = useMemo(() => {
+    const mapa = new Map<number, string>();
+    files.forEach((f) => {
+      (f.turmas_destino_ids || []).forEach((id, i) => {
+        const nome = (f.turmas_destino || [])[i];
+        if (nome) mapa.set(id, nome);
+      });
+    });
+    return Array.from(mapa, ([id, nome]) => ({ id, nome })).sort((a, b) =>
+      a.nome.localeCompare(b.nome, 'pt-BR')
+    );
+  }, [files]);
+
+  const filteredFiles = useMemo(() => {
+    const termo = search.trim().toLowerCase();
+    return files
+      .filter(
+        (f) =>
+          termo === '' ||
+          f.nome_original.toLowerCase().includes(termo) ||
+          (f.categoria && f.categoria.toLowerCase().includes(termo)) ||
+          (f.enviado_por_nome || '').toLowerCase().includes(termo) ||
+          (f.turmas_destino || []).some((t) => t.toLowerCase().includes(termo)) ||
+          (f.grupos_destino || []).some((g) => g.toLowerCase().includes(termo))
+      )
+      .filter((f) => categoriaFiltro === '' || f.categoria === categoriaFiltro)
+      .filter((f) => {
+        if (destinoFiltro === 'direcionado') return totalDirecionamentos(f) > 0;
+        if (destinoFiltro === 'sem_destino') return totalDirecionamentos(f) === 0;
+        return true;
+      })
+      .filter((f) => turmaFiltro === '' || (f.turmas_destino_ids || []).includes(Number(turmaFiltro)));
+  }, [files, search, categoriaFiltro, destinoFiltro, turmaFiltro]);
+
+  const semDestino = useMemo(() => files.filter((f) => totalDirecionamentos(f) === 0).length, [files]);
+
+  const algumFiltro = search !== '' || categoriaFiltro !== '' || destinoFiltro !== '' || turmaFiltro !== '';
+
+  const limparFiltros = () => {
+    setSearch('');
+    setCategoriaFiltro('');
+    setDestinoFiltro('');
+    setTurmaFiltro('');
+  };
 
   return (
     <div>
@@ -78,21 +159,91 @@ export const GerenciadorArquivosView: React.FC = () => {
 
         <label className="btn btn-primary cursor-pointer">
           <Upload size={18} />
-          {uploading ? 'Enviando...' : 'Fazer Upload de Arquivo'}
-          <input type="file" onChange={handleFileUpload} style={{ display: 'none' }} disabled={uploading} />
+          {uploading
+            ? `Enviando ${progresso?.feito ?? 0} de ${progresso?.total ?? 0}...`
+            : 'Fazer Upload de Arquivos'}
+          <input
+            type="file"
+            multiple
+            onChange={handleFileUpload}
+            style={{ display: 'none' }}
+            disabled={uploading}
+          />
         </label>
       </div>
 
-      <div className="card mb-4" style={{ padding: '1rem' }}>
-        <div className="flex items-center gap-2">
-          <Search size={18} className="text-muted" />
-          <input
-            type="text"
+      <div className="card mb-4" style={{ padding: '0.85rem 1rem' }}>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2" style={{ flex: 1, minWidth: '260px' }}>
+            <Search size={18} className="text-muted" />
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Buscar por nome, categoria, quem enviou, turma ou grupo de destino..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <Filter size={18} className="text-muted" />
+
+          <select
             className="form-control"
-            placeholder="Buscar arquivo por nome ou categoria..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+            style={{ minWidth: '170px' }}
+            value={categoriaFiltro}
+            onChange={(e) => setCategoriaFiltro(e.target.value)}
+          >
+            <option value="">Todas as categorias ({categorias.length})</option>
+            {categorias.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+
+          <select
+            className="form-control"
+            style={{ minWidth: '190px' }}
+            value={destinoFiltro}
+            onChange={(e) => setDestinoFiltro(e.target.value as typeof destinoFiltro)}
+          >
+            <option value="">Qualquer situação</option>
+            <option value="direcionado">Já direcionados</option>
+            <option value="sem_destino">Sem destino ({semDestino})</option>
+          </select>
+
+          <select
+            className="form-control"
+            style={{ minWidth: '190px' }}
+            value={turmaFiltro}
+            onChange={(e) => setTurmaFiltro(e.target.value ? Number(e.target.value) : '')}
+          >
+            <option value="">Todas as turmas de destino ({turmasDestino.length})</option>
+            {turmasDestino.map((t) => (
+              <option key={t.id} value={t.id}>{t.nome}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3" style={{ marginTop: '0.7rem' }}>
+          <span className="text-muted text-sm">
+            Exibindo {filteredFiles.length} de {files.length} arquivo(s).
+          </span>
+
+          {/* Atalho para o caso que trava a distribuição: o que subiu e nunca saiu daqui. */}
+          {semDestino > 0 && destinoFiltro !== 'sem_destino' && (
+            <button
+              onClick={() => setDestinoFiltro('sem_destino')}
+              className="btn btn-secondary btn-sm"
+              style={{ color: '#b45309', borderColor: '#fcd34d', background: '#fffbeb' }}
+            >
+              Ver os {semDestino} sem destino
+            </button>
+          )}
+
+          {algumFiltro && (
+            <button onClick={limparFiltros} className="btn btn-secondary btn-sm">
+              Limpar filtros
+            </button>
+          )}
         </div>
       </div>
 
@@ -143,11 +294,34 @@ export const GerenciadorArquivosView: React.FC = () => {
                   <td>
                     {/* COUNT do Postgres chega como string: "0" é truthy, daí o Number(). */}
                     {Number(f.total_direcionamentos || 0) > 0 ? (
-                      <span className="pill-tag pill-tag-green">
-                        {f.total_direcionamentos} docente{Number(f.total_direcionamentos) === 1 ? '' : 's'}
-                      </span>
+                      <div>
+                        <span className="pill-tag pill-tag-green">
+                          <CheckCircle2 size={11} /> distribuído
+                        </span>
+                        {/* O destino em si importa mais que a contagem de docentes:
+                            é por turma e grupo que a coordenação se orienta. */}
+                        <div className="text-muted text-sm" style={{ marginTop: '0.25rem' }}>
+                          {(f.turmas_destino || []).length > 0 && (
+                            <div title={(f.turmas_destino || []).join(', ')}>
+                              {(f.turmas_destino || []).slice(0, 2).join(', ')}
+                              {(f.turmas_destino || []).length > 2 &&
+                                ` +${(f.turmas_destino || []).length - 2}`}
+                            </div>
+                          )}
+                          {(f.grupos_destino || []).length > 0 && (
+                            <div title={(f.grupos_destino || []).join(', ')}>
+                              {(f.grupos_destino || []).length} grupo
+                              {(f.grupos_destino || []).length === 1 ? '' : 's'}
+                            </div>
+                          )}
+                          <div>
+                            {f.total_direcionamentos} docente
+                            {Number(f.total_direcionamentos) === 1 ? '' : 's'}
+                          </div>
+                        </div>
+                      </div>
                     ) : (
-                      <span className="text-muted text-sm">-</span>
+                      <span className="pill-tag pill-tag-amber">sem destino</span>
                     )}
                   </td>
                   <td>{f.criado_em ? new Date(f.criado_em).toLocaleDateString('pt-BR') : '-'}</td>

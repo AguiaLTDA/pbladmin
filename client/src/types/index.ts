@@ -106,6 +106,36 @@ export interface FileItem {
   criado_em?: string;
   /** Quantos docentes já receberam este arquivo (gerenciador do admin). */
   total_direcionamentos?: number | string;
+  total_turmas?: number | string;
+  total_grupos?: number | string;
+  turmas_destino?: string[];
+  grupos_destino?: string[];
+  turmas_destino_ids?: number[];
+}
+
+/** Resumo do que um grupo já recebeu, para sinalizar antes de enviar de novo. */
+export interface GrupoComMaterial {
+  grupoId: number;
+  total: number;
+  materiais: {
+    atividadeId: number;
+    titulo: string;
+    arquivoId: number | null;
+    arquivoNome: string | null;
+    criadoEm: string;
+  }[];
+}
+
+/** Comentário público do docente sobre um material, lido pela turma. */
+export interface ComentarioMaterial {
+  id: number;
+  texto: string;
+  criado_em: string;
+  grupo_id: number | null;
+  autor_id: number;
+  autor_nome: string;
+  autor_perfil: 'ADMIN' | 'PROFESSOR' | 'ALUNO';
+  grupo_nome: string | null;
 }
 
 export interface SubmissionFile {
@@ -184,6 +214,9 @@ export interface DirecionamentoArquivo {
   turma_codigo?: string | null;
   disciplina_nome?: string | null;
   grupo_nome?: string | null;
+  /** Ids do alvo — necessários para comentar sobre o material na turma certa. */
+  turma_id?: number | null;
+  grupo_id?: number | null;
 }
 
 /** Material que a coordenação direcionou ao professor autenticado. */

@@ -3,7 +3,8 @@ import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { MaterialDirecionado } from '../../types';
 import { VisualizadorArquivo } from '../../components/VisualizadorArquivo';
-import { FolderOpen, Eye, RefreshCw, FileText } from 'lucide-react';
+import { FolderOpen, Eye, RefreshCw, FileText, MessageSquare } from 'lucide-react';
+import { ComentariosMaterial } from '../../components/ComentariosMaterial';
 
 function formatarTamanho(bytes: number): string {
   if (!bytes) return '-';
@@ -20,6 +21,9 @@ export const MateriaisRecebidosProfessorView: React.FC = () => {
   const [materiais, setMateriais] = useState<MaterialDirecionado[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [emFoco, setEmFoco] = useState<MaterialDirecionado | null>(null);
+  // Comentar é ação deliberada: a caixa fica fechada até o docente pedir,
+  // para a tabela não virar um mural.
+  const [comentandoId, setComentandoId] = useState<number | null>(null);
 
   const carregar = () => {
     setCarregando(true);
@@ -92,7 +96,8 @@ export const MateriaisRecebidosProfessorView: React.FC = () => {
                 </thead>
                 <tbody>
                   {itens.map((m) => (
-                    <tr key={m.id}>
+                    <React.Fragment key={m.id}>
+                    <tr>
                       <td>
                         <div className="flex items-center gap-2 font-bold text-sm">
                           <FileText size={15} color="var(--primary)" />
@@ -110,11 +115,38 @@ export const MateriaisRecebidosProfessorView: React.FC = () => {
                         )}
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <button onClick={() => setEmFoco(m)} className="btn btn-primary btn-sm">
-                          <Eye size={14} /> Abrir
-                        </button>
+                        <div className="flex justify-end gap-2" style={{ flexWrap: 'wrap' }}>
+                          <button onClick={() => setEmFoco(m)} className="btn btn-primary btn-sm">
+                            <Eye size={14} /> Abrir
+                          </button>
+                          {/* Só faz sentido comentar o material de uma turma
+                              identificada — sem turma, não há audiência. */}
+                          {m.turma_id && (
+                            <button
+                              onClick={() => setComentandoId(comentandoId === m.id ? null : m.id)}
+                              className="btn btn-secondary btn-sm"
+                              title="Escrever um comentário visível aos alunos desta turma"
+                            >
+                              <MessageSquare size={14} /> Comentar
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
+
+                    {comentandoId === m.id && m.turma_id && (
+                      <tr>
+                        <td colSpan={5} style={{ background: 'var(--bg-main)' }}>
+                          <ComentariosMaterial
+                            arquivoId={m.arquivo_id}
+                            turmaId={m.turma_id}
+                            grupoId={m.grupo_id ?? null}
+                            podeComentar
+                          />
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
