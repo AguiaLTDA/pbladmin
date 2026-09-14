@@ -10,6 +10,13 @@ export interface User {
   criado_em?: string;
   /** Aluno que preencheu o Contexto do Aluno o bastante para ganhar a medalha. */
   contextoCompleto?: boolean;
+  /**
+   * CONCLUIDO = já confirmou o e-mail (convite ou "esqueci minha senha").
+   * PENDENTE = convite de primeiro acesso enviado, ainda dentro do prazo.
+   * EXPIRADO = convite enviado e vencido sem uso.
+   * SEM_CONVITE = nunca recebeu convite de primeiro acesso (conta antiga/local).
+   */
+  statusAcesso?: 'CONCLUIDO' | 'PENDENTE' | 'EXPIRADO' | 'SEM_CONVITE';
 }
 
 export type PBLStatus =

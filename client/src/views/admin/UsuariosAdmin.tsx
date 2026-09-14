@@ -3,7 +3,37 @@ import { apiRequest } from '../../services/api';
 import { MedalhaContexto } from '../../components/MedalhaContexto';
 import { User, PerfilRole } from '../../types';
 import { useToast } from '../../context/ToastContext';
-import { Users, UserPlus, Search, ShieldCheck, CheckCircle, XCircle, KeyRound, Copy } from 'lucide-react';
+import { Users, UserPlus, Search, ShieldCheck, CheckCircle, XCircle, KeyRound, Copy, Clock, AlertTriangle, MinusCircle } from 'lucide-react';
+
+const ESTILO_ACESSO: Record<
+  NonNullable<User['statusAcesso']>,
+  { rotulo: string; cor: string; icone: React.ReactNode; titulo: string }
+> = {
+  CONCLUIDO: {
+    rotulo: 'Confirmado',
+    cor: '#16a34a',
+    icone: <CheckCircle size={14} />,
+    titulo: 'Já confirmou o e-mail e definiu a própria senha.'
+  },
+  PENDENTE: {
+    rotulo: 'Aguardando',
+    cor: '#b45309',
+    icone: <Clock size={14} />,
+    titulo: 'Convite de primeiro acesso enviado, ainda dentro do prazo — aguardando o usuário clicar no link.'
+  },
+  EXPIRADO: {
+    rotulo: 'Convite expirado',
+    cor: '#dc2626',
+    icone: <AlertTriangle size={14} />,
+    titulo: 'O convite de primeiro acesso venceu sem uso. O usuário pode usar "Esqueci minha senha", ou use "Redefinir senha" aqui ao lado.'
+  },
+  SEM_CONVITE: {
+    rotulo: 'Sem registro',
+    cor: '#64748b',
+    icone: <MinusCircle size={14} />,
+    titulo: 'Nunca recebeu um convite de primeiro acesso por este sistema (conta antiga ou criada manualmente).'
+  }
+};
 
 export const UsuariosAdminView: React.FC = () => {
   const { showToast } = useToast();
@@ -160,6 +190,7 @@ export const UsuariosAdminView: React.FC = () => {
                 <th>E-mail Institucional</th>
                 <th>Perfil de Acesso</th>
                 <th>Status</th>
+                <th>Primeiro Acesso</th>
                 <th>Data de Cadastro</th>
                 <th style={{ textAlign: 'right' }}>Ação</th>
               </tr>
@@ -189,6 +220,20 @@ export const UsuariosAdminView: React.FC = () => {
                         <XCircle size={14} /> Inativo
                       </span>
                     )}
+                  </td>
+                  <td>
+                    {(() => {
+                      const estilo = ESTILO_ACESSO[u.statusAcesso || 'SEM_CONVITE'];
+                      return (
+                        <span
+                          className="flex items-center gap-1 text-sm font-bold"
+                          style={{ color: estilo.cor }}
+                          title={estilo.titulo}
+                        >
+                          {estilo.icone} {estilo.rotulo}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td>{u.criado_em ? new Date(u.criado_em).toLocaleDateString('pt-BR') : '-'}</td>
                   <td style={{ textAlign: 'right' }}>

@@ -12,10 +12,19 @@ export async function listUsers(req: AuthenticatedRequest, res: Response) {
     const { perfil, busca } = req.query;
     let sql = `
       SELECT u.id, u.nome, u.email, u.perfil_id, p.nome as perfil_nome, u.ativo, u.criado_em,
+             u.email_verificado_em,
+             convite.expira_em as convite_expira_em, convite.usado_em as convite_usado_em,
              (ca.completed_at IS NOT NULL) as contexto_completo
       FROM usuarios u
       JOIN perfis p ON u.perfil_id = p.id
       LEFT JOIN contexto_aluno ca ON ca.usuario_id = u.id
+      -- Convite de primeiro acesso mais recente do usuário (ver services/tokens.ts).
+      -- Alimenta a coluna "Primeiro Acesso" da tela de Gestão de Usuários.
+      LEFT JOIN LATERAL (
+        SELECT expira_em, usado_em FROM tokens_email t
+         WHERE t.usuario_id = u.id AND t.tipo = 'PRIMEIRO_ACESSO'
+         ORDER BY t.criado_em DESC LIMIT 1
+      ) convite ON true
       WHERE u.deletado_em IS NULL
     `;
     const params: any[] = [];
@@ -31,17 +40,32 @@ export async function listUsers(req: AuthenticatedRequest, res: Response) {
     sql += ` ORDER BY u.nome ASC`;
 
     const users = await queryAsync<any>(sql, params);
+    const agora = new Date();
+
     // O frontend espera perfilId/perfilNome (camelCase); o SQL devolve snake_case.
-    const mapped = users.map((u) => ({
-      id: u.id,
-      nome: u.nome,
-      email: u.email,
-      perfilId: u.perfil_id,
-      perfilNome: u.perfil_nome,
-      ativo: u.ativo,
-      criado_em: u.criado_em,
-      contextoCompleto: !!u.contexto_completo
-    }));
+    const mapped = users.map((u) => {
+      // CONCLUIDO: já confirmou o e-mail (pelo link do convite ou por "esqueci
+      // minha senha") — é o sinal definitivo, vale mesmo sem convite registrado.
+      // PENDENTE/EXPIRADO só distinguem POR QUE ainda não confirmou.
+      let statusAcesso: 'CONCLUIDO' | 'PENDENTE' | 'EXPIRADO' | 'SEM_CONVITE' = 'SEM_CONVITE';
+      if (u.email_verificado_em) {
+        statusAcesso = 'CONCLUIDO';
+      } else if (u.convite_expira_em) {
+        statusAcesso = new Date(u.convite_expira_em) > agora ? 'PENDENTE' : 'EXPIRADO';
+      }
+
+      return {
+        id: u.id,
+        nome: u.nome,
+        email: u.email,
+        perfilId: u.perfil_id,
+        perfilNome: u.perfil_nome,
+        ativo: u.ativo,
+        criado_em: u.criado_em,
+        contextoCompleto: !!u.contexto_completo,
+        statusAcesso
+      };
+    });
     return res.json(mapped);
   } catch (err) {
     return res.status(500).json({ message: 'Erro ao listar usuários.' });
