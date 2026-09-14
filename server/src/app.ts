@@ -42,11 +42,30 @@ async function startServer() {
     await runMigrations();
 
     // A grade acadêmica é a fonte da verdade do vínculo Professor <-> Turma <-> Disciplina.
-    const grade = await importarHorarioAcademico();
-    console.log(
-      `📅 Horário acadêmico importado: ${grade.aulas} aulas, ${grade.turmas} turmas novas, ` +
-        `${grade.professores} docentes (${grade.professoresCriados} criados), ${grade.vinculos} vínculos.`
-    );
+    //
+    // Falhar aqui NÃO derruba o servidor. Importar a grade é carga de dados, não
+    // estrutura: com os vínculos da rodada anterior já no banco, a API serve
+    // normalmente, e a próxima subida reimporta. Tratar isso como fatal fez um
+    // deploy inteiro falhar por uma colisão entre dois processos importando ao
+    // mesmo tempo — o portal ficou fora do ar por um passo que podia ter sido
+    // apenas adiado.
+    try {
+      const grade = await importarHorarioAcademico();
+      if (grade.ignorado) {
+        console.log('📅 Horário acadêmico: outra instância já está importando — rodada ignorada.');
+      } else {
+        console.log(
+          `📅 Horário acadêmico importado: ${grade.aulas} aulas, ${grade.turmas} turmas novas, ` +
+            `${grade.professores} docentes (${grade.professoresCriados} criados), ${grade.vinculos} vínculos.`
+        );
+      }
+    } catch (err) {
+      console.error(
+        '⚠️  Falha ao importar o horário acadêmico — o servidor sobe assim mesmo com os vínculos ' +
+          'da última importação bem-sucedida. Verifique a grade:',
+        err
+      );
+    }
 
     // Diagnostico do e-mail transacional: sem ele o autocadastro volta a liberar
     // acesso sem validar e a recuperacao de senha responde indisponivel — melhor

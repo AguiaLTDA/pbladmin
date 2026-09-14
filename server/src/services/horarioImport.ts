@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import { getAsync, queryAsync, runAsync } from '../config/db';
+import { getAsync, pool, queryAsync, runAsync } from '../config/db';
 import {
   AulaHorario,
   HORARIO_ACADEMICO,
@@ -52,7 +52,23 @@ interface ImportStats {
   professoresCriados: number;
   aulas: number;
   vinculos: number;
+  /** true quando outro processo já estava importando e este pulou a rodada. */
+  ignorado?: boolean;
 }
+
+/**
+ * Chave do advisory lock que serializa a importação da grade.
+ *
+ * A importação apaga `horarios_academicos` e reinsere tudo. Dois processos
+ * fazendo isso ao mesmo tempo produzem exatamente o erro que derrubou o deploy
+ * de 14/09/2026: o segundo apaga as linhas que o primeiro acabou de inserir, e o
+ * INSERT em `horarios_turmas` viola `horarios_turmas_horario_id_fkey`.
+ *
+ * Isso acontece mais do que parece num plano que hiberna: uma requisição que
+ * acorda a instância antiga enquanto o deploy novo inicializa já bastam para ter
+ * dois processos importando em paralelo.
+ */
+const LOCK_IMPORTACAO_HORARIO = 8140926;
 
 /**
  * Importa a grade de horário acadêmico e deriva dela os vínculos
@@ -64,6 +80,40 @@ interface ImportStats {
 export async function importarHorarioAcademico(
   aulas: AulaHorario[] = HORARIO_ACADEMICO
 ): Promise<ImportStats> {
+  // O lock é por conexão, então precisa de um client dedicado — pegar e soltar
+  // pelo pool poderia cair em conexões diferentes e nunca liberar.
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query('SELECT pg_try_advisory_lock($1) AS obtido', [
+      LOCK_IMPORTACAO_HORARIO
+    ]);
+
+    if (!rows[0]?.obtido) {
+      // Outro processo já está importando a mesma grade. Esperar não traria
+      // nada: o resultado seria idêntico ao que ele vai gravar.
+      return {
+        cursos: 0,
+        disciplinas: 0,
+        turmas: 0,
+        professores: 0,
+        professoresCriados: 0,
+        aulas: 0,
+        vinculos: 0,
+        ignorado: true
+      };
+    }
+
+    try {
+      return await executarImportacao(aulas);
+    } finally {
+      await client.query('SELECT pg_advisory_unlock($1)', [LOCK_IMPORTACAO_HORARIO]);
+    }
+  } finally {
+    client.release();
+  }
+}
+
+async function executarImportacao(aulas: AulaHorario[]): Promise<ImportStats> {
   const stats: ImportStats = {
     cursos: 0,
     disciplinas: 0,
