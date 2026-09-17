@@ -87,6 +87,11 @@ router.get('/academic/groups/:id/membros', authenticateToken, academicCtrl.listG
 router.post('/academic/groups/:id/membros', authenticateToken, requireRole('ALUNO', 'ADMIN'), academicCtrl.addGroupMember);
 router.delete('/academic/groups/:id/membros/:usuarioId', authenticateToken, requireRole('ADMIN'), academicCtrl.removeGroupMember);
 
+// Professor líder da turma: designado pela coordenação entre os docentes já
+// vinculados à turma. Papel de interlocução, não de permissão nova.
+router.get('/academic/turma-professores', authenticateToken, requireRole('ADMIN'), academicCtrl.listTurmaProfessores);
+router.put('/academic/classes/:id/lider', authenticateToken, requireRole('ADMIN'), academicCtrl.definirLiderTurma);
+
 router.get('/academic/periods', authenticateToken, academicCtrl.listPeriods);
 
 // --- AUTO-MATRÍCULA DO ALUNO (portal do aluno: escolhe a turma e informa o grupo) ---
@@ -198,6 +203,14 @@ router.post('/files/:id/enviar-para-grupo', authenticateToken, requireRole('ADMI
 // Sinal na tela de envio: quais grupos ja receberam material e o que receberam.
 router.get('/files/grupos-com-material', authenticateToken, requireRole('ADMIN'), fileCtrl.listarGruposComMaterial);
 router.put('/files/:id/tipo-documento', authenticateToken, requireRole('ADMIN'), fileCtrl.definirTipoDocumento);
+
+// Sugestoes da docencia sobre um material (ex.: Pre-PBL 1): visiveis a coordenacao
+// e aos demais docentes da mesma turma, nunca ao aluno. Precisa vir antes de
+// '/files/:id/...' para 'sugestoes' nao virar um id.
+router.get('/files/sugestoes', authenticateToken, requireRole('ADMIN'), fileCtrl.listarSugestoesParaAdmin);
+router.get('/files/:id/sugestoes', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), fileCtrl.listarSugestoesMaterial);
+router.post('/files/:id/sugestoes', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), fileCtrl.sugerirSobreMaterial);
+router.delete('/files/sugestoes/:sugestaoId', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), fileCtrl.excluirSugestaoMaterial);
 
 // Comentarios publicos do docente sobre um material, lidos pela turma.
 router.get('/files/:id/comentarios', authenticateToken, fileCtrl.listarComentariosMaterial);

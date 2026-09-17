@@ -453,6 +453,7 @@ export const GerenciadorArquivosView: React.FC = () => {
         <DirecionarArquivoModal
           arquivoId={arquivoParaDirecionar.id}
           nomeArquivo={arquivoParaDirecionar.nome_original}
+          tipoDocumento={arquivoParaDirecionar.tipo_documento}
           onClose={() => setArquivoParaDirecionar(null)}
           onDirecionado={fetchFiles}
         />

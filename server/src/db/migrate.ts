@@ -125,6 +125,27 @@ export async function runMigrations() {
   await runAsync(`ALTER TABLE arquivos ADD COLUMN IF NOT EXISTS tipo_documento TEXT DEFAULT NULL`);
   await runAsync(`CREATE INDEX IF NOT EXISTS idx_arquivos_tipo_documento ON arquivos(tipo_documento)`);
 
+  // Professor líder da turma, designado pela coordenação. Coluna (e não tabela)
+  // porque é um por turma; nulo enquanto a coordenação não designar ninguém.
+  await runAsync(`ALTER TABLE turmas ADD COLUMN IF NOT EXISTS professor_lider_id INTEGER DEFAULT NULL`);
+
+  // Sugestões da docência sobre um material direcionado (ver comentário do bloco
+  // 31 em schema.sql). Criada aqui também porque schema.sql só roda no seed.
+  await runAsync(
+    `CREATE TABLE IF NOT EXISTS sugestoes_material (
+       id SERIAL PRIMARY KEY,
+       arquivo_id INTEGER NOT NULL REFERENCES arquivos(id),
+       turma_id INTEGER NOT NULL REFERENCES turmas(id),
+       autor_id INTEGER NOT NULL REFERENCES usuarios(id),
+       texto TEXT NOT NULL,
+       deletado_em TIMESTAMPTZ DEFAULT NULL,
+       criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+     )`
+  );
+  await runAsync(
+    `CREATE INDEX IF NOT EXISTS idx_sugestoes_material_alvo ON sugestoes_material(arquivo_id, turma_id)`
+  );
+
   // Cronograma oficial das atividades PBL (ver bloco 32 em schema.sql). Criado
   // aqui também porque schema.sql só roda no seed, e semeado com o padrão de
   // fábrica — que é exatamente o quadro que antes ficava fixo no cliente — para

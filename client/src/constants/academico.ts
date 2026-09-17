@@ -118,11 +118,15 @@ export const PERIODOS_DISPONIVEIS = [
  */
 export const TIPOS_DOCUMENTO = [
   { valor: 'INFORMATIVO', rotulo: 'Informativo' },
+  { valor: 'PRE_PBL_1', rotulo: 'Pré-PBL 1' },
   { valor: 'PBL_1', rotulo: 'PBL 1' },
   { valor: 'ORIENTACAO_ESCRITO', rotulo: 'Orientação — Escrito' },
   { valor: 'FEEDBACK', rotulo: 'Feedback' },
   { valor: 'PBL_ORAL', rotulo: 'PBL Oral' }
 ] as const;
+
+/** Tipo cujo material abre o canal de sugestões entre docência e coordenação. */
+export const TIPO_PRE_PBL_1 = 'PRE_PBL_1';
 
 export const rotuloTipoDocumento = (valor?: string | null): string =>
   TIPOS_DOCUMENTO.find((t) => t.valor === valor)?.rotulo || 'Sem tipo';

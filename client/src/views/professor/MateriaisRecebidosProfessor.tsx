@@ -3,8 +3,10 @@ import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { MaterialDirecionado } from '../../types';
 import { VisualizadorArquivo } from '../../components/VisualizadorArquivo';
-import { FolderOpen, Eye, RefreshCw, FileText, MessageSquare } from 'lucide-react';
+import { FolderOpen, Eye, RefreshCw, FileText, MessageSquare, ClipboardList, Crown } from 'lucide-react';
 import { ComentariosMaterial } from '../../components/ComentariosMaterial';
+import { SugestoesMaterial } from '../../components/SugestoesMaterial';
+import { rotuloTipoDocumento } from '../../constants/academico';
 
 function formatarTamanho(bytes: number): string {
   if (!bytes) return '-';
@@ -24,6 +26,9 @@ export const MateriaisRecebidosProfessorView: React.FC = () => {
   // Comentar é ação deliberada: a caixa fica fechada até o docente pedir,
   // para a tabela não virar um mural.
   const [comentandoId, setComentandoId] = useState<number | null>(null);
+  // Sugerir à coordenação é outro fio, com outra audiência: fica em um painel
+  // próprio para o docente não confundir com o que os alunos leem.
+  const [sugerindoId, setSugerindoId] = useState<number | null>(null);
 
   const carregar = () => {
     setCarregando(true);
@@ -79,15 +84,23 @@ export const MateriaisRecebidosProfessorView: React.FC = () => {
       ) : (
         porAlvo.map(([alvo, itens]) => (
           <div key={alvo} className="card mb-4" style={{ padding: '1.25rem' }}>
-            <span className="pill-tag pill-tag-green" style={{ marginBottom: '0.75rem', display: 'inline-block' }}>
-              {alvo}
-            </span>
+            <div className="flex items-center gap-2 mb-2" style={{ flexWrap: 'wrap' }}>
+              <span className="pill-tag pill-tag-green">{alvo}</span>
+              {/* Quem é o líder importa aqui: é com ele que a coordenação fecha
+                  as sugestões desta turma. */}
+              {itens[0]?.professor_lider_nome && (
+                <span className="pill-tag pill-tag-amber" title="Professor líder designado pela coordenação">
+                  <Crown size={11} /> líder: {itens[0].professor_lider_nome}
+                </span>
+              )}
+            </div>
 
             <div className="table-responsive">
               <table className="table">
                 <thead>
                   <tr>
                     <th>Documento</th>
+                    <th>Tipo</th>
                     <th>Tamanho</th>
                     <th>Observação da coordenação</th>
                     <th>Recebido em</th>
@@ -103,6 +116,9 @@ export const MateriaisRecebidosProfessorView: React.FC = () => {
                           <FileText size={15} color="var(--primary)" />
                           {m.nome_original}
                         </div>
+                      </td>
+                      <td>
+                        <span className="pill-tag pill-tag-green">{rotuloTipoDocumento(m.tipo_documento)}</span>
                       </td>
                       <td>{formatarTamanho(m.tamanho_bytes)}</td>
                       <td className="text-sm">
@@ -130,18 +146,41 @@ export const MateriaisRecebidosProfessorView: React.FC = () => {
                               <MessageSquare size={14} /> Comentar
                             </button>
                           )}
+                          {/* Sem turma não há a quem dirigir a sugestão: o fio é
+                              por (arquivo, turma), como a própria discussão. */}
+                          {m.turma_id && (
+                            <button
+                              onClick={() => setSugerindoId(sugerindoId === m.id ? null : m.id)}
+                              className="btn btn-secondary btn-sm"
+                              title="Sugerir alterações à coordenação (os alunos não veem)"
+                            >
+                              <ClipboardList size={14} /> Sugerir à coordenação
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
 
                     {comentandoId === m.id && m.turma_id && (
                       <tr>
-                        <td colSpan={5} style={{ background: 'var(--bg-main)' }}>
+                        <td colSpan={6} style={{ background: 'var(--bg-main)' }}>
                           <ComentariosMaterial
                             arquivoId={m.arquivo_id}
                             turmaId={m.turma_id}
                             grupoId={m.grupo_id ?? null}
                             podeComentar
+                          />
+                        </td>
+                      </tr>
+                    )}
+
+                    {sugerindoId === m.id && m.turma_id && (
+                      <tr>
+                        <td colSpan={6} style={{ background: 'var(--bg-main)' }}>
+                          <SugestoesMaterial
+                            arquivoId={m.arquivo_id}
+                            turmaId={m.turma_id}
+                            turmaNome={m.turma_nome}
                           />
                         </td>
                       </tr>

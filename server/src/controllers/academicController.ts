@@ -247,6 +247,7 @@ export async function listClasses(req: AuthenticatedRequest, res: Response) {
     let sql = `
       SELECT t.*, d.nome as disciplina_nome, d.codigo as disciplina_codigo,
              COALESCE(c.nome, cd.nome) as curso_nome, p.nome as periodo_nome,
+             lider.nome as professor_lider_nome,
              (SELECT COUNT(*) FROM matriculas m
                 JOIN usuarios ua ON m.usuario_id = ua.id AND ua.deletado_em IS NULL
                WHERE m.turma_id = t.id AND m.deletado_em IS NULL) as total_alunos
@@ -254,6 +255,7 @@ export async function listClasses(req: AuthenticatedRequest, res: Response) {
       LEFT JOIN disciplinas d ON t.disciplina_id = d.id
       LEFT JOIN cursos c ON t.curso_id = c.id
       LEFT JOIN cursos cd ON d.curso_id = cd.id
+      LEFT JOIN usuarios lider ON t.professor_lider_id = lider.id
       JOIN periodos_letivos p ON t.periodo_letivo_id = p.id
       WHERE t.deletado_em IS NULL
     `;
@@ -889,6 +891,8 @@ export async function listMyBindings(req: AuthenticatedRequest, res: Response) {
     const turmas = await queryAsync(
       `SELECT t.id, t.codigo, t.nome, t.periodo_curso, t.turno,
               c.nome as curso_nome, pl.nome as periodo_nome,
+              t.professor_lider_id,
+              (SELECT nome FROM usuarios l WHERE l.id = t.professor_lider_id) as professor_lider_nome,
               (SELECT COUNT(*) FROM matriculas m
                 JOIN usuarios ua ON m.usuario_id = ua.id AND ua.deletado_em IS NULL
                WHERE m.turma_id = t.id AND m.deletado_em IS NULL) as total_alunos,
@@ -1400,5 +1404,115 @@ export async function aprovarEReplicarOrientador(req: AuthenticatedRequest, res:
   } catch (err) {
     console.error('Erro ao aprovar e replicar arquivo orientador:', err);
     return res.status(500).json({ message: 'Erro ao aprovar e replicar o arquivo orientador.' });
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* PROFESSOR LÍDER DA TURMA                                                    */
+/* -------------------------------------------------------------------------- */
+/**
+ * A coordenação designa um docente como líder de cada turma. Ele não ganha
+ * permissão nova — o papel é de interlocução: é quem consolida com os colegas
+ * as sugestões sobre o material (ver `sugestoes_material`) e a quem a
+ * coordenação se dirige quando a turma tem vários professores.
+ *
+ * Só entra quem já leciona na turma pela grade: líder sem vínculo não veria o
+ * material que deveria liderar, porque as telas do docente são todas filtradas
+ * por `vinculos_professores`.
+ */
+
+/** ADMIN: docentes vinculados a cada turma, para montar o seletor de líder. */
+export async function listTurmaProfessores(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { turmaId } = req.query;
+    const params: any[] = [];
+    let filtro = '';
+    if (turmaId) {
+      filtro = ' AND vp.turma_id = ?';
+      params.push(Number(turmaId));
+    }
+
+    const list = await queryAsync(
+      `SELECT DISTINCT vp.turma_id, u.id as professor_id, u.nome as professor_nome, u.email as professor_email
+         FROM vinculos_professores vp
+         JOIN usuarios u ON vp.usuario_id = u.id AND u.deletado_em IS NULL
+         JOIN turmas t ON vp.turma_id = t.id AND t.deletado_em IS NULL
+        WHERE vp.ativo = 1${filtro}
+        ORDER BY u.nome ASC`,
+      params
+    );
+    return res.json(list);
+  } catch (err) {
+    console.error('Erro ao listar docentes por turma:', err);
+    return res.status(500).json({ message: 'Erro ao listar os docentes das turmas.' });
+  }
+}
+
+/** ADMIN: designa (ou remove, com professorId nulo) o líder de uma turma. */
+export async function definirLiderTurma(req: AuthenticatedRequest, res: Response) {
+  try {
+    const adminId = req.user?.id;
+    const turmaId = Number(req.params.id);
+    if (!Number.isInteger(turmaId)) return res.status(400).json({ message: 'Turma inválida.' });
+
+    const turma = await getAsync<{ id: number; nome: string }>(
+      `SELECT id, nome FROM turmas WHERE id = ? AND deletado_em IS NULL`,
+      [turmaId]
+    );
+    if (!turma) return res.status(404).json({ message: 'Turma não encontrada.' });
+
+    const bruto = req.body?.professorId;
+    // Corpo sem professorId (ou com null) significa "esta turma fica sem líder".
+    const professorId = bruto === null || bruto === undefined || bruto === '' ? null : Number(bruto);
+
+    if (professorId === null) {
+      await runAsync(`UPDATE turmas SET professor_lider_id = NULL WHERE id = ?`, [turmaId]);
+      await logAudit(adminId || null, 'REMOVER_LIDER_TURMA', 'turmas', String(turmaId), { turma: turma.nome });
+      return res.json({ message: `${turma.nome} está sem professor líder.`, professorLiderId: null });
+    }
+
+    if (!Number.isInteger(professorId)) {
+      return res.status(400).json({ message: 'Professor inválido.' });
+    }
+
+    const professor = await getAsync<{ id: number; nome: string }>(
+      `SELECT u.id, u.nome
+         FROM usuarios u JOIN perfis p ON u.perfil_id = p.id
+        WHERE u.id = ? AND p.nome = 'PROFESSOR' AND u.deletado_em IS NULL`,
+      [professorId]
+    );
+    if (!professor) return res.status(404).json({ message: 'Professor não encontrado.' });
+
+    const vinculo = await getAsync<{ id: number }>(
+      `SELECT id FROM vinculos_professores WHERE usuario_id = ? AND turma_id = ? AND ativo = 1`,
+      [professorId, turmaId]
+    );
+    if (!vinculo) {
+      return res.status(400).json({
+        message: `${professor.nome} não leciona em ${turma.nome}. Vincule o docente à turma antes de designá-lo líder.`
+      });
+    }
+
+    await runAsync(`UPDATE turmas SET professor_lider_id = ? WHERE id = ?`, [professorId, turmaId]);
+
+    await runAsync(`INSERT INTO notificacoes (usuario_id, titulo, mensagem, link) VALUES (?, ?, ?, ?)`, [
+      professorId,
+      'Você é o professor líder de uma turma',
+      `A coordenação designou você como professor líder de ${turma.nome}.`,
+      '/professor/turmas'
+    ]);
+
+    await logAudit(adminId || null, 'DEFINIR_LIDER_TURMA', 'turmas', String(turmaId), {
+      turma: turma.nome,
+      professor: professor.nome
+    });
+
+    return res.json({
+      message: `${professor.nome} é o professor líder de ${turma.nome}.`,
+      professorLiderId: professorId
+    });
+  } catch (err) {
+    console.error('Erro ao definir líder da turma:', err);
+    return res.status(500).json({ message: 'Erro ao definir o professor líder.' });
   }
 }

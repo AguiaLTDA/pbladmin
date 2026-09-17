@@ -498,9 +498,12 @@ export async function listarMeusDirecionados(req: AuthenticatedRequest, res: Res
     const list = await queryAsync(
       `SELECT ad.id, ad.observacao, ad.criado_em, ad.turma_id, ad.grupo_id,
               ar.id as arquivo_id, ar.nome_original, ar.tamanho_bytes, ar.mime_type, ar.categoria,
+              ar.tipo_documento,
               c.nome as curso_nome, t.nome as turma_nome, t.codigo as turma_codigo,
               d.nome as disciplina_nome, g.nome as grupo_nome,
-              quem.nome as direcionado_por_nome
+              quem.nome as direcionado_por_nome,
+              t.professor_lider_id,
+              lider.nome as professor_lider_nome
        FROM arquivos_direcionados ad
        JOIN arquivos ar ON ad.arquivo_id = ar.id AND ar.deletado_em IS NULL
        LEFT JOIN cursos c ON ad.curso_id = c.id
@@ -508,6 +511,7 @@ export async function listarMeusDirecionados(req: AuthenticatedRequest, res: Res
        LEFT JOIN disciplinas d ON ad.disciplina_id = d.id
        LEFT JOIN grupos g ON ad.grupo_id = g.id
        LEFT JOIN usuarios quem ON ad.direcionado_por = quem.id
+       LEFT JOIN usuarios lider ON t.professor_lider_id = lider.id
        WHERE ad.professor_id = ?
        ORDER BY ad.criado_em DESC`,
       [professorId]
@@ -1055,5 +1059,213 @@ export async function definirTipoDocumento(req: AuthenticatedRequest, res: Respo
   } catch (err) {
     console.error('Erro ao definir tipo de documento:', err);
     return res.status(500).json({ message: 'Erro ao atualizar o tipo de documento.' });
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* SUGESTÕES DA DOCÊNCIA SOBRE UM MATERIAL (ex.: Pré-PBL 1)                    */
+/* -------------------------------------------------------------------------- */
+/**
+ * Canal fechado aos alunos. A coordenação direciona o material (tipicamente o
+ * Pré-PBL 1) aos docentes da turma; eles respondem aqui com comentários e
+ * pedidos de alteração, e a coordenação lê tudo na aba "Revisão Docente".
+ *
+ * A audiência do lado docente é a turma inteira, não o autor: dois professores
+ * da mesma turma precisam ler a sugestão um do outro, senão mandam pedidos
+ * contraditórios sobre o mesmo arquivo. O aluno nunca entra — é o que separa
+ * isto de `comentarios_material`, que existe justamente para ser lido por ele.
+ */
+
+/** ADMIN sempre; PROFESSOR apenas nas turmas em que leciona. Aluno, nunca. */
+async function podeVerSugestoes(
+  user: { id: number; perfilNome: string },
+  turmaId: number
+): Promise<boolean> {
+  if (user.perfilNome === 'ADMIN') return true;
+  if (user.perfilNome !== 'PROFESSOR') return false;
+
+  const vinculo = await getAsync<{ id: number }>(
+    `SELECT id FROM vinculos_professores WHERE usuario_id = ? AND turma_id = ? AND ativo = 1`,
+    [user.id, turmaId]
+  );
+  return !!vinculo;
+}
+
+export async function listarSugestoesMaterial(req: AuthenticatedRequest, res: Response) {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Não autenticado.' });
+
+    const arquivoId = Number(req.params.id);
+    const turmaId = Number(req.query.turmaId);
+    if (!Number.isInteger(arquivoId) || !Number.isInteger(turmaId)) {
+      return res.status(400).json({ message: 'Informe o arquivo e a turma.' });
+    }
+
+    if (!(await podeVerSugestoes(user, turmaId))) {
+      return res.status(403).json({ message: 'Esta discussão é restrita à coordenação e aos docentes da turma.' });
+    }
+
+    const turma = await getAsync<{ professor_lider_id: number | null; professor_lider_nome: string | null }>(
+      `SELECT t.professor_lider_id, l.nome as professor_lider_nome
+         FROM turmas t LEFT JOIN usuarios l ON t.professor_lider_id = l.id
+        WHERE t.id = ?`,
+      [turmaId]
+    );
+
+    const sugestoes = await queryAsync<any>(
+      `SELECT sm.id, sm.texto, sm.criado_em, sm.autor_id,
+              u.nome AS autor_nome, p.nome AS autor_perfil,
+              (t.professor_lider_id = sm.autor_id) AS autor_e_lider
+         FROM sugestoes_material sm
+         JOIN usuarios u ON sm.autor_id = u.id
+         JOIN perfis p ON u.perfil_id = p.id
+         JOIN turmas t ON sm.turma_id = t.id
+        WHERE sm.arquivo_id = ? AND sm.turma_id = ? AND sm.deletado_em IS NULL
+        ORDER BY sm.criado_em ASC`,
+      [arquivoId, turmaId]
+    );
+
+    return res.json({
+      liderId: turma?.professor_lider_id ?? null,
+      liderNome: turma?.professor_lider_nome ?? null,
+      sugestoes
+    });
+  } catch (err) {
+    console.error('Erro ao listar sugestões do material:', err);
+    return res.status(500).json({ message: 'Erro ao listar as sugestões.' });
+  }
+}
+
+/** Escrevem os docentes da turma e a coordenação; o aluno não alcança a rota. */
+export async function sugerirSobreMaterial(req: AuthenticatedRequest, res: Response) {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Não autenticado.' });
+
+    const arquivoId = Number(req.params.id);
+    const turma = Number(req.body?.turmaId);
+    if (!Number.isInteger(arquivoId) || !Number.isInteger(turma)) {
+      return res.status(400).json({ message: 'Informe o arquivo e a turma.' });
+    }
+
+    const conteudo = String(req.body?.texto || '').trim();
+    if (!conteudo) return res.status(400).json({ message: 'Escreva a sugestão antes de enviar.' });
+    if (conteudo.length > 4000) {
+      return res.status(400).json({ message: 'A sugestão deve ter no máximo 4000 caracteres.' });
+    }
+
+    if (!(await podeVerSugestoes(user, turma))) {
+      return res.status(403).json({ message: 'Você não leciona nesta turma.' });
+    }
+
+    const arquivo = await getAsync<{ id: number; nome_original: string }>(
+      `SELECT id, nome_original FROM arquivos WHERE id = ? AND deletado_em IS NULL`,
+      [arquivoId]
+    );
+    if (!arquivo) return res.status(404).json({ message: 'Arquivo não encontrado.' });
+
+    const ins = await runAsync(
+      `INSERT INTO sugestoes_material (arquivo_id, turma_id, autor_id, texto) VALUES (?, ?, ?, ?)`,
+      [arquivoId, turma, user.id, conteudo]
+    );
+
+    // Quem precisa saber: a coordenação (é ela quem altera o material) e os
+    // demais docentes da turma (para não repetirem ou contradizerem o pedido).
+    // O autor não é notificado do próprio texto.
+    const destinatarios = await queryAsync<{ id: number }>(
+      `SELECT DISTINCT u.id
+         FROM usuarios u
+         JOIN perfis p ON u.perfil_id = p.id
+        WHERE u.deletado_em IS NULL AND u.id != ?
+          AND (
+            p.nome = 'ADMIN'
+            OR (p.nome = 'PROFESSOR' AND EXISTS (
+                  SELECT 1 FROM vinculos_professores vp
+                   WHERE vp.usuario_id = u.id AND vp.turma_id = ? AND vp.ativo = 1))
+          )`,
+      [user.id, turma]
+    );
+
+    for (const destinatario of destinatarios) {
+      await runAsync(`INSERT INTO notificacoes (usuario_id, titulo, mensagem, link) VALUES (?, ?, ?, ?)`, [
+        destinatario.id,
+        'Sugestão sobre um material',
+        `${user.nome} comentou o material "${arquivo.nome_original}".`,
+        '/professor/materiais'
+      ]);
+    }
+
+    await logAudit(user.id, 'SUGERIR_SOBRE_MATERIAL', 'sugestoes_material', ins.lastID, {
+      arquivoId,
+      turmaId: turma,
+      notificados: destinatarios.length
+    });
+
+    return res.status(201).json({
+      id: ins.lastID,
+      message: 'Sugestão registrada. A coordenação e os demais docentes da turma foram avisados.'
+    });
+  } catch (err) {
+    console.error('Erro ao registrar sugestão do material:', err);
+    return res.status(500).json({ message: 'Erro ao registrar a sugestão.' });
+  }
+}
+
+/** O autor apaga a própria sugestão; a coordenação apaga qualquer uma. */
+export async function excluirSugestaoMaterial(req: AuthenticatedRequest, res: Response) {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Não autenticado.' });
+
+    const sugestaoId = Number(req.params.sugestaoId);
+    const sugestao = await getAsync<{ id: number; autor_id: number }>(
+      `SELECT id, autor_id FROM sugestoes_material WHERE id = ? AND deletado_em IS NULL`,
+      [sugestaoId]
+    );
+    if (!sugestao) return res.status(404).json({ message: 'Sugestão não encontrada.' });
+
+    if (user.perfilNome !== 'ADMIN' && sugestao.autor_id !== user.id) {
+      return res.status(403).json({ message: 'Você só pode remover as próprias sugestões.' });
+    }
+
+    await runAsync(`UPDATE sugestoes_material SET deletado_em = CURRENT_TIMESTAMP WHERE id = ?`, [sugestaoId]);
+    await logAudit(user.id, 'EXCLUIR_SUGESTAO_MATERIAL', 'sugestoes_material', sugestaoId);
+
+    return res.json({ message: 'Sugestão removida.' });
+  } catch (err) {
+    console.error('Erro ao excluir sugestão:', err);
+    return res.status(500).json({ message: 'Erro ao remover a sugestão.' });
+  }
+}
+
+/**
+ * ADMIN: painel único com todas as sugestões, para a aba "Revisão Docente".
+ * Sem isto, a coordenação teria de abrir arquivo por arquivo para descobrir
+ * onde houve retorno — que é justamente o que ela não sabe de antemão.
+ */
+export async function listarSugestoesParaAdmin(req: AuthenticatedRequest, res: Response) {
+  try {
+    const lista = await queryAsync<any>(
+      `SELECT sm.id, sm.texto, sm.criado_em, sm.autor_id,
+              u.nome AS autor_nome,
+              ar.id AS arquivo_id, ar.nome_original, ar.tipo_documento,
+              t.id AS turma_id, t.nome AS turma_nome,
+              c.nome AS curso_nome,
+              (t.professor_lider_id = sm.autor_id) AS autor_e_lider,
+              lider.nome AS professor_lider_nome
+         FROM sugestoes_material sm
+         JOIN usuarios u ON sm.autor_id = u.id
+         JOIN arquivos ar ON sm.arquivo_id = ar.id
+         JOIN turmas t ON sm.turma_id = t.id
+         LEFT JOIN cursos c ON t.curso_id = c.id
+         LEFT JOIN usuarios lider ON t.professor_lider_id = lider.id
+        WHERE sm.deletado_em IS NULL AND ar.deletado_em IS NULL
+        ORDER BY sm.criado_em DESC`
+    );
+    return res.json(lista);
+  } catch (err) {
+    console.error('Erro ao listar sugestões para o admin:', err);
+    return res.status(500).json({ message: 'Erro ao listar as sugestões dos docentes.' });
   }
 }

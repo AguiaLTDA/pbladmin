@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarDays, MapPin, Users, BookOpen, Wifi } from 'lucide-react';
+import { CalendarDays, MapPin, Users, BookOpen, Wifi, Crown } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { ProfessorBindings, ScheduleEntry, DiaSemana } from '../../types';
 import { useToast } from '../../context/ToastContext';
@@ -76,6 +76,7 @@ export const MinhasTurmasProfessorView: React.FC = () => {
                   <th>Turma</th>
                   <th>Curso</th>
                   <th>Disciplinas que você leciona</th>
+                  <th>Professor líder</th>
                   <th style={{ textAlign: 'right' }}>Alunos</th>
                 </tr>
               </thead>
@@ -91,6 +92,19 @@ export const MinhasTurmasProfessorView: React.FC = () => {
                     <td>{t.curso_nome || '-'}</td>
                     <td className="text-sm">
                       {(t.disciplinas_nomes || '').split(' | ').filter(Boolean).join(' · ') || '-'}
+                    </td>
+                    <td className="text-sm">
+                      {t.professor_lider_nome ? (
+                        <span className="flex items-center gap-2">
+                          <Crown size={13} color="#b45309" />
+                          {t.professor_lider_nome}
+                          {t.professor_lider_id === vinculos?.professorId && (
+                            <span className="pill-tag pill-tag-amber">você</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-muted">Sem líder designado</span>
+                      )}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <strong>{t.total_alunos}</strong>

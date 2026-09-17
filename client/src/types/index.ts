@@ -228,7 +228,42 @@ export interface MaterialDirecionado extends DirecionamentoArquivo {
   tamanho_bytes: number;
   mime_type: string;
   categoria?: string;
+  tipo_documento?: string | null;
   direcionado_por_nome?: string | null;
+  professor_lider_id?: number | null;
+  professor_lider_nome?: string | null;
+}
+
+/**
+ * Sugestão da docência sobre um material direcionado (ex.: Pré-PBL 1).
+ * Diferente de `ComentarioMaterial`, que é lido pelos alunos: esta só alcança a
+ * coordenação e os demais docentes da mesma turma.
+ */
+export interface SugestaoMaterial {
+  id: number;
+  texto: string;
+  criado_em: string;
+  autor_id: number;
+  autor_nome: string;
+  autor_perfil: 'ADMIN' | 'PROFESSOR';
+  autor_e_lider?: boolean | null;
+}
+
+export interface SugestoesMaterialPayload {
+  liderId: number | null;
+  liderNome: string | null;
+  sugestoes: SugestaoMaterial[];
+}
+
+/** Linha do painel da coordenação com as sugestões de todas as turmas. */
+export interface SugestaoMaterialAdminRow extends SugestaoMaterial {
+  arquivo_id: number;
+  nome_original: string;
+  tipo_documento?: string | null;
+  turma_id: number;
+  turma_nome: string;
+  curso_nome?: string | null;
+  professor_lider_nome?: string | null;
 }
 
 export interface NotificationItem {
@@ -290,6 +325,16 @@ export interface TurmaOption {
   disciplina_nome?: string;
   curso_nome?: string;
   periodo_nome?: string;
+  professor_lider_id?: number | null;
+  professor_lider_nome?: string | null;
+}
+
+/** Docente vinculado a uma turma — base do seletor de professor líder. */
+export interface TurmaProfessor {
+  turma_id: number;
+  professor_id: number;
+  professor_nome: string;
+  professor_email?: string;
 }
 
 export interface GrupoOption {
@@ -398,6 +443,9 @@ export interface ProfessorClassBinding {
   periodo_nome?: string;
   total_alunos: number;
   disciplinas_nomes?: string | null;
+  /** Docente designado pela coordenação como líder desta turma. */
+  professor_lider_id?: number | null;
+  professor_lider_nome?: string | null;
 }
 
 export interface ProfessorBindings {

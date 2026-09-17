@@ -65,12 +65,17 @@ CREATE TABLE IF NOT EXISTS turmas (
   periodo_curso INTEGER DEFAULT NULL, -- 2, 4, 6, 8 ...
   turno TEXT DEFAULT 'NOTURNO',
   periodo_letivo_id INTEGER NOT NULL,
+  -- Docente designado pela coordenação como líder desta turma: é ele quem
+  -- consolida com os colegas as sugestões sobre o material do Pré-PBL 1.
+  -- Um por turma (daí ser coluna, e não tabela); nulo = turma sem líder.
+  professor_lider_id INTEGER DEFAULT NULL,
   ativo INTEGER DEFAULT 1,
   deletado_em TIMESTAMPTZ DEFAULT NULL,
   criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (curso_id) REFERENCES cursos(id),
   FOREIGN KEY (disciplina_id) REFERENCES disciplinas(id),
-  FOREIGN KEY (periodo_letivo_id) REFERENCES periodos_letivos(id)
+  FOREIGN KEY (periodo_letivo_id) REFERENCES periodos_letivos(id),
+  FOREIGN KEY (professor_lider_id) REFERENCES usuarios(id)
 );
 
 -- 7. Grupos PBL dentro das turmas
@@ -564,6 +569,31 @@ CREATE TABLE IF NOT EXISTS comentarios_material (
 );
 
 CREATE INDEX IF NOT EXISTS idx_comentarios_material_alvo ON comentarios_material(arquivo_id, turma_id);
+
+-- 31. Sugestoes da docencia sobre um material direcionado (ex.: Pre-PBL 1)
+-- Terceiro canal de comentario do sistema, e o unico fechado aos alunos:
+--   * comentarios_orientador -> docente comenta o PROPRIO kit, so a coordenacao le;
+--   * comentarios_material   -> docente comenta PARA A TURMA, o aluno le;
+--   * sugestoes_material     -> docentes da turma discutem o material ENTRE SI
+--                               e com a coordenacao; o aluno nunca le.
+-- A audiencia e a turma inteira do lado docente de proposito: dois professores
+-- da mesma turma precisam ver a sugestao um do outro para nao mandarem pedidos
+-- contraditorios sobre o mesmo arquivo. Por isso a chave e (arquivo, turma) e
+-- nao (arquivo, autor).
+CREATE TABLE IF NOT EXISTS sugestoes_material (
+  id SERIAL PRIMARY KEY,
+  arquivo_id INTEGER NOT NULL,
+  turma_id INTEGER NOT NULL,
+  autor_id INTEGER NOT NULL,
+  texto TEXT NOT NULL,
+  deletado_em TIMESTAMPTZ DEFAULT NULL,
+  criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (arquivo_id) REFERENCES arquivos(id),
+  FOREIGN KEY (turma_id) REFERENCES turmas(id),
+  FOREIGN KEY (autor_id) REFERENCES usuarios(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sugestoes_material_alvo ON sugestoes_material(arquivo_id, turma_id);
 
 -- 32. Cronograma oficial das atividades PBL do semestre.
 -- Antes ficava fixo no código do cliente (client/src/constants/academico.ts);

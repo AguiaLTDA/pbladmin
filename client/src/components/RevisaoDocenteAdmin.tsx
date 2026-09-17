@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { RevisaoDocentePayload, OrientadorReviewRow, RevisaoPBLGrupo } from '../types';
-import { MessageSquare, Award, BookOpen, RefreshCw } from 'lucide-react';
+import { RevisaoDocentePayload, OrientadorReviewRow, RevisaoPBLGrupo, SugestaoMaterialAdminRow } from '../types';
+import { MessageSquare, Award, BookOpen, RefreshCw, ClipboardList, Crown } from 'lucide-react';
+import { rotuloTipoDocumento } from '../constants/academico';
 
-type Aba = 'orientador' | 'pbl';
+type Aba = 'orientador' | 'pbl' | 'materiais';
 
 /** Rótulo de segmentação: curso • turma • disciplina, omitindo o que não houver. */
 function segmento(curso?: string | null, turma?: string | null, disciplina?: string | null): string {
@@ -33,6 +34,10 @@ export const RevisaoDocenteAdmin: React.FC = () => {
   const [carregando, setCarregando] = useState(true);
   const [aba, setAba] = useState<Aba>('orientador');
   const [filtroProfessor, setFiltroProfessor] = useState('');
+  // As sugestões sobre materiais direcionados vêm de outro endpoint: elas não
+  // pertencem ao kit do professor nem às entregas dos grupos, e sim ao arquivo
+  // que a coordenação mandou para a turma revisar.
+  const [sugestoes, setSugestoes] = useState<SugestaoMaterialAdminRow[]>([]);
 
   const carregar = () => {
     setCarregando(true);
@@ -40,6 +45,10 @@ export const RevisaoDocenteAdmin: React.FC = () => {
       .then((res) => setDados({ orientador: res.orientador || [], pblGrupos: res.pblGrupos || [] }))
       .catch((err: any) => showToast(err.message || 'Erro ao carregar a revisão docente.', 'error'))
       .finally(() => setCarregando(false));
+
+    apiRequest<SugestaoMaterialAdminRow[]>('/files/sugestoes')
+      .then(setSugestoes)
+      .catch(() => setSugestoes([]));
   };
 
   useEffect(() => {
@@ -51,8 +60,14 @@ export const RevisaoDocenteAdmin: React.FC = () => {
     const nomes = new Set<string>();
     dados.orientador.forEach((r) => nomes.add(r.professor_nome));
     dados.pblGrupos.forEach((r) => nomes.add(r.professor_nome));
+    sugestoes.forEach((r) => nomes.add(r.autor_nome));
     return Array.from(nomes).sort();
-  }, [dados]);
+  }, [dados, sugestoes]);
+
+  const sugestoesFiltradas = useMemo(
+    () => sugestoes.filter((r) => !filtroProfessor || r.autor_nome === filtroProfessor),
+    [sugestoes, filtroProfessor]
+  );
 
   const orientadorFiltrado = useMemo(
     () => dados.orientador.filter((r) => !filtroProfessor || r.professor_nome === filtroProfessor),
@@ -172,6 +187,64 @@ export const RevisaoDocenteAdmin: React.FC = () => {
     ));
   };
 
+  /**
+   * Sugestões sobre materiais, agrupadas pelo arquivo + turma — que é a unidade
+   * da discussão. Agrupar por docente, como nas outras abas, separaria o que
+   * dois professores da mesma turma escreveram sobre o mesmo PDF, justamente a
+   * comparação que a coordenação precisa fazer para decidir a alteração.
+   */
+  const renderSugestoes = (itens: SugestaoMaterialAdminRow[]) => {
+    if (itens.length === 0) {
+      return (
+        <div className="card text-center py-8">
+          <ClipboardList size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
+          <h3 className="font-bold">Nenhuma sugestão sobre materiais</h3>
+          <p className="text-muted text-sm">
+            Quando um docente comentar um material direcionado (ex.: o Pré-PBL 1), a sugestão aparece
+            aqui por arquivo e turma. Os alunos não veem estas mensagens.
+          </p>
+        </div>
+      );
+    }
+
+    return agrupar(itens, (r) => `${r.arquivo_id}|${r.turma_id}`).map(([chave, lista]) => {
+      const cabeca = lista[0];
+      return (
+        <div key={chave} className="card mb-4" style={{ padding: '1.25rem' }}>
+          <div className="font-bold" style={{ fontSize: '1.05rem' }}>{cabeca.nome_original}</div>
+          <div className="flex items-center gap-2 mt-1 mb-3" style={{ flexWrap: 'wrap' }}>
+            <span className="pill-tag">{segmento(cabeca.curso_nome, cabeca.turma_nome)}</span>
+            <span className="pill-tag pill-tag-green">{rotuloTipoDocumento(cabeca.tipo_documento)}</span>
+            {cabeca.professor_lider_nome && (
+              <span className="pill-tag pill-tag-amber" title="Professor líder da turma">
+                <Crown size={11} /> líder: {cabeca.professor_lider_nome}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {lista.map((item) => (
+              <div key={item.id} className="card" style={{ padding: '0.75rem 1rem' }}>
+                <div className="text-sm font-bold flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+                  {item.autor_nome}
+                  {item.autor_e_lider && (
+                    <span className="pill-tag pill-tag-amber"><Crown size={10} /> líder</span>
+                  )}
+                  <span className="text-muted" style={{ fontWeight: 400 }}>
+                    · {new Date(item.criado_em).toLocaleString('pt-BR')}
+                  </span>
+                </div>
+                <div className="text-sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, marginTop: '0.3rem' }}>
+                  {item.texto}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    });
+  };
+
   return (
     <div>
       <div
@@ -218,14 +291,22 @@ export const RevisaoDocenteAdmin: React.FC = () => {
         >
           <Award size={16} /> PBL dos grupos ({pblFiltrado.length})
         </button>
+        <button
+          onClick={() => setAba('materiais')}
+          className={`btn btn-sm ${aba === 'materiais' ? 'btn-primary' : 'btn-secondary'}`}
+        >
+          <ClipboardList size={16} /> Sugestões de materiais ({sugestoesFiltradas.length})
+        </button>
       </div>
 
       {carregando ? (
         <div className="text-center py-8 text-muted">Carregando a revisão docente...</div>
       ) : aba === 'orientador' ? (
         renderOrientador(orientadorFiltrado)
-      ) : (
+      ) : aba === 'pbl' ? (
         renderPBL(pblFiltrado)
+      ) : (
+        renderSugestoes(sugestoesFiltradas)
       )}
     </div>
   );

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
-import { OrientadorFileAdminRow, OrientadorReplicacaoResultado, OrientadorReviewRow } from '../../types';
+import { OrientadorFileAdminRow, OrientadorReplicacaoResultado, OrientadorReviewRow, TurmaProfessor } from '../../types';
 import { GestaoGruposAdmin } from '../../components/GestaoGruposAdmin';
 import { RevisaoDocenteAdmin } from '../../components/RevisaoDocenteAdmin';
-import { BookOpen, Layers, Users, Plus, UserCheck, GraduationCap, Upload, FileText, MessageSquare, CheckCircle2 } from 'lucide-react';
+import { BookOpen, Layers, Users, Plus, UserCheck, GraduationCap, Upload, FileText, MessageSquare, CheckCircle2, Crown } from 'lucide-react';
 
 function formatarTamanho(bytes: number): string {
   if (!bytes) return '-';
@@ -50,6 +50,8 @@ export const AcademicAdminView: React.FC = () => {
   const [professors, setProfessors] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
+  // Docentes vinculados a cada turma: é entre eles que se escolhe o líder.
+  const [turmaProfessores, setTurmaProfessores] = useState<TurmaProfessor[]>([]);
   const [orientadorFiles, setOrientadorFiles] = useState<OrientadorFileAdminRow[]>([]);
   const [orientadorReviews, setOrientadorReviews] = useState<OrientadorReviewRow[]>([]);
   const [orientadorAlvoId, setOrientadorAlvoId] = useState<number | null>(null);
@@ -86,9 +88,10 @@ export const AcademicAdminView: React.FC = () => {
       apiRequest('/academic/users?perfil=ALUNO'),
       apiRequest('/academic/periods'),
       apiRequest('/academic/orientador-files'),
-      apiRequest('/academic/orientador-reviews')
+      apiRequest('/academic/orientador-reviews'),
+      apiRequest('/academic/turma-professores')
     ])
-      .then(([c, d, cl, g, p, s, per, orient, reviews]) => {
+      .then(([c, d, cl, g, p, s, per, orient, reviews, turmaProfs]) => {
         setCourses(c);
         setDisciplines(d);
         setClasses(cl);
@@ -98,6 +101,7 @@ export const AcademicAdminView: React.FC = () => {
         setPeriods(per);
         setOrientadorFiles(orient);
         setOrientadorReviews(reviews);
+        setTurmaProfessores(turmaProfs);
       })
       .catch((err) => showToast(err.message, 'error'));
   };
@@ -105,6 +109,37 @@ export const AcademicAdminView: React.FC = () => {
   useEffect(() => {
     reloadData();
   }, []);
+
+  /**
+   * Designa o professor líder da turma. A lista do seletor sai dos vínculos da
+   * grade: designar quem não leciona ali criaria um líder que nem enxerga o
+   * material da turma, já que as telas do docente são filtradas pelo vínculo.
+   */
+  const handleDefinirLider = async (turmaId: number, professorId: string) => {
+    try {
+      const res = await apiRequest<{ message: string }>(`/academic/classes/${turmaId}/lider`, {
+        method: 'PUT',
+        body: JSON.stringify({ professorId: professorId ? Number(professorId) : null })
+      });
+      showToast(res.message, 'success');
+      // Atualiza só a turma alterada: recarregar tudo faria a tabela piscar no
+      // meio de uma sequência de designações.
+      const nome = turmaProfessores.find((tp) => tp.professor_id === Number(professorId))?.professor_nome;
+      setClasses((atuais) =>
+        atuais.map((c) =>
+          c.id === turmaId
+            ? {
+                ...c,
+                professor_lider_id: professorId ? Number(professorId) : null,
+                professor_lider_nome: professorId ? nome : null
+              }
+            : c
+        )
+      );
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao definir o professor líder.', 'error');
+    }
+  };
 
   const handleCreateCourse = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -342,6 +377,7 @@ export const AcademicAdminView: React.FC = () => {
                   <th>Disciplina</th>
                   <th>Curso</th>
                   <th>Período Letivo</th>
+                  <th>Professor Líder</th>
                   <th>Total de Alunos</th>
                 </tr>
               </thead>
@@ -353,6 +389,37 @@ export const AcademicAdminView: React.FC = () => {
                     <td>{c.disciplina_nome}</td>
                     <td>{c.curso_nome}</td>
                     <td>{c.periodo_nome}</td>
+                    <td>
+                      {(() => {
+                        const docentes = turmaProfessores.filter((tp) => tp.turma_id === c.id);
+                        if (docentes.length === 0) {
+                          return (
+                            <span className="text-muted text-sm">
+                              Nenhum docente vinculado
+                            </span>
+                          );
+                        }
+                        return (
+                          <div className="flex items-center gap-2">
+                            <Crown size={13} color={c.professor_lider_id ? '#b45309' : 'var(--text-muted)'} />
+                            <select
+                              className="form-control"
+                              style={{ fontSize: '0.78rem', padding: '0.25rem 0.4rem', minWidth: '190px' }}
+                              value={c.professor_lider_id || ''}
+                              onChange={(e) => handleDefinirLider(c.id, e.target.value)}
+                              title="Docente que representa a turma perante a coordenação"
+                            >
+                              <option value="">Sem líder designado</option>
+                              {docentes.map((tp) => (
+                                <option key={tp.professor_id} value={tp.professor_id}>
+                                  {tp.professor_nome}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td>{c.total_alunos} alunos</td>
                   </tr>
                 ))}

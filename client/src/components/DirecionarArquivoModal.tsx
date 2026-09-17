@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { GrupoOption, DirecionamentoArquivo, TurmaOption } from '../types';
-import { Send, Trash2, UserCheck, Users, BookOpen, Loader2, CheckSquare } from 'lucide-react';
+import { Send, Trash2, UserCheck, Users, BookOpen, Loader2, CheckSquare, ClipboardList } from 'lucide-react';
+import { TIPO_PRE_PBL_1, rotuloTipoDocumento } from '../constants/academico';
 
 interface CursoOpcao {
   id: number;
@@ -19,6 +20,8 @@ interface AulaGrade {
 interface DirecionarArquivoModalProps {
   arquivoId: number;
   nomeArquivo: string;
+  /** Papel do documento no ciclo do PBL; muda o que a tela explica ao admin. */
+  tipoDocumento?: string | null;
   onClose: () => void;
   onDirecionado: () => void;
 }
@@ -36,9 +39,11 @@ interface DirecionarArquivoModalProps {
 export const DirecionarArquivoModal: React.FC<DirecionarArquivoModalProps> = ({
   arquivoId,
   nomeArquivo,
+  tipoDocumento,
   onClose,
   onDirecionado
 }) => {
+  const ehPrePBL1 = tipoDocumento === TIPO_PRE_PBL_1;
   const { showToast } = useToast();
 
   const [cursos, setCursos] = useState<CursoOpcao[]>([]);
@@ -203,6 +208,23 @@ export const DirecionarArquivoModal: React.FC<DirecionarArquivoModalProps> = ({
             restringir, as <strong>turmas</strong>. Os docentes vinculados a essas turmas recebem o
             material automaticamente — não é preciso selecioná-los.
           </p>
+
+          {/* O Pré-PBL 1 existe para ser revisado antes de virar PBL 1: dizer
+              isso aqui evita que a coordenação o trate como material de aula. */}
+          {ehPrePBL1 && (
+            <div
+              className="card text-sm"
+              style={{ padding: '0.7rem 0.9rem', marginBottom: '1rem', borderLeft: '3px solid #b45309' }}
+            >
+              <div className="font-bold flex items-center gap-2" style={{ marginBottom: '0.25rem' }}>
+                <ClipboardList size={14} color="#b45309" /> {rotuloTipoDocumento(tipoDocumento)}
+              </div>
+              Os docentes das turmas escolhidas poderão comentar e sugerir alterações neste arquivo em
+              "Materiais Recebidos". As sugestões chegam a você na aba <strong>Revisão Docente →
+              Sugestões de materiais</strong> e ficam visíveis também aos demais professores da mesma
+              turma. Os alunos não veem nada disso.
+            </div>
+          )}
 
           <div className="form-group">
             <label className="form-label">Curso</label>

@@ -12,6 +12,10 @@
  */
 export const TIPOS_DOCUMENTO = [
   { valor: 'INFORMATIVO', rotulo: 'Informativo' },
+  // Pré-PBL 1: o material que a coordenação manda ANTES do PBL 1 para a docência
+  // conferir e sugerir mudanças. É o único tipo com um canal de sugestões próprio
+  // (ver `sugestoes_material`), por isso precisa de um valor separado de PBL_1.
+  { valor: 'PRE_PBL_1', rotulo: 'Pré-PBL 1' },
   { valor: 'PBL_1', rotulo: 'PBL 1' },
   { valor: 'ORIENTACAO_ESCRITO', rotulo: 'Orientação — Escrito' },
   { valor: 'FEEDBACK', rotulo: 'Feedback' },
