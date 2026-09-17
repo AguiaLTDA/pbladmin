@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
 import { MedalhaContexto } from '../../components/MedalhaContexto';
 import { User, PerfilRole } from '../../types';
@@ -41,6 +41,10 @@ export const UsuariosAdminView: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   const [perfilFiltro, setPerfilFiltro] = useState('');
+  // Filtrado no cliente, ao contrário do perfil: o status vem calculado na mesma
+  // resposta, então recarregar do servidor para trocar o recorte só acrescentaria
+  // uma ida à rede.
+  const [acessoFiltro, setAcessoFiltro] = useState('');
   const [busca, setBusca] = useState('');
 
   // Modal Novo Usuário
@@ -66,6 +70,23 @@ export const UsuariosAdminView: React.FC = () => {
   useEffect(() => {
     fetchUsers();
   }, [perfilFiltro]);
+
+  const contagemAcesso = useMemo(() => {
+    const c: Record<string, number> = { CONCLUIDO: 0, PENDENTE: 0, EXPIRADO: 0, SEM_CONVITE: 0 };
+    users.forEach((u) => {
+      const st = u.statusAcesso || 'SEM_CONVITE';
+      c[st] = (c[st] || 0) + 1;
+    });
+    return c;
+  }, [users]);
+
+  const usuariosFiltrados = useMemo(
+    () =>
+      acessoFiltro === ''
+        ? users
+        : users.filter((u) => (u.statusAcesso || 'SEM_CONVITE') === acessoFiltro),
+    [users, acessoFiltro]
+  );
 
   const [resetandoId, setResetandoId] = useState<number | null>(null);
   const [senhaGerada, setSenhaGerada] = useState<{ nome: string; email: string; senha: string } | null>(null);
@@ -176,6 +197,51 @@ export const UsuariosAdminView: React.FC = () => {
               <option value="ALUNO">Alunos</option>
             </select>
           </div>
+
+          <div style={{ minWidth: '210px' }}>
+            <select
+              className="form-control"
+              value={acessoFiltro}
+              onChange={(e) => setAcessoFiltro(e.target.value)}
+            >
+              <option value="">Qualquer primeiro acesso</option>
+              <option value="CONCLUIDO">Confirmados ({contagemAcesso.CONCLUIDO})</option>
+              <option value="PENDENTE">Aguardando ({contagemAcesso.PENDENTE})</option>
+              <option value="EXPIRADO">Convite expirado ({contagemAcesso.EXPIRADO})</option>
+              <option value="SEM_CONVITE">Sem registro ({contagemAcesso.SEM_CONVITE})</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3" style={{ marginTop: '0.7rem' }}>
+          <span className="text-muted text-sm">
+            Exibindo {usuariosFiltrados.length} de {users.length} usuário(s).
+          </span>
+
+          {/* Atalho para quem ainda não entrou: é a lista que a coordenação
+              precisa para cobrar ou reenviar convite. */}
+          {contagemAcesso.PENDENTE > 0 && acessoFiltro !== 'PENDENTE' && (
+            <button
+              onClick={() => setAcessoFiltro('PENDENTE')}
+              className="btn btn-secondary btn-sm"
+              style={{ color: '#b45309', borderColor: '#fcd34d', background: '#fffbeb' }}
+            >
+              Ver os {contagemAcesso.PENDENTE} aguardando primeiro acesso
+            </button>
+          )}
+
+          {(acessoFiltro !== '' || perfilFiltro !== '' || busca !== '') && (
+            <button
+              onClick={() => {
+                setAcessoFiltro('');
+                setPerfilFiltro('');
+                setBusca('');
+              }}
+              className="btn btn-secondary btn-sm"
+            >
+              Limpar filtros
+            </button>
+          )}
         </div>
       </div>
 
@@ -196,7 +262,7 @@ export const UsuariosAdminView: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {usuariosFiltrados.map((u) => (
                 <tr key={u.id}>
                   <td>
                     <div className="font-bold">
