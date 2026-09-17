@@ -1,4 +1,5 @@
 import { getAsync, runAsync } from '../config/db';
+import { CRONOGRAMA_PBL_PADRAO } from '../config/cronogramaPadrao';
 
 // schema.sql já cria as tabelas no formato final; o único ajuste que não dá para expressar
 // em CREATE TABLE IF NOT EXISTS é este índice único (parte da chave depende de COALESCE).
@@ -123,4 +124,56 @@ export async function runMigrations() {
   // de `categoria`, que é derivada do MIME e responde outra pergunta.
   await runAsync(`ALTER TABLE arquivos ADD COLUMN IF NOT EXISTS tipo_documento TEXT DEFAULT NULL`);
   await runAsync(`CREATE INDEX IF NOT EXISTS idx_arquivos_tipo_documento ON arquivos(tipo_documento)`);
+
+  // Cronograma oficial das atividades PBL (ver bloco 32 em schema.sql). Criado
+  // aqui também porque schema.sql só roda no seed, e semeado com o padrão de
+  // fábrica — que é exatamente o quadro que antes ficava fixo no cliente — para
+  // que nenhum portal fique com o calendário em branco depois do deploy.
+  await runAsync(
+    `CREATE TABLE IF NOT EXISTS cronograma_pbl (
+       id INTEGER PRIMARY KEY,
+       periodo TEXT NOT NULL,
+       total_avaliativo TEXT NOT NULL,
+       atualizado_por INTEGER REFERENCES usuarios(id),
+       atualizado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+     )`
+  );
+  await runAsync(
+    `CREATE TABLE IF NOT EXISTS cronograma_pbl_etapas (
+       id SERIAL PRIMARY KEY,
+       posicao INTEGER NOT NULL,
+       ordem INTEGER DEFAULT NULL,
+       titulo TEXT NOT NULL,
+       prazo_texto TEXT NOT NULL,
+       fim TEXT NOT NULL,
+       pontos TEXT DEFAULT NULL
+     )`
+  );
+  await runAsync(
+    `CREATE INDEX IF NOT EXISTS idx_cronograma_etapas_posicao ON cronograma_pbl_etapas(posicao)`
+  );
+
+  // Semeadura só na ausência de dados: uma vez que a coordenação editar o
+  // cronograma, subir o servidor de novo não pode desfazer a edição dela.
+  await runAsync(
+    `INSERT INTO cronograma_pbl (id, periodo, total_avaliativo)
+          VALUES (1, ?, ?)
+     ON CONFLICT (id) DO NOTHING`,
+    [CRONOGRAMA_PBL_PADRAO.periodo, CRONOGRAMA_PBL_PADRAO.totalAvaliativo]
+  );
+
+  const etapasExistentes = await getAsync<{ total: string }>(
+    `SELECT COUNT(*) as total FROM cronograma_pbl_etapas`
+  );
+  if (Number(etapasExistentes?.total || 0) === 0) {
+    let posicao = 0;
+    for (const etapa of CRONOGRAMA_PBL_PADRAO.etapas) {
+      posicao += 1;
+      await runAsync(
+        `INSERT INTO cronograma_pbl_etapas (posicao, ordem, titulo, prazo_texto, fim, pontos)
+              VALUES (?, ?, ?, ?, ?, ?)`,
+        [posicao, etapa.ordem, etapa.titulo, etapa.prazoTexto, etapa.fim, etapa.pontos || null]
+      );
+    }
+  }
 }

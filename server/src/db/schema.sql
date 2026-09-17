@@ -564,3 +564,31 @@ CREATE TABLE IF NOT EXISTS comentarios_material (
 );
 
 CREATE INDEX IF NOT EXISTS idx_comentarios_material_alvo ON comentarios_material(arquivo_id, turma_id);
+
+-- 32. Cronograma oficial das atividades PBL do semestre.
+-- Antes ficava fixo no código do cliente (client/src/constants/academico.ts);
+-- virou tabela para a coordenação editar pelo portal administrativo e as três
+-- audiências (admin, professor e aluno) lerem sempre a MESMA fonte.
+-- `cronograma_pbl` é linha única (id = 1) só com o cabeçalho do quadro.
+CREATE TABLE IF NOT EXISTS cronograma_pbl (
+  id INTEGER PRIMARY KEY,
+  periodo TEXT NOT NULL,
+  total_avaliativo TEXT NOT NULL,
+  atualizado_por INTEGER,
+  atualizado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (atualizado_por) REFERENCES usuarios(id)
+);
+
+-- `posicao` manda na ordem de exibição; `ordem` é só a numeração divulgada pela
+-- coordenação (nula na etapa preparatória), por isso as duas colunas existem.
+CREATE TABLE IF NOT EXISTS cronograma_pbl_etapas (
+  id SERIAL PRIMARY KEY,
+  posicao INTEGER NOT NULL,
+  ordem INTEGER DEFAULT NULL,
+  titulo TEXT NOT NULL,
+  prazo_texto TEXT NOT NULL,
+  fim TEXT NOT NULL,
+  pontos TEXT DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cronograma_etapas_posicao ON cronograma_pbl_etapas(posicao);

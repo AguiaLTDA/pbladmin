@@ -1,5 +1,6 @@
 import React from 'react';
-import { CRONOGRAMA_PBL, EtapaCronogramaPBL } from '../constants/academico';
+import { EtapaCronogramaPBL } from '../constants/academico';
+import { useCronograma } from '../services/cronograma';
 import { CalendarDays, CheckCircle2, Clock, Award } from 'lucide-react';
 
 type SituacaoEtapa = 'ENCERRADA' | 'PROXIMA' | 'PREVISTA';
@@ -28,10 +29,14 @@ const ESTILO_SITUACAO: Record<SituacaoEtapa, { rotulo: string; fundo: string; co
 
 /**
  * Cronograma oficial das atividades PBL do semestre. A mesma peça aparece no
- * portal do professor e no do aluno, para que os dois vejam as mesmas datas.
+ * portal do professor e no do aluno, para que os dois vejam as mesmas datas —
+ * e agora também na tela do admin, como pré-visualização do que foi editado.
+ * As datas vêm do banco (ver services/cronograma.ts), que se recarrega sozinho
+ * quando a coordenação salva uma alteração.
  */
 export const CronogramaPBL: React.FC = () => {
-  const { periodo, totalAvaliativo, etapas } = CRONOGRAMA_PBL;
+  const { dados } = useCronograma();
+  const { periodo, totalAvaliativo, etapas } = dados;
   const situacoes = calcularSituacoes(etapas);
 
   return (
@@ -61,7 +66,7 @@ export const CronogramaPBL: React.FC = () => {
 
           return (
             <li
-              key={etapa.titulo}
+              key={`${indice}-${etapa.titulo}`}
               className="flex items-center"
               style={{
                 flexWrap: 'wrap',

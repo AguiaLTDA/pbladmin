@@ -57,6 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate, aberto
     { path: '/admin/entregas', label: 'Entregas & Relatórios', icon: Award },
     { path: '/admin/arquivos', label: 'Gerenciador de Arquivos', icon: FolderOpen },
     { path: '/admin/relatorios', label: 'Relatórios & Exportação', icon: BarChart3 },
+    { path: '/admin/cronograma', label: 'Calendário de Prazos', icon: Calendar },
     { path: '/admin/auditoria', label: 'Trilha de Auditoria', icon: ShieldCheck },
     { path: '/admin/configuracoes', label: 'Configurações PBL', icon: Settings }
   ];
@@ -66,6 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate, aberto
     { path: '/professor/turmas', label: 'Minhas Turmas & Horário', icon: CalendarDays },
     { path: '/professor/alunos', label: 'Alunos & Grupos', icon: Briefcase },
     { path: '/professor/entregas', label: 'Acompanhamento & Entregas', icon: Award },
+    { path: '/professor/calendario', label: 'Calendário de Prazos', icon: Calendar },
     { path: '/professor/arquivo-orientador', label: 'Arquivo Orientador', icon: BookOpen },
     { path: '/professor/materiais', label: 'Materiais Recebidos', icon: FolderOpen }
   ];

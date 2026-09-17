@@ -13,6 +13,7 @@ import * as notifCtrl from '../controllers/notificationController';
 import * as auditCtrl from '../controllers/auditController';
 import * as preCadastroCtrl from '../controllers/preCadastroController';
 import * as contextoCtrl from '../controllers/contextoAlunoController';
+import * as cronogramaCtrl from '../controllers/cronogramaController';
 
 const router = Router();
 
@@ -202,6 +203,12 @@ router.put('/files/:id/tipo-documento', authenticateToken, requireRole('ADMIN'),
 router.get('/files/:id/comentarios', authenticateToken, fileCtrl.listarComentariosMaterial);
 router.post('/files/:id/comentarios', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), fileCtrl.comentarMaterial);
 router.delete('/files/comentarios/:comentarioId', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), fileCtrl.excluirComentarioMaterial);
+
+// --- CRONOGRAMA OFICIAL DAS ATIVIDADES PBL ---
+// Leitura liberada a qualquer autenticado (o quadro aparece igual nos portais
+// do aluno e do professor); só a coordenação edita.
+router.get('/cronograma', authenticateToken, cronogramaCtrl.getCronograma);
+router.put('/cronograma', authenticateToken, requireRole('ADMIN'), cronogramaCtrl.updateCronograma);
 
 // --- DASHBOARD & REPORTS ---
 router.get('/dashboard', authenticateToken, dashCtrl.getDashboardData);

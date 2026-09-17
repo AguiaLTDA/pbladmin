@@ -35,6 +35,8 @@ import { MateriaisRecebidosProfessorView } from './views/professor/MateriaisRece
 import { DashboardAlunoView } from './views/aluno/DashboardAluno';
 import { MinhasAtividadesAlunoView } from './views/aluno/MinhasAtividadesAluno';
 import { CalendarioPrazosAlunoView } from './views/aluno/CalendarioPrazosAluno';
+import { CalendarioPrazosProfessorView } from './views/professor/CalendarioPrazosProfessor';
+import { CronogramaAdminView } from './views/admin/CronogramaAdmin';
 import { DetalhesPBLAlunoView } from './views/aluno/DetalhesPBLAluno';
 import { MeuGrupoAlunoView } from './views/aluno/MeuGrupoAluno';
 import { PanoramaContextosAlunos } from './components/PanoramaContextosAlunos';
@@ -167,6 +169,7 @@ export const App: React.FC = () => {
       if (currentRoute === '/admin/entregas') return <EntregasProfessorView />;
       if (currentRoute === '/admin/arquivos') return <GerenciadorArquivosView />;
       if (currentRoute === '/admin/relatorios') return <RelatoriosAdminView />;
+      if (currentRoute === '/admin/cronograma') return <CronogramaAdminView />;
       if (currentRoute === '/admin/auditoria') return <AuditoriaAdminView />;
       if (currentRoute === '/admin/configuracoes') return <ConfiguracoesAdminView />;
     }
@@ -183,6 +186,8 @@ export const App: React.FC = () => {
       if (currentRoute === '/professor/turmas') return <MinhasTurmasProfessorView />;
       if (currentRoute === '/professor/arquivo-orientador') return <ArquivoOrientadorProfessorView />;
       if (currentRoute === '/professor/materiais') return <MateriaisRecebidosProfessorView />;
+      if (currentRoute === '/professor/calendario')
+        return <CalendarioPrazosProfessorView navigate={navigate} />;
     }
 
     // ALUNO ROUTES

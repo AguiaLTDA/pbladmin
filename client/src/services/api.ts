@@ -1,4 +1,5 @@
 import { isSupabaseConfigured } from './supabase';
+import { CRONOGRAMA_PBL_PADRAO } from '../constants/academico';
 import { supabaseService } from './supabaseService';
 
 // Em produção (build do GitHub Pages), aponta para o backend publicado no Render,
@@ -224,6 +225,16 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
       minimoCaracteres: 15,
       medalha: null
     } as unknown as T;
+  }
+
+  // Cronograma PBL: sem backend, devolve o padrão de fábrica para o quadro
+  // continuar aparecendo na vitrine. Salvar não pode fingir sucesso — a edição
+  // da coordenação não teria onde ser gravada.
+  if (endpoint.startsWith('/cronograma')) {
+    if ((options.method || 'GET').toUpperCase() !== 'GET') {
+      throw new Error('Não foi possível salvar o cronograma: o servidor do portal está indisponível.');
+    }
+    return { ...CRONOGRAMA_PBL_PADRAO, atualizadoEm: null } as unknown as T;
   }
 
   if (endpoint.startsWith('/student/') && endpoint.endsWith('/badges')) {
