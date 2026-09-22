@@ -54,6 +54,8 @@ const turmaFiltro = valorFlag('--turma');
 // turma inteira para acertar um arquivo, mexendo em grupos que estavam certos.
 const grupoFiltro = valorFlag('--grupo');
 const todas = temFlag('--todas');
+// Republica por cima do que ja esta la. So faz sentido quando o PDF mudou.
+const forcar = temFlag('--forcar');
 
 /** Aproxima nomes para conferência: sem acento, sem caixa, sem espaço duplicado. */
 function normalizar(txt: string): string {
@@ -148,6 +150,7 @@ async function main() {
   console.log(`Itens a publicar: ${alvo.length}${reservas.length ? ` | ignorados por serem de reserva: ${reservas.length}` : ''}\n`);
 
   let ok = 0;
+  let jaEstavam = 0;
   const problemas: string[] = [];
 
   for (const item of alvo) {
@@ -186,6 +189,33 @@ async function main() {
             : ' Diferença pequena (grafia); tratado como o mesmo grupo.')
       );
       if (grave) continue;
+    }
+
+    // Ja publicado? Pula. Sem isso, repetir o comando para retomar de onde parou
+    // -- que e o uso natural depois de uma falha no meio da lista -- reenviaria
+    // ao Drive copias identicas das que ja estao la e trocaria a atividade do
+    // grupo por outra igual, zerando a data de recebimento que o aluno ve.
+    // `--forcar` existe para o caso legitimo oposto: o PDF mudou e precisa subir
+    // de novo com o mesmo nome.
+    const jaPublicado = await getAsync<{ id: number }>(
+      `SELECT ar.id
+         FROM segmentacao_regras sr
+         JOIN segmentacoes seg ON seg.id = sr.segmentacao_id
+         JOIN atividades_pbl a ON a.id = seg.atividade_id
+              AND a.natureza = 'INFORMATIVA' AND a.deletado_em IS NULL
+         JOIN versoes_atividades va ON va.atividade_id = a.id
+         JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
+         JOIN arquivos ar ON ar.id = aa.arquivo_id AND ar.deletado_em IS NULL
+        WHERE sr.entidade_tipo = 'grupo' AND sr.entidade_id = ? AND sr.acao = 'INCLUIR'
+          AND ar.nome_original = ?
+        LIMIT 1`,
+      [grupo.id, item.arquivo]
+    );
+
+    if (jaPublicado && !forcar) {
+      console.log(`[ja publicado] ${rotulo} -> arquivo id ${jaPublicado.id}`);
+      jaEstavam++;
+      continue;
     }
 
     const caminho = path.join(RAIZ, item.arquivo);
