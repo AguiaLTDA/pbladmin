@@ -128,5 +128,8 @@ export const TIPOS_DOCUMENTO = [
 /** Tipo cujo material abre o canal de sugestões entre docência e coordenação. */
 export const TIPO_PRE_PBL_1 = 'PRE_PBL_1';
 
+/** Tipo que marca o grupo como já atendido pelo PBL 1 (selo na aba de grupos). */
+export const TIPO_PBL_1 = 'PBL_1';
+
 export const rotuloTipoDocumento = (valor?: string | null): string =>
   TIPOS_DOCUMENTO.find((t) => t.valor === valor)?.rotulo || 'Sem tipo';

@@ -1257,6 +1257,25 @@ textarea.form-control {
   border: 1px solid #fcd34d;
 }
 
+/* Grupo que já ficou com o PBL 1. Cor distinta do selo genérico de material:
+   a coordenação varre a coluna procurando quem FALTA, e "recebeu alguma coisa"
+   não responde a mesma pergunta que "recebeu o PBL 1". */
+.grupo-com-pbl1 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 9999px;
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #a5b4fc;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+}
+
 /* Grupo que já recebeu material, na lista de seleção do envio. */
 .grupo-com-material {
   display: inline-flex;

@@ -119,11 +119,14 @@ export interface FileItem {
 export interface GrupoComMaterial {
   grupoId: number;
   total: number;
+  /** Já recebeu ao menos um material classificado como PBL 1 — vira o selo na lista de grupos. */
+  temPbl1: boolean;
   materiais: {
     atividadeId: number;
     titulo: string;
     arquivoId: number | null;
     arquivoNome: string | null;
+    tipoDocumento: string | null;
     criadoEm: string;
   }[];
 }

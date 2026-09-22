@@ -84,12 +84,24 @@ export const GerenciadorArquivosView: React.FC = () => {
     fetchFiles();
   };
 
+  // O portal não tem restauração de arquivo: o que existe é a pasta "Excluídos"
+  // no Drive, e o aviso precisa dizer onde o PDF foi parar — senão a coordenação
+  // acha que o material sumiu.
   const handleDelete = async (id: number, name: string) => {
-    if (!window.confirm(`Tem certeza que deseja mover '${name}' para a lixeira (exclusão lógica)?`)) return;
+    if (
+      !window.confirm(
+        `Excluir '${name}' do portal?` +
+          String.fromCharCode(10, 10) +
+          'O arquivo sai da lista e o PDF vai para a pasta "Excluídos" no Google Drive. ' +
+          'Quem já recebeu este material deixa de conseguir abri-lo, e não há como desfazer pelo portal.'
+      )
+    ) {
+      return;
+    }
 
     try {
-      await apiRequest(`/files/${id}`, { method: 'DELETE' });
-      showToast(`Arquivo '${name}' movido para a lixeira.`, 'info');
+      const res = await apiRequest<{ message: string }>(`/files/${id}`, { method: 'DELETE' });
+      showToast(res?.message || `Arquivo '${name}' excluído.`, 'info');
       fetchFiles();
     } catch (err: any) {
       showToast(err.message || 'Erro ao excluir arquivo.', 'error');
@@ -436,7 +448,7 @@ export const GerenciadorArquivosView: React.FC = () => {
                       <button
                         onClick={() => handleDelete(f.id, f.nome_original)}
                         className="btn btn-danger btn-sm"
-                        title="Mover para a lixeira (Exclusão Lógica)"
+                        title="Excluir do portal (move o arquivo para a pasta Excluídos no Drive)"
                       >
                         <Trash2 size={14} />
                       </button>

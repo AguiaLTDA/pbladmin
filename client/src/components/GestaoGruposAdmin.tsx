@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiRequest } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { GrupoOption, GrupoMembro, TurmaOption } from '../types';
-import { MAX_INTEGRANTES_GRUPO } from '../constants/academico';
+import { GrupoOption, GrupoMembro, TurmaOption, GrupoComMaterial } from '../types';
+import { MAX_INTEGRANTES_GRUPO, rotuloTipoDocumento } from '../constants/academico';
+import { AnexarPblGrupoModal } from './AnexarPblGrupoModal';
 import {
   Plus,
   Trash2,
@@ -13,7 +14,10 @@ import {
   ChevronDown,
   ChevronRight,
   Filter,
-  UserX
+  UserX,
+  Paperclip,
+  FileCheck2,
+  FileText
 } from 'lucide-react';
 
 interface GestaoGruposAdminProps {
@@ -44,10 +48,18 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
   const [resultados, setResultados] = useState<GrupoMembro[]>([]);
   const [buscando, setBuscando] = useState(false);
 
+  // Quem já recebeu material e o que recebeu — a fonte do selo "PBL 1" e do
+  // aviso de duplicação no modal de anexo.
+  const [materialPorGrupo, setMaterialPorGrupo] = useState<Record<number, GrupoComMaterial>>({});
+  const [grupoAnexando, setGrupoAnexando] = useState<GrupoOption | null>(null);
+
   const [turmaFiltro, setTurmaFiltro] = useState<number | ''>('');
   // Grupo vazio é um problema a resolver, não um estado normal: ou ninguém entrou
   // ainda, ou os integrantes saíram e ele virou casca. Daí o filtro próprio.
   const [ocupacaoFiltro, setOcupacaoFiltro] = useState<'' | 'vazios' | 'com_vagas' | 'lotados'>('');
+  // Filtro próprio para o PBL 1: a pergunta "quem ainda não recebeu" é o motivo
+  // de a coordenação abrir esta aba durante a distribuição.
+  const [pblFiltro, setPblFiltro] = useState<'' | 'com_pbl1' | 'sem_pbl1'>('');
 
   // Só as turmas que de fato têm grupo — evita um seletor gigante com opções vazias.
   const turmasComGrupos = useMemo(() => {
@@ -59,6 +71,22 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
   }, [grupos]);
 
   const totalDe = (g: GrupoOption) => Number(g.total_integrantes || 0);
+  const temPbl1 = (g: GrupoOption) => Boolean(materialPorGrupo[g.id]?.temPbl1);
+
+  const carregarMateriais = () => {
+    apiRequest<GrupoComMaterial[]>('/files/grupos-com-material')
+      .then((lista) => {
+        const mapa: Record<number, GrupoComMaterial> = {};
+        lista.forEach((g) => (mapa[g.grupoId] = g));
+        setMaterialPorGrupo(mapa);
+      })
+      .catch(() => setMaterialPorGrupo({}));
+  };
+
+  useEffect(() => {
+    carregarMateriais();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const gruposDaTurma = useMemo(
     () => (turmaFiltro === '' ? grupos : grupos.filter((g) => g.turma_id === Number(turmaFiltro))),
@@ -80,17 +108,29 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
     return { vazios, comVagas, lotados };
   }, [gruposDaTurma]);
 
+  const contagemPbl = useMemo(() => {
+    let com = 0;
+    gruposDaTurma.forEach((g) => {
+      if (temPbl1(g)) com++;
+    });
+    return { com, sem: gruposDaTurma.length - com };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gruposDaTurma, materialPorGrupo]);
+
   const gruposFiltrados = useMemo(() => {
-    if (ocupacaoFiltro === '') return gruposDaTurma;
     return gruposDaTurma.filter((g) => {
       const total = totalDe(g);
-      if (ocupacaoFiltro === 'vazios') return total === 0;
-      if (ocupacaoFiltro === 'lotados') return total >= MAX_INTEGRANTES_GRUPO;
-      return total > 0 && total < MAX_INTEGRANTES_GRUPO;
+      if (ocupacaoFiltro === 'vazios' && total !== 0) return false;
+      if (ocupacaoFiltro === 'lotados' && total < MAX_INTEGRANTES_GRUPO) return false;
+      if (ocupacaoFiltro === 'com_vagas' && !(total > 0 && total < MAX_INTEGRANTES_GRUPO)) return false;
+      if (pblFiltro === 'com_pbl1' && !temPbl1(g)) return false;
+      if (pblFiltro === 'sem_pbl1' && temPbl1(g)) return false;
+      return true;
     });
-  }, [gruposDaTurma, ocupacaoFiltro]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gruposDaTurma, ocupacaoFiltro, pblFiltro, materialPorGrupo]);
 
-  const algumFiltroAtivo = turmaFiltro !== '' || ocupacaoFiltro !== '';
+  const algumFiltroAtivo = turmaFiltro !== '' || ocupacaoFiltro !== '' || pblFiltro !== '';
 
   const carregarMembros = (grupoId: number) => {
     setCarregandoMembrosId(grupoId);
@@ -243,6 +283,18 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
             </select>
           </div>
 
+          <div className="flex items-center gap-2" style={{ minWidth: '230px' }}>
+            <select
+              className="form-control"
+              value={pblFiltro}
+              onChange={(e) => setPblFiltro(e.target.value as typeof pblFiltro)}
+            >
+              <option value="">Qualquer situação de PBL 1</option>
+              <option value="com_pbl1">Com PBL 1 entregue ({contagemPbl.com})</option>
+              <option value="sem_pbl1">Sem PBL 1 ainda ({contagemPbl.sem})</option>
+            </select>
+          </div>
+
           <span className="text-muted text-sm">
             Exibindo {gruposFiltrados.length} de {grupos.length} grupo(s).
           </span>
@@ -252,6 +304,7 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
               onClick={() => {
                 setTurmaFiltro('');
                 setOcupacaoFiltro('');
+                setPblFiltro('');
               }}
               className="btn btn-secondary btn-sm"
             >
@@ -309,6 +362,7 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
                 <th>Nome do Grupo PBL</th>
                 <th>Turma Pertencente</th>
                 <th>Integrantes</th>
+                <th>PBL do grupo</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
             </thead>
@@ -338,8 +392,30 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
                         <span className="text-muted text-sm"> — lotado</span>
                       )}
                     </td>
+                    <td>
+                      {/* O selo responde de relance a pergunta que move a distribuição:
+                          este grupo já ficou com o PBL 1 ou ainda não? */}
+                      {temPbl1(g) ? (
+                        <span className="grupo-com-pbl1" title="Este grupo já recebeu o PBL 1">
+                          <FileCheck2 size={12} /> PBL 1
+                        </span>
+                      ) : materialPorGrupo[g.id] ? (
+                        <span className="text-muted text-sm">
+                          {materialPorGrupo[g.id].total} material(is), sem PBL 1
+                        </span>
+                      ) : (
+                        <span className="text-muted text-sm">—</span>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'right' }}>
                       <div className="flex gap-2 justify-end">
+                        <button
+                          onClick={() => setGrupoAnexando(g)}
+                          className="btn btn-primary btn-sm"
+                          title="Anexar o PDF do PBL a este grupo"
+                        >
+                          <Paperclip size={14} /> Anexar PBL
+                        </button>
                         <button onClick={() => alternarExpandido(g.id)} className="btn btn-secondary btn-sm">
                           <Users size={14} /> Integrantes
                         </button>
@@ -356,8 +432,40 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
 
                   {expandidoId === g.id && (
                     <tr>
-                      <td colSpan={4} style={{ background: 'var(--bg-main)' }}>
+                      <td colSpan={5} style={{ background: 'var(--bg-main)' }}>
                         <div style={{ padding: '0.5rem 0.25rem' }}>
+                          <div className="mb-3">
+                            <span className="font-bold text-sm">Arquivos PBL deste grupo</span>
+                            {materialPorGrupo[g.id]?.materiais.length ? (
+                              <ul style={{ listStyle: 'none', padding: 0, margin: '0.4rem 0 0' }}>
+                                {materialPorGrupo[g.id].materiais.map((m) => (
+                                  <li
+                                    key={m.atividadeId}
+                                    className="flex items-center gap-2 text-sm"
+                                    style={{ padding: '0.2rem 0' }}
+                                  >
+                                    <FileText size={14} className="text-muted" />
+                                    <span>{m.arquivoNome || m.titulo}</span>
+                                    <span className="text-muted">
+                                      — {rotuloTipoDocumento(m.tipoDocumento)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="text-muted text-sm" style={{ margin: '0.4rem 0' }}>
+                                Nenhum arquivo anexado a este grupo ainda.
+                              </div>
+                            )}
+                            <button
+                              onClick={() => setGrupoAnexando(g)}
+                              className="btn btn-secondary btn-sm"
+                              style={{ marginTop: '0.35rem' }}
+                            >
+                              <Paperclip size={14} /> Anexar arquivo PBL
+                            </button>
+                          </div>
+
                           <span className="font-bold text-sm">Integrantes de {g.nome}</span>
 
                           {carregandoMembrosId === g.id ? (
@@ -459,6 +567,18 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
             </tbody>
           </table>
         </div>
+      )}
+
+      {grupoAnexando && (
+        <AnexarPblGrupoModal
+          grupo={grupoAnexando}
+          material={materialPorGrupo[grupoAnexando.id]}
+          onClose={() => setGrupoAnexando(null)}
+          onEnviado={() => {
+            carregarMateriais();
+            onChanged();
+          }}
+        />
       )}
 
       {showCriar && (
