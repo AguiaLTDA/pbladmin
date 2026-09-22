@@ -201,6 +201,10 @@ router.delete('/files/direcionamentos/:direcionamentoId', authenticateToken, req
 // Atalho: publica o arquivo para um grupo, criando/segmentando/publicando uma atividade mínima por trás dos panos.
 router.post('/files/:id/enviar-para-grupo', authenticateToken, requireRole('ADMIN'), fileCtrl.enviarArquivoParaGrupo);
 
+// Visao do docente: os PBLs por grupo das turmas que ele leciona. Precisa vir
+// antes de '/files/:id' para 'meus-grupos-pbl' nao ser lido como um id.
+router.get('/files/meus-grupos-pbl', authenticateToken, requireRole('PROFESSOR', 'ADMIN'), fileCtrl.listarPblsDosMeusGrupos);
+
 // Sinal na tela de envio: quais grupos ja receberam material e o que receberam.
 router.get('/files/grupos-com-material', authenticateToken, requireRole('ADMIN'), fileCtrl.listarGruposComMaterial);
 router.put('/files/:id/tipo-documento', authenticateToken, requireRole('ADMIN'), fileCtrl.definirTipoDocumento);

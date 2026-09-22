@@ -6,7 +6,7 @@ import { queryAsync, runAsync, getAsync } from '../config/db';
 import { normalizarTipoDocumento } from '../config/tiposDocumento';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
-import { uploadToDrive, downloadFromDrive } from '../services/googleDrive';
+import { uploadToDrive, downloadFromDrive, moverParaExcluidosNoDrive } from '../services/googleDrive';
 import { calculateAudiencePreview, saveSegmentationAndTargetStudents } from '../services/segmentation';
 
 // Arquivos ficam em buffer só até serem enviados ao Google Drive — nada é gravado em disco local.
@@ -173,12 +173,35 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response) {
         [id, user.id]
       );
 
+      // PBL entregue a um grupo de uma turma que ele leciona.
+      //
+      // `isMaterialProprio` não cobre este caso: ele casa pela DISCIPLINA da
+      // atividade, e o atalho "enviar para grupo" carimba a atividade com o
+      // primeiro vínculo da turma. Numa turma com quatro docentes, isso liberava
+      // o material para um e barrava os outros três — todos lecionando para o
+      // mesmo grupo. A regra do portal é por turma, então a verificação também é.
+      const isPblDeGrupoDaMinhaTurma = await getAsync<{ id: number }>(
+        `SELECT sr.id
+           FROM arquivos_atividades aa
+           JOIN versoes_atividades va ON va.id = aa.versao_atividade_id
+           JOIN atividades_pbl a ON a.id = va.atividade_id AND a.deletado_em IS NULL
+           JOIN segmentacoes seg ON seg.atividade_id = a.id
+           JOIN segmentacao_regras sr ON sr.segmentacao_id = seg.id
+                AND sr.entidade_tipo = 'grupo' AND sr.acao = 'INCLUIR'
+           JOIN grupos g ON g.id = sr.entidade_id AND g.deletado_em IS NULL
+           JOIN vinculos_professores vp ON vp.turma_id = g.turma_id
+          WHERE aa.arquivo_id = ? AND vp.usuario_id = ? AND vp.ativo = 1
+          LIMIT 1`,
+        [id, user.id]
+      );
+
       if (
         !isOwner &&
         !isMaterialProprio &&
         !isEntregaDaMinhaTurma &&
         !isMeuArquivoOrientador &&
-        !foiDirecionadoAMim
+        !foiDirecionadoAMim &&
+        !isPblDeGrupoDaMinhaTurma
       ) {
         return res.status(403).json({
           message: 'Acesso negado. Este arquivo não pertence às suas atividades nem às turmas que você leciona.'
@@ -209,28 +232,71 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response) {
   }
 }
 
-// SOFT DELETE FILE
+/**
+ * Exclui o arquivo do portal e recolhe o PDF para a pasta "Excluídos" do Drive.
+ *
+ * Nem uma coisa nem outra isoladamente resolve: antes, "excluir" só escondia o
+ * arquivo da tela e o conteúdo seguia misturado aos materiais vigentes no Drive;
+ * apagar de vez tiraria a última chance de recuperação, já que não existe rota
+ * de restauração de arquivo no portal. Mover resolve os dois lados — sai da
+ * vista de quem trabalha no Drive e continua lá para quem tem acesso à pasta.
+ *
+ * A linha em `arquivos` permanece (atividades, direcionamentos e auditoria
+ * referenciam esse id e virariam buraco sem ela), apenas marcada com
+ * `deletado_em` — é isso que corta o download no portal.
+ *
+ * O Drive vem ANTES do UPDATE de propósito: se a API falhar, a linha continua
+ * íntegra e a coordenação pode tentar de novo. Na ordem inversa, uma falha
+ * deixaria o arquivo invisível na tela — logo, impossível de repetir a exclusão
+ * — e o PDF ainda solto entre os materiais ativos.
+ */
 export async function deleteFile(req: AuthenticatedRequest, res: Response) {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
 
+    const arquivo = await getAsync<{
+      id: number;
+      caminho_armazenado: string;
+      enviado_por: number;
+      deletado_em: string | null;
+    }>('SELECT id, caminho_armazenado, enviado_por, deletado_em FROM arquivos WHERE id = ?', [String(id)]);
+
+    if (!arquivo) return res.status(404).json({ message: 'Arquivo não encontrado.' });
+
     // O docente só remove arquivos que ele mesmo enviou; o admin remove qualquer um.
-    if (req.user?.perfilNome === 'PROFESSOR') {
-      const own = await getAsync<{ id: number }>('SELECT id FROM arquivos WHERE id = ? AND enviado_por = ?', [
-        String(id),
-        userId
-      ]);
-      if (!own) {
-        return res.status(403).json({ message: 'Acesso negado. Você só pode excluir arquivos enviados por você.' });
-      }
+    if (req.user?.perfilNome === 'PROFESSOR' && arquivo.enviado_por !== userId) {
+      return res.status(403).json({ message: 'Acesso negado. Você só pode excluir arquivos enviados por você.' });
+    }
+
+    // `false` = o arquivo já não estava no Drive; esperado quando uma exclusão
+    // anterior parou no meio do caminho ou alguém mexeu direto no Drive.
+    let movidoNoDrive: boolean;
+    try {
+      movidoNoDrive = await moverParaExcluidosNoDrive(arquivo.caminho_armazenado);
+    } catch (err) {
+      console.error('Erro ao mover arquivo para a pasta de excluídos no Google Drive:', err);
+      return res.status(502).json({
+        message:
+          'Não foi possível mover o arquivo no Google Drive; nada foi excluído. Tente novamente em instantes.'
+      });
     }
 
     await runAsync('UPDATE arquivos SET deletado_em = CURRENT_TIMESTAMP WHERE id = ?', [String(id)]);
-    await logAudit(userId || null, 'EXCLUSAO_LOGICA_ARQUIVO', 'arquivos', String(id));
+    await logAudit(userId || null, 'EXCLUSAO_ARQUIVO', 'arquivos', String(id), {
+      driveFileId: arquivo.caminho_armazenado,
+      movidoParaExcluidos: movidoNoDrive,
+      // Sinaliza a exclusão repetida em cima de uma linha que já estava marcada.
+      jaEstavaDeletado: arquivo.deletado_em !== null
+    });
 
-    return res.json({ message: 'Arquivo movido para a lixeira (exclusão lógica).' });
+    return res.json({
+      message: movidoNoDrive
+        ? 'Arquivo excluído do portal e movido para a pasta "Excluídos" no Google Drive.'
+        : 'Arquivo excluído do portal. O conteúdo já não estava mais no Google Drive.'
+    });
   } catch (err) {
+    console.error('Erro ao excluir arquivo:', err);
     return res.status(500).json({ message: 'Erro ao excluir arquivo.' });
   }
 }
@@ -834,7 +900,7 @@ export async function listarGruposComMaterial(_req: AuthenticatedRequest, res: R
     const linhas = await queryAsync<any>(
       `SELECT sr.entidade_id AS grupo_id,
               a.id AS atividade_id, a.titulo, a.criado_em,
-              ar.id AS arquivo_id, ar.nome_original
+              ar.id AS arquivo_id, ar.nome_original, ar.tipo_documento
          FROM atividades_pbl a
          JOIN segmentacoes seg ON seg.atividade_id = a.id
          JOIN segmentacao_regras sr ON sr.segmentacao_id = seg.id
@@ -847,15 +913,24 @@ export async function listarGruposComMaterial(_req: AuthenticatedRequest, res: R
     );
 
     // Um grupo pode ter recebido mais de um material; a tela quer o resumo.
-    const porGrupo = new Map<number, { grupoId: number; total: number; materiais: any[] }>();
+    // `temPbl1` sai daqui pronto porque é ele que vira o selo na lista de grupos:
+    // fazer a tela varrer os materiais um a um repetiria a mesma regra em cada
+    // lugar que precisa da resposta.
+    const porGrupo = new Map<
+      number,
+      { grupoId: number; total: number; temPbl1: boolean; materiais: any[] }
+    >();
     for (const l of linhas) {
-      const atual = porGrupo.get(l.grupo_id) || { grupoId: l.grupo_id, total: 0, materiais: [] };
+      const atual =
+        porGrupo.get(l.grupo_id) || { grupoId: l.grupo_id, total: 0, temPbl1: false, materiais: [] };
       atual.total++;
+      if (l.tipo_documento === 'PBL_1') atual.temPbl1 = true;
       atual.materiais.push({
         atividadeId: l.atividade_id,
         titulo: l.titulo,
         arquivoId: l.arquivo_id,
         arquivoNome: l.nome_original,
+        tipoDocumento: l.tipo_documento || null,
         criadoEm: l.criado_em
       });
       porGrupo.set(l.grupo_id, atual);
@@ -865,6 +940,104 @@ export async function listarGruposComMaterial(_req: AuthenticatedRequest, res: R
   } catch (err) {
     console.error('Erro ao listar grupos com material:', err);
     return res.status(500).json({ message: 'Erro ao listar os grupos que já receberam material.' });
+  }
+}
+
+/**
+ * Os PBLs por grupo das turmas que o docente leciona.
+ *
+ * O portal já sabia responder "o que este grupo recebeu?" para a coordenação
+ * (`listarGruposComMaterial`, sem recorte, porque o admin vê tudo). Faltava a
+ * pergunta do docente, que é outra: "o que os MEUS grupos receberam?". O recorte
+ * nasce do vínculo ativo do professor com a turma — é ele que autoriza ver mais
+ * de um grupo, e só dentro da turma em que leciona.
+ *
+ * Os grupos SEM material vêm junto, de propósito: a ausência é a informação mais
+ * acionável para quem acompanha a turma, e omiti-los faria a tela parecer
+ * completa quando não está.
+ */
+export async function listarPblsDosMeusGrupos(req: AuthenticatedRequest, res: Response) {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Não autenticado.' });
+
+    const linhas = await queryAsync<any>(
+      `SELECT t.id AS turma_id, t.codigo AS turma_codigo, t.nome AS turma_nome,
+              c.nome AS curso_nome,
+              g.id AS grupo_id, g.nome AS grupo_nome,
+              a.id AS atividade_id, a.titulo, a.criado_em,
+              ar.id AS arquivo_id, ar.nome_original, ar.tipo_documento,
+              (SELECT COUNT(*) FROM matriculas m
+                WHERE m.grupo_id = g.id AND m.deletado_em IS NULL AND m.ativo = 1) AS total_integrantes,
+              (SELECT COUNT(*) FROM comentarios_material cm
+                WHERE cm.arquivo_id = ar.id AND cm.turma_id = t.id
+                  AND cm.grupo_id = g.id AND cm.deletado_em IS NULL) AS total_comentarios
+         FROM vinculos_professores vp
+         JOIN turmas t ON t.id = vp.turma_id AND t.deletado_em IS NULL AND t.ativo = 1
+         LEFT JOIN disciplinas d ON d.id = t.disciplina_id
+         LEFT JOIN cursos c ON c.id = COALESCE(t.curso_id, d.curso_id)
+         JOIN grupos g ON g.turma_id = t.id AND g.deletado_em IS NULL AND g.ativo = 1
+         LEFT JOIN segmentacao_regras sr
+                ON sr.entidade_tipo = 'grupo' AND sr.entidade_id = g.id AND sr.acao = 'INCLUIR'
+         LEFT JOIN segmentacoes seg ON seg.id = sr.segmentacao_id
+         LEFT JOIN atividades_pbl a
+                ON a.id = seg.atividade_id AND a.natureza = 'INFORMATIVA' AND a.deletado_em IS NULL
+         LEFT JOIN versoes_atividades va ON va.atividade_id = a.id
+         LEFT JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
+         LEFT JOIN arquivos ar ON ar.id = aa.arquivo_id AND ar.deletado_em IS NULL
+        WHERE vp.usuario_id = ? AND vp.ativo = 1
+        ORDER BY t.codigo, g.nome, a.criado_em DESC`,
+      [user.id]
+    );
+
+    // Uma linha por (grupo, material). Agrupa por turma para a tela não ter de
+    // remontar a hierarquia, e deduplica o grupo que aparece repetido porque o
+    // docente tem mais de um vínculo com a mesma turma.
+    const turmas = new Map<number, any>();
+    const gruposVistos = new Map<number, any>();
+
+    for (const l of linhas) {
+      let turma = turmas.get(l.turma_id);
+      if (!turma) {
+        turma = {
+          turmaId: l.turma_id,
+          turmaCodigo: l.turma_codigo,
+          turmaNome: l.turma_nome,
+          cursoNome: l.curso_nome || null,
+          grupos: []
+        };
+        turmas.set(l.turma_id, turma);
+      }
+
+      let grupo = gruposVistos.get(l.grupo_id);
+      if (!grupo) {
+        grupo = {
+          grupoId: l.grupo_id,
+          grupoNome: l.grupo_nome,
+          totalIntegrantes: Number(l.total_integrantes || 0),
+          materiais: []
+        };
+        gruposVistos.set(l.grupo_id, grupo);
+        turma.grupos.push(grupo);
+      }
+
+      if (l.arquivo_id && !grupo.materiais.some((m: any) => m.arquivoId === l.arquivo_id)) {
+        grupo.materiais.push({
+          atividadeId: l.atividade_id,
+          titulo: l.titulo,
+          arquivoId: l.arquivo_id,
+          arquivoNome: l.nome_original,
+          tipoDocumento: l.tipo_documento || null,
+          totalComentarios: Number(l.total_comentarios || 0),
+          criadoEm: l.criado_em
+        });
+      }
+    }
+
+    return res.json(Array.from(turmas.values()));
+  } catch (err) {
+    console.error('Erro ao listar os PBLs dos grupos do docente:', err);
+    return res.status(500).json({ message: 'Erro ao listar os PBLs dos seus grupos.' });
   }
 }
 
@@ -909,6 +1082,25 @@ export async function listarComentariosMaterial(req: AuthenticatedRequest, res: 
       return res.status(403).json({ message: 'Você não tem vínculo com esta turma.' });
     }
 
+    // O aluno lê apenas o que foi dirigido a ele: o comentário geral da turma
+    // (grupo_id nulo) e o do SEU grupo. Sem este recorte, quem está matriculado
+    // na turma leria o retorno que o docente escreveu para outro grupo — o
+    // material é individual por grupo, e o comentário sobre ele também é.
+    // Docente e coordenação continuam vendo a turma inteira, que é o que lhes
+    // permite comparar e acompanhar.
+    const escopoAluno = user.perfilNome === 'ALUNO';
+    let grupoDoAluno: number | null = null;
+
+    if (escopoAluno) {
+      const matricula = await getAsync<{ grupo_id: number | null }>(
+        `SELECT grupo_id FROM matriculas
+          WHERE usuario_id = ? AND turma_id = ? AND deletado_em IS NULL AND ativo = 1
+          ORDER BY id DESC LIMIT 1`,
+        [user.id, turmaId]
+      );
+      grupoDoAluno = matricula?.grupo_id ?? null;
+    }
+
     const comentarios = await queryAsync<any>(
       `SELECT cm.id, cm.texto, cm.criado_em, cm.grupo_id, cm.autor_id,
               u.nome AS autor_nome, p.nome AS autor_perfil, g.nome AS grupo_nome
@@ -916,9 +1108,16 @@ export async function listarComentariosMaterial(req: AuthenticatedRequest, res: 
          JOIN usuarios u ON cm.autor_id = u.id
          JOIN perfis p ON u.perfil_id = p.id
          LEFT JOIN grupos g ON cm.grupo_id = g.id
-        WHERE cm.arquivo_id = ? AND cm.turma_id = ? AND cm.deletado_em IS NULL
-        ORDER BY cm.criado_em ASC`,
-      [arquivoId, turmaId]
+        WHERE cm.arquivo_id = ? AND cm.turma_id = ? AND cm.deletado_em IS NULL` +
+        (escopoAluno
+          ? grupoDoAluno === null
+            ? ' AND cm.grupo_id IS NULL'
+            : ' AND (cm.grupo_id IS NULL OR cm.grupo_id = ?)'
+          : '') +
+        ` ORDER BY cm.criado_em ASC`,
+      escopoAluno && grupoDoAluno !== null
+        ? [arquivoId, turmaId, grupoDoAluno]
+        : [arquivoId, turmaId]
     );
 
     return res.json(comentarios);

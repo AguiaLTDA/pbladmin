@@ -30,6 +30,7 @@ import { EntregasProfessorView } from './views/professor/EntregasProfessor';
 import { MinhasTurmasProfessorView } from './views/professor/MinhasTurmasProfessor';
 import { ArquivoOrientadorProfessorView } from './views/professor/ArquivoOrientadorProfessor';
 import { MateriaisRecebidosProfessorView } from './views/professor/MateriaisRecebidosProfessor';
+import { PblsDosGruposProfessorView } from './views/professor/PblsDosGruposProfessor';
 
 // Aluno Views
 import { DashboardAlunoView } from './views/aluno/DashboardAluno';
@@ -185,6 +186,7 @@ export const App: React.FC = () => {
       if (currentRoute === '/professor/entregas') return <EntregasProfessorView />;
       if (currentRoute === '/professor/turmas') return <MinhasTurmasProfessorView />;
       if (currentRoute === '/professor/arquivo-orientador') return <ArquivoOrientadorProfessorView />;
+      if (currentRoute === '/professor/pbls-grupos') return <PblsDosGruposProfessorView />;
       if (currentRoute === '/professor/materiais') return <MateriaisRecebidosProfessorView />;
       if (currentRoute === '/professor/calendario')
         return <CalendarioPrazosProfessorView navigate={navigate} />;
