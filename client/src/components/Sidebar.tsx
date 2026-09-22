@@ -68,7 +68,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate, aberto
     { path: '/professor/alunos', label: 'Alunos & Grupos', icon: Briefcase },
     { path: '/professor/entregas', label: 'Acompanhamento & Entregas', icon: Award },
     { path: '/professor/calendario', label: 'Calendário de Prazos', icon: Calendar },
-    { path: '/professor/arquivo-orientador', label: 'Arquivo Orientador', icon: BookOpen },
     { path: '/professor/pbls-grupos', label: 'PBLs dos Meus Grupos', icon: Users },
     { path: '/professor/materiais', label: 'Materiais Recebidos', icon: FolderOpen }
   ];
