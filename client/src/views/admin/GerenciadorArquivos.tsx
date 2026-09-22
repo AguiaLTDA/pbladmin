@@ -3,13 +3,18 @@ import { apiRequest, getDownloadUrl } from '../../services/api';
 import { FileItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { TIPOS_DOCUMENTO, rotuloTipoDocumento } from '../../constants/academico';
-import { FolderOpen, Upload, Download, Trash2, FileText, Search, ShieldCheck, Send, Users, Filter, CheckCircle2 } from 'lucide-react';
+import { FolderOpen, Upload, Download, Trash2, FileText, Search, ShieldCheck, Send, Users, Filter, CheckCircle2, Eye } from 'lucide-react';
+import { VisualizadorArquivo } from '../../components/VisualizadorArquivo';
 import { DirecionarArquivoModal } from '../../components/DirecionarArquivoModal';
 import { EnviarArquivoGrupoModal } from '../../components/EnviarArquivoGrupoModal';
 
 export const GerenciadorArquivosView: React.FC = () => {
   const { showToast } = useToast();
   const [files, setFiles] = useState<FileItem[]>([]);
+  // Abrir na plataforma em vez de baixar: conferir o conteudo de um PDF antes de
+  // direciona-lo ou de trocar o arquivo de um grupo nao deveria exigir salvar o
+  // arquivo no computador de quem confere.
+  const [arquivoEmFoco, setArquivoEmFoco] = useState<FileItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [progresso, setProgresso] = useState<{ feito: number; total: number } | null>(null);
@@ -436,6 +441,13 @@ export const GerenciadorArquivosView: React.FC = () => {
                       >
                         <Users size={14} /> Enviar para Grupo
                       </button>
+                      <button
+                        onClick={() => setArquivoEmFoco(f)}
+                        className="btn btn-secondary btn-sm"
+                        title="Abrir na plataforma, sem baixar"
+                      >
+                        <Eye size={14} /> Abrir
+                      </button>
                       <a
                         href={getDownloadUrl(f.id)}
                         target="_blank"
@@ -459,6 +471,16 @@ export const GerenciadorArquivosView: React.FC = () => {
             </tbody>
           </table>
         </div>
+      )}
+
+      {arquivoEmFoco && (
+        <VisualizadorArquivo
+          arquivoId={arquivoEmFoco.id}
+          nomeArquivo={arquivoEmFoco.nome_original}
+          mimeType={arquivoEmFoco.mime_type}
+          descricao={rotuloTipoDocumento(arquivoEmFoco.tipo_documento)}
+          onClose={() => setArquivoEmFoco(null)}
+        />
       )}
 
       {arquivoParaDirecionar && (

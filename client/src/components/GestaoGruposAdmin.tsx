@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { GrupoOption, GrupoMembro, TurmaOption, GrupoComMaterial } from '../types';
 import { MAX_INTEGRANTES_GRUPO, rotuloTipoDocumento } from '../constants/academico';
 import { AnexarPblGrupoModal } from './AnexarPblGrupoModal';
+import { VisualizadorArquivo } from './VisualizadorArquivo';
 import {
   Plus,
   Trash2,
@@ -17,7 +18,8 @@ import {
   UserX,
   Paperclip,
   FileCheck2,
-  FileText
+  FileText,
+  Eye
 } from 'lucide-react';
 
 interface GestaoGruposAdminProps {
@@ -52,6 +54,11 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
   // aviso de duplicação no modal de anexo.
   const [materialPorGrupo, setMaterialPorGrupo] = useState<Record<number, GrupoComMaterial>>({});
   const [grupoAnexando, setGrupoAnexando] = useState<GrupoOption | null>(null);
+  // Conferir o conteudo do PDF sem sair do portal. Ate aqui a coordenacao via o
+  // NOME do arquivo do grupo e nada mais: para saber se o caso certo foi para o
+  // grupo certo era preciso abrir a pasta do Drive, onde os arquivos estao com
+  // nome gerado e nao dizem a que grupo pertencem.
+  const [arquivoEmFoco, setArquivoEmFoco] = useState<{ id: number; nome: string; grupo: string } | null>(null);
 
   const [turmaFiltro, setTurmaFiltro] = useState<number | ''>('');
   // Grupo vazio é um problema a resolver, não um estado normal: ou ninguém entrou
@@ -449,6 +456,21 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
                                     <span className="text-muted">
                                       — {rotuloTipoDocumento(m.tipoDocumento)}
                                     </span>
+                                    {m.arquivoId && (
+                                      <button
+                                        className="btn btn-sm btn-outline"
+                                        onClick={() =>
+                                          setArquivoEmFoco({
+                                            id: m.arquivoId as number,
+                                            nome: m.arquivoNome || m.titulo,
+                                            grupo: g.nome
+                                          })
+                                        }
+                                        title="Abrir o arquivo na plataforma"
+                                      >
+                                        <Eye size={13} /> Abrir
+                                      </button>
+                                    )}
                                   </li>
                                 ))}
                               </ul>
@@ -567,6 +589,16 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
             </tbody>
           </table>
         </div>
+      )}
+
+      {arquivoEmFoco && (
+        <VisualizadorArquivo
+          arquivoId={arquivoEmFoco.id}
+          nomeArquivo={arquivoEmFoco.nome}
+          mimeType="application/pdf"
+          descricao={`Arquivo do grupo ${arquivoEmFoco.grupo}`}
+          onClose={() => setArquivoEmFoco(null)}
+        />
       )}
 
       {grupoAnexando && (
