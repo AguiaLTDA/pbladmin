@@ -4,7 +4,7 @@ import { MedalhaContexto } from '../../components/MedalhaContexto';
 import { useToast } from '../../context/ToastContext';
 import { TurmaOption, GrupoOption, GrupoMembro, MinhaMatricula } from '../../types';
 import { MAX_INTEGRANTES_GRUPO } from '../../constants/academico';
-import { Users, UserPlus, CheckCircle2, RefreshCw, LogIn, Search, UserCheck, Repeat } from 'lucide-react';
+import { Users, UserPlus, CheckCircle2, RefreshCw, LogIn, Search, UserCheck, Repeat, Lock } from 'lucide-react';
 
 interface AdicionarColegaProps {
   grupoId: number;
@@ -271,14 +271,26 @@ export const MeuGrupoAlunoView: React.FC = () => {
   const [trocandoGrupoDaTurma, setTrocandoGrupoDaTurma] = useState<number | null>(null);
 
   const [membrosPorGrupo, setMembrosPorGrupo] = useState<Record<number, GrupoMembro[]>>({});
+  // Quem decide se a janela está aberta é o servidor. Começa fechada: se a
+  // consulta falhar, a tela não oferece ações que a API vai recusar.
+  const [faseGrupos, setFaseGrupos] = useState<{ aberto: boolean; mensagem: string | null }>({
+    aberto: false,
+    mensagem: null
+  });
 
   const carregar = async () => {
     setLoading(true);
     try {
-      const [t, m] = await Promise.all([
+      const [t, m, fase] = await Promise.all([
         apiRequest<TurmaOption[]>('/academic/classes'),
-        apiRequest<MinhaMatricula[]>('/academic/my-enrollment')
+        apiRequest<MinhaMatricula[]>('/academic/my-enrollment'),
+        apiRequest<{ aberto: boolean; mensagem: string | null }>('/academic/fase-grupos').catch(() => ({
+          aberto: false,
+          mensagem: null
+        }))
       ]);
+
+      setFaseGrupos(fase);
       setTurmas(t);
       setMinhasMatriculas(m);
 
@@ -331,10 +343,12 @@ export const MeuGrupoAlunoView: React.FC = () => {
         <div>
           <h2 style={{ fontSize: '1.4rem' }}>Meus Grupos PBL</h2>
           <p className="text-muted text-sm">
-            Selecione sua turma e informe o grupo ao qual você pertence. Se um colega já criou o
-            grupo, basta escolher o mesmo nome — vocês serão vinculados automaticamente. Você
-            também pode indicar um colega diretamente pelo nome ou e-mail dele, e trocar de grupo
-            a qualquer momento.
+            {faseGrupos.aberto
+              ? 'Selecione sua turma e informe o grupo ao qual você pertence. Se um colega já criou o ' +
+                'grupo, basta escolher o mesmo nome — vocês serão vinculados automaticamente. Você ' +
+                'também pode indicar um colega diretamente pelo nome ou e-mail dele, e trocar de ' +
+                'grupo a qualquer momento.'
+              : 'Aqui você acompanha suas turmas, seu grupo e os colegas que fazem parte dele.'}
           </p>
         </div>
         <button onClick={carregar} className="btn btn-secondary btn-sm">
@@ -342,6 +356,27 @@ export const MeuGrupoAlunoView: React.FC = () => {
           Atualizar
         </button>
       </div>
+
+      {/* Comunicado da fase encerrada: vem antes dos cards porque explica a
+          ausência dos botões que estavam ali. */}
+      {!faseGrupos.aberto && (
+        <div
+          className="card mb-4"
+          style={{ background: '#fffbeb', border: '1px solid #fcd34d' }}
+        >
+          <div className="flex items-start gap-3">
+            <Lock size={20} color="#b45309" style={{ flexShrink: 0, marginTop: '0.15rem' }} />
+            <div>
+              <strong style={{ color: '#b45309' }}>Cadastro de grupos encerrado</strong>
+              <p className="text-sm" style={{ margin: '0.35rem 0 0', color: '#78350f' }}>
+                {faseGrupos.mensagem ||
+                  'O período de cadastro e alteração de grupos PBL está encerrado. Para entrar em um ' +
+                    'grupo, sair, trocar ou incluir um colega, procure a coordenação do seu curso.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Matrículas já confirmadas */}
       {minhasMatriculas.length > 0 && (
@@ -374,39 +409,52 @@ export const MeuGrupoAlunoView: React.FC = () => {
                     <div className="text-muted text-sm">Você é o único integrante até o momento.</div>
                   )}
 
-                  <AdicionarColega
-                    grupoId={m.grupo_id as number}
-                    onAdicionado={(grupoId, membros) =>
-                      setMembrosPorGrupo((prev) => ({ ...prev, [grupoId]: membros }))
-                    }
-                  />
+                  {faseGrupos.aberto && (
+                    <AdicionarColega
+                      grupoId={m.grupo_id as number}
+                      onAdicionado={(grupoId, membros) =>
+                        setMembrosPorGrupo((prev) => ({ ...prev, [grupoId]: membros }))
+                      }
+                    />
+                  )}
                 </>
               ) : (
                 <span className="text-muted text-sm">Sem grupo definido nesta turma.</span>
               )}
 
-              {trocandoGrupoDaTurma === m.turma_id ? (
-                <SeletorGrupo
-                  turmaId={m.turma_id}
-                  onConfirmado={handleTrocaConfirmada}
-                  onCancelar={() => setTrocandoGrupoDaTurma(null)}
-                  textoBotao="Confirmar Novo Grupo"
-                />
-              ) : (
-                <button
-                  onClick={() => setTrocandoGrupoDaTurma(m.turma_id)}
-                  className="btn btn-secondary btn-sm"
-                  style={{ marginTop: '0.5rem' }}
-                >
-                  <Repeat size={14} /> {m.grupo_nome ? 'Trocar de grupo' : 'Escolher grupo'}
-                </button>
+              {faseGrupos.aberto &&
+                (trocandoGrupoDaTurma === m.turma_id ? (
+                  <SeletorGrupo
+                    turmaId={m.turma_id}
+                    onConfirmado={handleTrocaConfirmada}
+                    onCancelar={() => setTrocandoGrupoDaTurma(null)}
+                    textoBotao="Confirmar Novo Grupo"
+                  />
+                ) : (
+                  <button
+                    onClick={() => setTrocandoGrupoDaTurma(m.turma_id)}
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginTop: '0.5rem' }}
+                  >
+                    <Repeat size={14} /> {m.grupo_nome ? 'Trocar de grupo' : 'Escolher grupo'}
+                  </button>
+                ))}
+
+              {/* Sem grupo e sem poder escolher: dizer a quem recorrer, no
+                  lugar exato onde estava o botão. */}
+              {!faseGrupos.aberto && !m.grupo_nome && (
+                <div className="text-sm" style={{ marginTop: '0.5rem', color: '#b45309' }}>
+                  Você não está em nenhum grupo nesta turma. Procure a coordenação do seu curso.
+                </div>
               )}
             </div>
           ))}
         </div>
       )}
 
-      {/* Matrícula em uma turma nova */}
+      {/* Matrícula em uma turma nova — esta rota cria grupo junto, então sai de
+          cena com a fase encerrada. */}
+      {faseGrupos.aberto && (
       <div className="card" style={{ padding: '1.5rem' }}>
         <h3 className="font-bold mb-3 flex items-center gap-2">
           <UserPlus size={18} />
@@ -446,6 +494,7 @@ export const MeuGrupoAlunoView: React.FC = () => {
           </>
         )}
       </div>
+      )}
     </div>
   );
 };

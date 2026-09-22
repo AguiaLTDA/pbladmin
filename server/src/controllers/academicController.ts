@@ -5,6 +5,7 @@ import { queryAsync, runAsync, getAsync } from '../config/db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
 import { importarHorarioAcademico } from '../services/horarioImport';
+import { CADASTRO_GRUPOS_ABERTO, MENSAGEM_GRUPOS_ENCERRADO } from '../config/fases';
 
 // --- USUÁRIOS ---
 export async function listUsers(req: AuthenticatedRequest, res: Response) {
@@ -476,10 +477,29 @@ export async function listMyEnrollment(req: AuthenticatedRequest, res: Response)
  * turma; `grupoNome` procura um grupo com esse nome (sem diferenciar
  * maiúsculas/acentuação de caixa) e só cria um novo se nenhum existir.
  */
+/**
+ * Estado da janela de cadastro de grupos, para a tela do aluno decidir o que
+ * mostrar. A tela nunca decide isso por conta própria: se o servidor e o
+ * frontend discordassem, o aluno veria botões que a API recusa.
+ */
+export async function getFaseGrupos(_req: AuthenticatedRequest, res: Response) {
+  return res.json({
+    aberto: CADASTRO_GRUPOS_ABERTO,
+    mensagem: CADASTRO_GRUPOS_ABERTO ? null : MENSAGEM_GRUPOS_ENCERRADO
+  });
+}
+
 export async function selfEnroll(req: AuthenticatedRequest, res: Response) {
   try {
     const alunoId = req.user?.id;
     if (!alunoId) return res.status(401).json({ message: 'Não autenticado.' });
+
+    // Esta rota cria grupo, entra em grupo existente E troca de grupo (o
+    // UPDATE em matriculas.grupo_id mais abaixo). Com a fase encerrada, as tres
+    // caem juntas — o aluno passa a depender da coordenacao para qualquer uma.
+    if (!CADASTRO_GRUPOS_ABERTO) {
+      return res.status(403).json({ codigo: 'FASE_GRUPOS_ENCERRADA', message: MENSAGEM_GRUPOS_ENCERRADO });
+    }
 
     const { turmaId, grupoId, grupoNome } = req.body;
     if (!turmaId) return res.status(400).json({ message: 'Selecione a turma.' });
@@ -641,6 +661,13 @@ export async function addGroupMember(req: AuthenticatedRequest, res: Response) {
 
     // O aluno só mexe no grupo em que ele mesmo está; a coordenadoria monta qualquer grupo.
     const isAdmin = req.user?.perfilNome === 'ADMIN';
+
+    // Fase encerrada vale para o aluno, não para a coordenação: é justamente
+    // ela quem passa a fazer os ajustes que o aluno não pode mais fazer.
+    if (!isAdmin && !CADASTRO_GRUPOS_ABERTO) {
+      return res.status(403).json({ codigo: 'FASE_GRUPOS_ENCERRADA', message: MENSAGEM_GRUPOS_ENCERRADO });
+    }
+
     if (!isAdmin) {
       const requisitanteNoGrupo = await getAsync<{ id: number }>(
         `SELECT id FROM matriculas WHERE usuario_id = ? AND grupo_id = ? AND deletado_em IS NULL`,

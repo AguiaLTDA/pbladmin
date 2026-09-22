@@ -95,6 +95,7 @@ router.put('/academic/classes/:id/lider', authenticateToken, requireRole('ADMIN'
 router.get('/academic/periods', authenticateToken, academicCtrl.listPeriods);
 
 // --- AUTO-MATRÍCULA DO ALUNO (portal do aluno: escolhe a turma e informa o grupo) ---
+router.get('/academic/fase-grupos', authenticateToken, academicCtrl.getFaseGrupos);
 router.get('/academic/my-enrollment', authenticateToken, requireRole('ALUNO'), academicCtrl.listMyEnrollment);
 router.post('/academic/my-enrollment', authenticateToken, requireRole('ALUNO'), academicCtrl.selfEnroll);
 router.get('/academic/students/search', authenticateToken, requireRole('ALUNO', 'ADMIN'), academicCtrl.searchStudents);
