@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { CronogramaPBL } from '../../components/CronogramaPBL';
 import { ManualAlunoPBLButton } from '../../components/ManualAlunoPBLButton';
-import { Send, Users, Award, BookOpen, ArrowRight, AlertTriangle, GraduationCap, Layers } from 'lucide-react';
+import { Send, Users, Award, ArrowRight, AlertTriangle, GraduationCap, Layers } from 'lucide-react';
 
 interface ProfessorDashboardData {
   kpis: {
@@ -39,7 +39,7 @@ export const DashboardProfessorView: React.FC<Props> = ({ navigate }) => {
       <div className="mb-4">
         <h2 style={{ fontSize: '1.4rem' }}>Portal do Professor — Visão Geral</h2>
         <p className="text-muted text-sm">
-          Acompanhe as entregas das turmas que você leciona e o seu arquivo orientador.
+          Acompanhe as entregas e os casos PBL dos grupos das turmas em que você leciona.
         </p>
       </div>
 
@@ -130,21 +130,6 @@ export const DashboardProfessorView: React.FC<Props> = ({ navigate }) => {
         </div>
       )}
 
-      {/* Alerta de arquivo orientador pendente */}
-      {!k?.temArquivoOrientador && (
-        <div className="card mb-4" style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <BookOpen color="#1d4ed8" size={20} />
-              <div>
-                <strong style={{ color: '#1e40af' }}>Nenhum arquivo orientador vinculado ainda.</strong>
-                <p className="text-sm text-muted">A coordenação ainda não vinculou um material à sua conta.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <CronogramaPBL />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
@@ -156,8 +141,8 @@ export const DashboardProfessorView: React.FC<Props> = ({ navigate }) => {
               <ArrowRight size={16} />
             </button>
 
-            <button onClick={() => navigate('/professor/arquivo-orientador')} className="btn btn-secondary justify-between">
-              <span>Revisar Arquivo Orientador</span>
+            <button onClick={() => navigate('/professor/pbls-grupos')} className="btn btn-secondary justify-between">
+              <span>PBLs dos Meus Grupos</span>
               <ArrowRight size={16} />
             </button>
 
