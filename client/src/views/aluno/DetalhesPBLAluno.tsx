@@ -78,6 +78,15 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
 
   const { atividade, versao, etapas, arquivos, entrega, feedback, turmaId, grupoId } = data;
 
+  // O atalho "enviar para grupo" cria a atividade so com o PDF: cenario, problema
+  // central, objetivos, etapas e criterios ficam vazios. Renderizar os titulos
+  // assim mostrava ao aluno secoes em branco numeradas de 1 a 5, como se faltasse
+  // conteudo carregar. Somem quando nao ha o que mostrar, e seguem aparecendo nos
+  // PBLs que a coordenacao monta por inteiro.
+  const temEnunciado = Boolean(
+    versao?.contexto_problema || versao?.problema_central || versao?.objetivos_aprendizagem
+  );
+
   const isFinalSubmitted = entrega && (entrega.status === 'ENVIADO' || entrega.status === 'ATRASADO');
   // Atalho "enviar arquivo para grupo": material de apoio, sem entrega esperada
   // (a menos que o aluno já tenha respondido mesmo assim — aí mantém a entrega visível).
@@ -260,26 +269,35 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
         </div>
       ) : (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }} className="mb-4">
+        {temEnunciado && (
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {versao?.contexto_problema && (
           <div>
             <h4 className="font-bold mb-2">1. Cenário-Problema</h4>
             <p style={{ whiteSpace: 'pre-line', fontSize: '0.9rem' }}>{versao?.contexto_problema}</p>
           </div>
+          )}
 
+          {versao?.problema_central && (
           <div>
             <h4 className="font-bold mb-2" style={{ color: 'var(--primary)' }}>2. Problema Central</h4>
             <div style={{ padding: '1rem', background: 'var(--bg-main)', borderLeft: '4px solid var(--primary)', borderRadius: '6px', fontWeight: 500 }}>
               {versao?.problema_central}
             </div>
           </div>
+          )}
 
+          {versao?.objetivos_aprendizagem && (
           <div>
             <h4 className="font-bold mb-2">3. Objetivos de Aprendizagem</h4>
             <p style={{ whiteSpace: 'pre-line', fontSize: '0.9rem' }}>{versao?.objetivos_aprendizagem}</p>
           </div>
+          )}
         </div>
+        )}
 
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {etapas.length > 0 && (
           <div>
             <h4 className="font-bold mb-2">4. Etapas da Atividade</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -291,17 +309,24 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
               ))}
             </div>
           </div>
+          )}
 
+          {(versao?.produtos_esperados || versao?.criterios_avaliacao) && (
           <div>
             <h4 className="font-bold mb-2">5. Produtos Esperados & Critérios</h4>
-            <p style={{ whiteSpace: 'pre-line', fontSize: '0.85rem' }}>{versao?.produtos_esperados}</p>
-            <p style={{ whiteSpace: 'pre-line', fontSize: '0.85rem', marginTop: '0.5rem', color: 'var(--text-muted)' }}>
-              <strong>Critérios:</strong> {versao?.criterios_avaliacao}
-            </p>
+            {versao?.produtos_esperados && (
+              <p style={{ whiteSpace: 'pre-line', fontSize: '0.85rem' }}>{versao?.produtos_esperados}</p>
+            )}
+            {versao?.criterios_avaliacao && (
+              <p style={{ whiteSpace: 'pre-line', fontSize: '0.85rem', marginTop: '0.5rem', color: 'var(--text-muted)' }}>
+                <strong>Critérios:</strong> {versao?.criterios_avaliacao}
+              </p>
+            )}
           </div>
+          )}
 
           <div>
-            <h4 className="font-bold mb-2">6. Materiais de Apoio Aprovados ({arquivos.length})</h4>
+            <h4 className="font-bold mb-2">Materiais PBL ({arquivos.length})</h4>
             {arquivos.map((f: any) => (
               <div key={f.id} className="flex items-center justify-between p-2 mb-1" style={{ background: 'var(--bg-main)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                 <div className="flex items-center gap-2 text-sm">
