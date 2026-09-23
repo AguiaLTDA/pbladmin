@@ -166,3 +166,86 @@ export async function saveSegmentationAndTargetStudents(
 
   return audience;
 }
+
+/**
+ * Recalcula QUEM alcança uma atividade, a partir das regras que ela já tem.
+ *
+ * `alunos_segmentados` é uma fotografia: nasce quando a atividade é publicada e
+ * não se move sozinha depois. Enquanto a audiência era "a turma", isso bastava.
+ * Com o caso PBL individual por grupo, deixou de bastar — mover um aluno de
+ * grupo passa a mudar a que material ele tem direito, e a fotografia antiga
+ * produz os dois erros ao mesmo tempo: o aluno não vê o caso do grupo em que
+ * entrou e continua vendo o caso do grupo de onde saiu.
+ *
+ * Difere de `saveSegmentationAndTargetStudents` de propósito: aquela refaz as
+ * REGRAS (usada quando a coordenação redefine o público-alvo), esta preserva as
+ * regras e só reprojeta a audiência. Aqui as regras estão certas — o que mudou
+ * foi a composição dos grupos que elas apontam.
+ */
+export async function ressincronizarAudiencia(atividadeId: number): Promise<number> {
+  const regras = await queryAsync<{ entidade_tipo: string; entidade_id: number; acao: string }>(
+    `SELECT sr.entidade_tipo, sr.entidade_id, sr.acao
+       FROM segmentacoes seg
+       JOIN segmentacao_regras sr ON sr.segmentacao_id = seg.id
+      WHERE seg.atividade_id = ?`,
+    [atividadeId]
+  );
+
+  // Sem regras não há o que projetar. Apagar a audiência aqui tiraria o acesso de
+  // quem já o tinha por causa de uma segmentação que talvez nem exista mais.
+  if (regras.length === 0) return 0;
+
+  const audiencia = await calculateAudiencePreview(
+    regras.map((r) => ({
+      entidadeTipo: r.entidade_tipo as RuleInput['entidadeTipo'],
+      entidadeId: r.entidade_id,
+      acao: r.acao as RuleInput['acao']
+    }))
+  );
+
+  await runAsync(`DELETE FROM alunos_segmentados WHERE atividade_id = ?`, [atividadeId]);
+  for (const al of audiencia.alunosIncluidos) {
+    await runAsync(
+      `INSERT INTO alunos_segmentados (atividade_id, aluno_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
+      [atividadeId, al.id]
+    );
+  }
+
+  return audiencia.alunosIncluidos.length;
+}
+
+/**
+ * Ressincroniza tudo o que foi direcionado aos grupos informados.
+ *
+ * Chamada depois de qualquer mexida na composição de um grupo. Recebe a lista
+ * de grupos afetados — numa troca são dois, o de origem e o de destino — porque
+ * corrigir só o destino deixaria o aluno ainda enxergando o caso do grupo
+ * anterior, que é o vazamento.
+ *
+ * Nunca derruba a operação que a chamou: remanejar um aluno é a ação que o
+ * usuário pediu, e falhar o remanejamento inteiro porque a audiência não pôde
+ * ser reprojetada seria pior que a audiência ficar desatualizada — que é o
+ * estado em que o portal já vivia. O erro vai para o log.
+ */
+export async function ressincronizarAudienciaDosGrupos(grupoIds: Array<number | null | undefined>): Promise<void> {
+  const ids = Array.from(new Set(grupoIds.filter((g): g is number => Number.isInteger(g as number))));
+  if (ids.length === 0) return;
+
+  try {
+    const placeholders = ids.map(() => '?').join(',');
+    const atividades = await queryAsync<{ atividade_id: number }>(
+      `SELECT DISTINCT seg.atividade_id
+         FROM segmentacao_regras sr
+         JOIN segmentacoes seg ON seg.id = sr.segmentacao_id
+         JOIN atividades_pbl a ON a.id = seg.atividade_id AND a.deletado_em IS NULL
+        WHERE sr.entidade_tipo = 'grupo' AND sr.entidade_id IN (${placeholders})`,
+      ids
+    );
+
+    for (const { atividade_id } of atividades) {
+      await ressincronizarAudiencia(atividade_id);
+    }
+  } catch (err) {
+    console.error('Falha ao ressincronizar a audiência dos grupos', ids, err);
+  }
+}

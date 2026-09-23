@@ -6,6 +6,7 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
 import { importarHorarioAcademico } from '../services/horarioImport';
 import { CADASTRO_GRUPOS_ABERTO, MENSAGEM_GRUPOS_ENCERRADO } from '../config/fases';
+import { ressincronizarAudienciaDosGrupos } from '../services/segmentation';
 
 // --- USUÁRIOS ---
 export async function listUsers(req: AuthenticatedRequest, res: Response) {
@@ -544,10 +545,13 @@ export async function selfEnroll(req: AuthenticatedRequest, res: Response) {
       }
     }
 
-    const matriculaExistente = await getAsync<{ id: number }>(
-      `SELECT id FROM matriculas WHERE usuario_id = ? AND turma_id = ? AND deletado_em IS NULL`,
+    const matriculaExistente = await getAsync<{ id: number; grupo_id: number | null }>(
+      `SELECT id, grupo_id FROM matriculas WHERE usuario_id = ? AND turma_id = ? AND deletado_em IS NULL`,
       [alunoId, turmaId]
     );
+    // Lido antes do UPDATE: e o grupo que o aluno deixa ao trocar.
+    const grupoAnteriorSelf = matriculaExistente?.grupo_id ?? null;
+
     if (matriculaExistente) {
       await runAsync(`UPDATE matriculas SET grupo_id = ? WHERE id = ?`, [grupoFinalId, matriculaExistente.id]);
     } else {
@@ -557,6 +561,10 @@ export async function selfEnroll(req: AuthenticatedRequest, res: Response) {
         grupoFinalId
       ]);
     }
+
+    // Esta rota cria grupo, entra em grupo E troca de grupo na mesma operacao,
+    // entao os dois lados da troca precisam ser reprojetados.
+    await ressincronizarAudienciaDosGrupos([grupoFinalId, grupoAnteriorSelf]);
 
     await logAudit(alunoId, 'AUTO_MATRICULA_GRUPO', 'matriculas', undefined, { turmaId, grupoId: grupoFinalId });
 
@@ -700,6 +708,11 @@ export async function addGroupMember(req: AuthenticatedRequest, res: Response) {
     const lotado = await grupoLotado(grupo.id, Number(usuarioId));
     if (lotado) return res.status(409).json({ message: lotado });
 
+    // Guardado ANTES do UPDATE: e o grupo de onde o aluno saiu, e e ele que
+    // precisa perder o aluno da audiencia. Depois do UPDATE essa informacao
+    // ja nao existe em lugar nenhum.
+    const grupoAnterior = matriculaColega?.grupo_id ?? null;
+
     if (matriculaColega) {
       // Entre alunos, tirar alguém de um grupo já formado tem de partir dele mesmo;
       // a coordenadoria pode remanejar direto.
@@ -716,6 +729,10 @@ export async function addGroupMember(req: AuthenticatedRequest, res: Response) {
         grupo.id
       ]);
     }
+
+    // O material segue o grupo: quem entra passa a ver o caso do grupo novo e
+    // deixa de ver o do anterior.
+    await ressincronizarAudienciaDosGrupos([grupo.id, grupoAnterior]);
 
     await logAudit(alunoId, isAdmin ? 'ADMIN_ADICIONAR_MEMBRO_GRUPO' : 'INDICAR_COLEGA_GRUPO', 'matriculas', undefined, {
       grupoId: grupo.id,
@@ -763,6 +780,9 @@ export async function removeGroupMember(req: AuthenticatedRequest, res: Response
     if (!matricula) return res.status(404).json({ message: 'Este aluno não está neste grupo.' });
 
     await runAsync(`UPDATE matriculas SET grupo_id = NULL WHERE id = ?`, [matricula.id]);
+
+    // Sem grupo, sem caso: o aluno perde o acesso ao material daquele grupo.
+    await ressincronizarAudienciaDosGrupos([grupo.id]);
 
     await logAudit(adminId || null, 'ADMIN_REMOVER_MEMBRO_GRUPO', 'matriculas', String(matricula.id), {
       grupoId: grupo.id,
@@ -813,6 +833,10 @@ export async function deleteGroup(req: AuthenticatedRequest, res: Response) {
 
     await runAsync(`UPDATE matriculas SET grupo_id = NULL WHERE grupo_id = ? AND deletado_em IS NULL`, [grupo.id]);
     await runAsync(`UPDATE grupos SET deletado_em = CURRENT_TIMESTAMP, ativo = 0 WHERE id = ?`, [grupo.id]);
+
+    // O grupo deixou de existir; o material direcionado a ele nao pode continuar
+    // acessivel a quem estava nele.
+    await ressincronizarAudienciaDosGrupos([grupo.id]);
 
     await logAudit(adminId || null, 'EXCLUIR_GRUPO', 'grupos', String(grupo.id), {
       nome: grupo.nome,
