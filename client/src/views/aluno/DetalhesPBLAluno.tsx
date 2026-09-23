@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { apiRequest, getDownloadUrl } from '../../services/api';
+import { apiRequest, baixarArquivoAutenticado } from '../../services/api';
+import { VisualizadorArquivo } from '../../components/VisualizadorArquivo';
 import { useToast } from '../../context/ToastContext';
 import { ComentariosMaterial } from '../../components/ComentariosMaterial';
 import {
@@ -15,7 +16,8 @@ import {
   ShieldCheck,
   Paperclip,
   Trash2,
-  Info
+  Info,
+  Eye
 } from 'lucide-react';
 
 interface Props {
@@ -26,6 +28,10 @@ interface Props {
 export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) => {
   const { showToast } = useToast();
   const [data, setData] = useState<any>(null);
+  // Abrir o material dentro do portal. O link direto para a rota de download nao
+  // carrega o cabecalho Authorization, e o aluno terminava numa aba com o JSON
+  // "Token de autenticacao nao fornecido." em vez do PDF.
+  const [arquivoEmFoco, setArquivoEmFoco] = useState<{ id: number; nome: string; mime?: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Student Submission state
@@ -52,6 +58,14 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
         navigate('/aluno/atividades');
       })
       .finally(() => setLoading(false));
+  };
+
+  const baixar = async (id: number, nome: string) => {
+    try {
+      await baixarArquivoAutenticado(id, nome);
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível baixar o arquivo.', 'error');
+    }
   };
 
   useEffect(() => {
@@ -215,9 +229,20 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
                 <FileText size={16} color="var(--primary)" />
                 <span>{f.nome_original}</span>
               </div>
-              <a href={getDownloadUrl(f.id)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
-                <Download size={14} /> Baixar
-              </a>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setArquivoEmFoco({ id: f.id, nome: f.nome_original, mime: f.mime_type })}
+                  className="btn btn-sm btn-secondary"
+                >
+                  <Eye size={14} /> Ver
+                </button>
+                <button
+                  onClick={() => baixar(f.id, f.nome_original)}
+                  className="btn btn-sm btn-secondary"
+                >
+                  <Download size={14} /> Baixar
+                </button>
+              </div>
             </div>
           ))}
 
@@ -283,9 +308,20 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
                   <FileText size={16} color="var(--primary)" />
                   <span>{f.nome_original}</span>
                 </div>
-                <a href={getDownloadUrl(f.id)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
-                  <Download size={14} /> Baixar
-                </a>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setArquivoEmFoco({ id: f.id, nome: f.nome_original, mime: f.mime_type })}
+                    className="btn btn-sm btn-secondary"
+                  >
+                    <Eye size={14} /> Ver
+                  </button>
+                  <button
+                    onClick={() => baixar(f.id, f.nome_original)}
+                    className="btn btn-sm btn-secondary"
+                  >
+                    <Download size={14} /> Baixar
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -386,6 +422,15 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
           </div>
         )}
       </div>
+      )}
+
+      {arquivoEmFoco && (
+        <VisualizadorArquivo
+          arquivoId={arquivoEmFoco.id}
+          nomeArquivo={arquivoEmFoco.nome}
+          mimeType={arquivoEmFoco.mime}
+          onClose={() => setArquivoEmFoco(null)}
+        />
       )}
     </div>
   );

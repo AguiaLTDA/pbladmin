@@ -469,6 +469,32 @@ export function getDownloadUrl(fileId: number): string {
  *
  * Quem chama é responsável por revogar a URL com URL.revokeObjectURL().
  */
+/**
+ * Baixa um arquivo do acervo COM o token de autenticação.
+ *
+ * Um `<a href>` apontando direto para a rota de download não funciona: o portal
+ * autentica por cabeçalho `Authorization`, e uma navegação do navegador não o
+ * envia — a API responde "Token de autenticação não fornecido." e o usuário vê
+ * um JSON cru numa aba em branco. Colocar o token na URL resolveria e criaria
+ * outro problema, porque ele passaria a aparecer no histórico e nos logs de
+ * acesso. Então o conteúdo vem por fetch e o download é disparado a partir do
+ * blob já recebido.
+ */
+export async function baixarArquivoAutenticado(fileId: number, nomeArquivo: string): Promise<void> {
+  const url = await fetchFileObjectUrl(fileId);
+  try {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = nomeArquivo;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    // Sem isto o blob fica retido na memória da aba até o usuário sair da página.
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+}
+
 export async function fetchFileObjectUrl(fileId: number): Promise<string> {
   const token = localStorage.getItem('pbl_auth_token');
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { apiRequest, getDownloadUrl } from '../../services/api';
+import { apiRequest, baixarArquivoAutenticado } from '../../services/api';
 import { PBLActivity, PBLVersion, PBLStep, FileItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -32,6 +32,14 @@ interface ActivityDetailsResponse {
 
 export const RevisaoPBLView: React.FC<Props> = ({ activityId, navigate }) => {
   const { showToast } = useToast();
+  const baixar = async (id: number, nome: string) => {
+    try {
+      await baixarArquivoAutenticado(id, nome);
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível baixar o arquivo.', 'error');
+    }
+  };
+
   const [data, setData] = useState<ActivityDetailsResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -230,10 +238,10 @@ export const RevisaoPBLView: React.FC<Props> = ({ activityId, navigate }) => {
                       <span>{f.nome_original}</span>
                       <span className="text-muted">({(f.tamanho_bytes / 1024).toFixed(0)} KB)</span>
                     </div>
-                    <a href={getDownloadUrl(f.id)} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
+                    <button onClick={() => baixar(f.id, f.nome_original)} className="btn btn-sm btn-secondary">
                       <Download size={14} />
                       Baixar
-                    </a>
+                    </button>
                   </div>
                 ))}
               </div>

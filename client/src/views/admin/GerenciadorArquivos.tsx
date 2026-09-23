@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { apiRequest, getDownloadUrl } from '../../services/api';
+import { apiRequest, baixarArquivoAutenticado } from '../../services/api';
 import { FileItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { TIPOS_DOCUMENTO, rotuloTipoDocumento } from '../../constants/academico';
@@ -10,6 +10,14 @@ import { EnviarArquivoGrupoModal } from '../../components/EnviarArquivoGrupoModa
 
 export const GerenciadorArquivosView: React.FC = () => {
   const { showToast } = useToast();
+  const baixar = async (id: number, nome: string) => {
+    try {
+      await baixarArquivoAutenticado(id, nome);
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível baixar o arquivo.', 'error');
+    }
+  };
+
   const [files, setFiles] = useState<FileItem[]>([]);
   // Abrir na plataforma em vez de baixar: conferir o conteudo de um PDF antes de
   // direciona-lo ou de trocar o arquivo de um grupo nao deveria exigir salvar o
@@ -448,15 +456,13 @@ export const GerenciadorArquivosView: React.FC = () => {
                       >
                         <Eye size={14} /> Abrir
                       </button>
-                      <a
-                        href={getDownloadUrl(f.id)}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        onClick={() => baixar(f.id, f.nome_original)}
                         className="btn btn-secondary btn-sm"
-                        title="Download Seguro Stream"
+                        title="Baixar o arquivo"
                       >
                         <Download size={14} />
-                      </a>
+                      </button>
                       <button
                         onClick={() => handleDelete(f.id, f.nome_original)}
                         className="btn btn-danger btn-sm"
