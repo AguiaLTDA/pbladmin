@@ -663,6 +663,11 @@ export async function setInstitutionalFile(req: AuthenticatedRequest, res: Respo
  * nas listagens como qualquer outra atividade. O título e o código levam um
  * prefixo (ver ROTULO_MATERIAL/PREFIXO_CODIGO) só para ficar reconhecível.
  */
+// `PBL-MAT-` no codigo unico e a marca de que a atividade nasceu deste atalho.
+// Ate a conversao dos casos em PBL 1, esse papel era exercido por
+// `natureza = 'INFORMATIVA'` -- que deixou de servir no instante em que as
+// atividades viraram AVALIATIVA e sumiram das telas que as procuravam por ali.
+// O codigo nao muda com a natureza, entao e nele que a marca vive agora.
 const ROTULO_MATERIAL = 'Material';
 const PREFIXO_CODIGO = 'MAT';
 
@@ -721,7 +726,7 @@ export async function enviarArquivoParaGrupo(req: AuthenticatedRequest, res: Res
          FROM atividades_pbl a
          JOIN segmentacoes seg ON seg.atividade_id = a.id
          JOIN segmentacao_regras sr ON sr.segmentacao_id = seg.id
-        WHERE a.natureza = 'INFORMATIVA' AND a.deletado_em IS NULL
+        WHERE a.codigo_unico LIKE 'PBL-${PREFIXO_CODIGO}-%' AND a.deletado_em IS NULL
           AND sr.entidade_tipo = 'grupo' AND sr.entidade_id = ? AND sr.acao = 'INCLUIR'`,
       [grupo.id]
     );
@@ -907,7 +912,7 @@ export async function listarGruposComMaterial(_req: AuthenticatedRequest, res: R
          LEFT JOIN versoes_atividades va ON va.atividade_id = a.id
          LEFT JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
          LEFT JOIN arquivos ar ON ar.id = aa.arquivo_id AND ar.deletado_em IS NULL
-        WHERE a.natureza = 'INFORMATIVA' AND a.deletado_em IS NULL
+        WHERE a.deletado_em IS NULL
           AND sr.entidade_tipo = 'grupo' AND sr.acao = 'INCLUIR'
         ORDER BY sr.entidade_id, a.criado_em DESC`
     );
@@ -981,7 +986,7 @@ export async function listarPblsDosMeusGrupos(req: AuthenticatedRequest, res: Re
                 ON sr.entidade_tipo = 'grupo' AND sr.entidade_id = g.id AND sr.acao = 'INCLUIR'
          LEFT JOIN segmentacoes seg ON seg.id = sr.segmentacao_id
          LEFT JOIN atividades_pbl a
-                ON a.id = seg.atividade_id AND a.natureza = 'INFORMATIVA' AND a.deletado_em IS NULL
+                ON a.id = seg.atividade_id AND a.deletado_em IS NULL
          LEFT JOIN versoes_atividades va ON va.atividade_id = a.id
          LEFT JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
          LEFT JOIN arquivos ar ON ar.id = aa.arquivo_id AND ar.deletado_em IS NULL

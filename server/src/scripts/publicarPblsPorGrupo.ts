@@ -201,8 +201,7 @@ async function main() {
       `SELECT ar.id
          FROM segmentacao_regras sr
          JOIN segmentacoes seg ON seg.id = sr.segmentacao_id
-         JOIN atividades_pbl a ON a.id = seg.atividade_id
-              AND a.natureza = 'INFORMATIVA' AND a.deletado_em IS NULL
+         JOIN atividades_pbl a ON a.id = seg.atividade_id AND a.deletado_em IS NULL
          JOIN versoes_atividades va ON va.atividade_id = a.id
          JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
          JOIN arquivos ar ON ar.id = aa.arquivo_id AND ar.deletado_em IS NULL
