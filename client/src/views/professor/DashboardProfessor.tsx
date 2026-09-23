@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { CronogramaPBL } from '../../components/CronogramaPBL';
 import { ManualAlunoPBLButton } from '../../components/ManualAlunoPBLButton';
-import { Send, Users, Award, ArrowRight, AlertTriangle, GraduationCap, Layers } from 'lucide-react';
+import { Send, Users, Award, ArrowRight, AlertTriangle, GraduationCap, Layers, Star } from 'lucide-react';
 
 interface ProfessorDashboardData {
   kpis: {
@@ -148,6 +148,14 @@ export const DashboardProfessorView: React.FC<Props> = ({ navigate }) => {
 
             <button onClick={() => navigate('/professor/turmas')} className="btn btn-secondary justify-between">
               <span>Minhas Turmas & Horário</span>
+              <ArrowRight size={16} />
+            </button>
+
+            <button onClick={() => navigate('/professor/autoavaliacao-grupos')} className="btn btn-secondary justify-between">
+              <span className="flex items-center gap-2">
+                <Star size={16} />
+                Autoavaliação dos Grupos que Participo
+              </span>
               <ArrowRight size={16} />
             </button>
 

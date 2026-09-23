@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
-import { GraduationCap, Clock, CheckCircle2, AlertTriangle, ArrowRight, Sparkles, Award } from 'lucide-react';
+import { GraduationCap, Clock, CheckCircle2, AlertTriangle, ArrowRight, Sparkles, Award, Star } from 'lucide-react';
 import { ManualAlunoPBLButton } from '../../components/ManualAlunoPBLButton';
 import { useAuth } from '../../context/AuthContext';
 
@@ -128,6 +128,14 @@ export const DashboardAlunoView: React.FC<Props> = ({ navigate }) => {
 
             <button onClick={() => navigate('/aluno/calendario')} className="btn btn-secondary justify-between">
               <span>Consultar Calendário de Prazos</span>
+              <ArrowRight size={16} />
+            </button>
+
+            <button onClick={() => navigate('/aluno/autoavaliacao')} className="btn btn-secondary justify-between">
+              <span className="flex items-center gap-2">
+                <Star size={16} />
+                Autoavaliação do Grupo
+              </span>
               <ArrowRight size={16} />
             </button>
 

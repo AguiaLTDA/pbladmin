@@ -622,3 +622,40 @@ CREATE TABLE IF NOT EXISTS cronograma_pbl_etapas (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cronograma_etapas_posicao ON cronograma_pbl_etapas(posicao);
+
+-- 33. Retro-autoavaliação entre pares dos grupos PBL.
+-- Cada integrante avalia a desenvoltura dos DEMAIS integrantes do próprio grupo,
+-- de 1 a 5 estrelas, dentro de uma janela de prazo (ver `autoavaliacao_janelas`,
+-- que replica as datas já divulgadas em cronograma_pbl_etapas, mas com abertura
+-- e fechamento reais para o servidor decidir quando aceitar respostas).
+CREATE TABLE IF NOT EXISTS autoavaliacao_janelas (
+  id SERIAL PRIMARY KEY,
+  rodada INTEGER NOT NULL,
+  titulo TEXT NOT NULL,
+  abre_em TIMESTAMPTZ NOT NULL,
+  fecha_em TIMESTAMPTZ NOT NULL,
+  criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_autoavaliacao_janelas_rodada ON autoavaliacao_janelas(rodada);
+
+-- Um par (avaliador, avaliado) por rodada. `grupo_id` fica gravado no momento
+-- do envio — se o aluno trocar de grupo depois, a resposta permanece ligada ao
+-- grupo em que ela de fato foi dada.
+CREATE TABLE IF NOT EXISTS autoavaliacoes (
+  id SERIAL PRIMARY KEY,
+  janela_id INTEGER NOT NULL,
+  grupo_id INTEGER NOT NULL,
+  avaliador_id INTEGER NOT NULL,
+  avaliado_id INTEGER NOT NULL,
+  nota SMALLINT NOT NULL CHECK (nota BETWEEN 1 AND 5),
+  criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (janela_id) REFERENCES autoavaliacao_janelas(id),
+  FOREIGN KEY (grupo_id) REFERENCES grupos(id),
+  FOREIGN KEY (avaliador_id) REFERENCES usuarios(id),
+  FOREIGN KEY (avaliado_id) REFERENCES usuarios(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_autoavaliacoes_par ON autoavaliacoes(janela_id, avaliador_id, avaliado_id);
+CREATE INDEX IF NOT EXISTS idx_autoavaliacoes_avaliado ON autoavaliacoes(janela_id, avaliado_id);

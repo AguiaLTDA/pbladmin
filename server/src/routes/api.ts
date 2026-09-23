@@ -14,6 +14,7 @@ import * as auditCtrl from '../controllers/auditController';
 import * as preCadastroCtrl from '../controllers/preCadastroController';
 import * as contextoCtrl from '../controllers/contextoAlunoController';
 import * as cronogramaCtrl from '../controllers/cronogramaController';
+import * as autoavaliacaoCtrl from '../controllers/autoavaliacaoController';
 
 const router = Router();
 
@@ -227,6 +228,16 @@ router.delete('/files/comentarios/:comentarioId', authenticateToken, requireRole
 // do aluno e do professor); só a coordenação edita.
 router.get('/cronograma', authenticateToken, cronogramaCtrl.getCronograma);
 router.put('/cronograma', authenticateToken, requireRole('ADMIN'), cronogramaCtrl.updateCronograma);
+
+// --- RETRO-AUTOAVALIAÇÃO ENTRE PARES DOS GRUPOS PBL ---
+// Leitura da rodada corrente liberada a qualquer autenticado (o aluno precisa
+// saber se o prazo está aberto); só o aluno responde, e só admin/professor
+// veem o panorama de quem já respondeu.
+router.get('/autoavaliacao/janela', authenticateToken, autoavaliacaoCtrl.getJanelaAtual);
+router.get('/autoavaliacao/janelas', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), autoavaliacaoCtrl.listarJanelas);
+router.get('/autoavaliacao/meu-grupo', authenticateToken, requireRole('ALUNO'), autoavaliacaoCtrl.getMeuGrupoParaAvaliar);
+router.post('/autoavaliacao/meu-grupo', authenticateToken, requireRole('ALUNO'), autoavaliacaoCtrl.salvarAvaliacoes);
+router.get('/autoavaliacao/status', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), autoavaliacaoCtrl.listarStatusAutoavaliacao);
 
 // --- DASHBOARD & REPORTS ---
 router.get('/dashboard', authenticateToken, dashCtrl.getDashboardData);

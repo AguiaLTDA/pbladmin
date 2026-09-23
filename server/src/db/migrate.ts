@@ -1,5 +1,6 @@
 import { getAsync, runAsync } from '../config/db';
 import { CRONOGRAMA_PBL_PADRAO } from '../config/cronogramaPadrao';
+import { AUTOAVALIACAO_JANELAS_PADRAO } from '../config/autoavaliacaoPadrao';
 
 // schema.sql já cria as tabelas no formato final; o único ajuste que não dá para expressar
 // em CREATE TABLE IF NOT EXISTS é este índice único (parte da chave depende de COALESCE).
@@ -196,5 +197,50 @@ export async function runMigrations() {
         [posicao, etapa.ordem, etapa.titulo, etapa.prazoTexto, etapa.fim, etapa.pontos || null]
       );
     }
+  }
+
+  // Retro-autoavaliação entre pares dos grupos PBL (ver bloco 33 em schema.sql).
+  // Criada aqui também porque schema.sql só roda no seed, e semeada com a janela
+  // de fábrica — mesma data já divulgada no cronograma oficial — para o portal
+  // do aluno já nascer com o prazo certo em produção.
+  await runAsync(
+    `CREATE TABLE IF NOT EXISTS autoavaliacao_janelas (
+       id SERIAL PRIMARY KEY,
+       rodada INTEGER NOT NULL,
+       titulo TEXT NOT NULL,
+       abre_em TIMESTAMPTZ NOT NULL,
+       fecha_em TIMESTAMPTZ NOT NULL,
+       criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+     )`
+  );
+  await runAsync(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_autoavaliacao_janelas_rodada ON autoavaliacao_janelas(rodada)`
+  );
+  await runAsync(
+    `CREATE TABLE IF NOT EXISTS autoavaliacoes (
+       id SERIAL PRIMARY KEY,
+       janela_id INTEGER NOT NULL REFERENCES autoavaliacao_janelas(id),
+       grupo_id INTEGER NOT NULL REFERENCES grupos(id),
+       avaliador_id INTEGER NOT NULL REFERENCES usuarios(id),
+       avaliado_id INTEGER NOT NULL REFERENCES usuarios(id),
+       nota SMALLINT NOT NULL CHECK (nota BETWEEN 1 AND 5),
+       criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+       atualizado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+     )`
+  );
+  await runAsync(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_autoavaliacoes_par ON autoavaliacoes(janela_id, avaliador_id, avaliado_id)`
+  );
+  await runAsync(
+    `CREATE INDEX IF NOT EXISTS idx_autoavaliacoes_avaliado ON autoavaliacoes(janela_id, avaliado_id)`
+  );
+
+  for (const janela of AUTOAVALIACAO_JANELAS_PADRAO) {
+    await runAsync(
+      `INSERT INTO autoavaliacao_janelas (rodada, titulo, abre_em, fecha_em)
+            VALUES (?, ?, ?, ?)
+       ON CONFLICT (rodada) DO NOTHING`,
+      [janela.rodada, janela.titulo, janela.abreEm, janela.fechaEm]
+    );
   }
 }

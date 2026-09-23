@@ -669,6 +669,18 @@ textarea.form-control {
   border: 1px solid rgba(9, 47, 30, 0.3);
 }
 
+/* Retro-autoavaliação: nome do aluno sublinhado para sinalizar, à vista na
+   listagem, quem já respondeu (verde) e quem ainda não respondeu (vermelho). */
+.autoavaliacao-nome-completo {
+  border-bottom: 2px solid #16a34a;
+  padding-bottom: 1px;
+}
+
+.autoavaliacao-nome-pendente {
+  border-bottom: 2px solid #dc2626;
+  padding-bottom: 1px;
+}
+
 .status-RASCUNHO { background: #f1f5f9; color: #475569; }
 .status-ENVIADO_ANALISE { background: #e0f2fe; color: #0369a1; }
 .status-EM_ANALISE { background: #dbeafe; color: #1d4ed8; }

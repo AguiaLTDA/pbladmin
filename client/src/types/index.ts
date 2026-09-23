@@ -597,3 +597,60 @@ export interface PanoramaContextos {
   resumo: { alunos: number; completos: number; iniciados: number; semResposta: number };
   alunos: ContextoAlunoResumo[];
 }
+
+// --- RETRO-AUTOAVALIAÇÃO ENTRE PARES DOS GRUPOS PBL ---
+
+export type StatusJanelaAutoavaliacao = 'ABERTA' | 'FUTURA' | 'ENCERRADA' | 'INEXISTENTE';
+
+export interface JanelaAutoavaliacao {
+  id: number;
+  rodada: number;
+  titulo: string;
+  abreEm: string;
+  fechaEm: string;
+  status?: StatusJanelaAutoavaliacao;
+}
+
+export interface ColegaParaAvaliar {
+  id: number;
+  nome: string;
+  nota: number | null;
+}
+
+export interface TurmaParaAutoavaliar {
+  turmaId: number;
+  turmaNome: string;
+  grupoId: number;
+  grupoNome: string;
+  colegas: ColegaParaAvaliar[];
+  completo: boolean;
+}
+
+export interface MeuGrupoAutoavaliacao {
+  janela: JanelaAutoavaliacao | null;
+  status: StatusJanelaAutoavaliacao;
+  turmas: TurmaParaAutoavaliar[];
+}
+
+export interface AlunoStatusAutoavaliacao {
+  id: number;
+  nome: string;
+  email: string;
+  cursoId: number;
+  cursoNome: string;
+  turmaId: number;
+  turmaNome: string;
+  grupoId: number;
+  grupoNome: string;
+  totalColegas: number;
+  notasDadas: number;
+  completo: boolean;
+  totalNotasRecebidas: number;
+  mediaRecebida: number | null;
+}
+
+export interface PanoramaAutoavaliacao {
+  janela: JanelaAutoavaliacao | null;
+  status: StatusJanelaAutoavaliacao;
+  alunos: AlunoStatusAutoavaliacao[];
+}

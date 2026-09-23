@@ -11,7 +11,8 @@ import {
   ArrowRight,
   TrendingUp,
   GraduationCap,
-  Layers
+  Layers,
+  Star
 } from 'lucide-react';
 
 interface DashboardData {
@@ -237,6 +238,14 @@ export const DashboardAdminView: React.FC<Props> = ({ navigate }) => {
               <span className="flex items-center gap-2">
                 <Clock size={16} />
                 Configurar Campos Obrigatórios do PBL
+              </span>
+              <ArrowRight size={16} />
+            </button>
+
+            <button onClick={() => navigate('/admin/autoavaliacao-grupos')} className="btn btn-secondary justify-between">
+              <span className="flex items-center gap-2">
+                <Star size={16} />
+                Autoavaliação dos Grupos
               </span>
               <ArrowRight size={16} />
             </button>

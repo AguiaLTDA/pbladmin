@@ -15,7 +15,8 @@ import {
   CalendarDays,
   LogOut,
   Award,
-  Briefcase
+  Briefcase,
+  Star
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { BrandLogo } from './BrandLogo';
@@ -58,6 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate, aberto
     { path: '/admin/arquivos', label: 'Gerenciador de Arquivos', icon: FolderOpen },
     { path: '/admin/relatorios', label: 'Relatórios & Exportação', icon: BarChart3 },
     { path: '/admin/cronograma', label: 'Calendário de Prazos', icon: Calendar },
+    { path: '/admin/autoavaliacao-grupos', label: 'Autoavaliação dos Grupos', icon: Star },
     { path: '/admin/auditoria', label: 'Trilha de Auditoria', icon: ShieldCheck },
     { path: '/admin/configuracoes', label: 'Configurações PBL', icon: Settings }
   ];
@@ -69,6 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate, aberto
     { path: '/professor/entregas', label: 'Acompanhamento & Entregas', icon: Award },
     { path: '/professor/calendario', label: 'Calendário de Prazos', icon: Calendar },
     { path: '/professor/pbls-grupos', label: 'PBLs dos Meus Grupos', icon: Users },
+    { path: '/professor/autoavaliacao-grupos', label: 'Autoavaliação dos Grupos que Participo', icon: Star },
     { path: '/professor/materiais', label: 'Materiais Recebidos', icon: FolderOpen }
   ];
 
@@ -76,6 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate, aberto
     { path: '/aluno/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/aluno/atividades', label: 'Minhas Atividades', icon: GraduationCap },
     { path: '/aluno/grupo', label: 'Meus Grupos PBL', icon: Users },
+    { path: '/aluno/autoavaliacao', label: 'Autoavaliação do Grupo', icon: Star },
     { path: '/aluno/calendario', label: 'Calendário de Prazos', icon: Calendar },
     { path: '/aluno/contexto', label: 'Meu Contexto Profissional', icon: Briefcase }
   ];

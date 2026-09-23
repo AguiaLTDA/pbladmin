@@ -43,6 +43,9 @@ import { MeuGrupoAlunoView } from './views/aluno/MeuGrupoAluno';
 import { PanoramaContextosAlunos } from './components/PanoramaContextosAlunos';
 import { AlunosRelacionadosProfessorView } from './views/professor/AlunosRelacionadosProfessor';
 import { ContextoAlunoView } from './views/aluno/ContextoAluno';
+import { AutoavaliacaoAlunoView } from './views/aluno/AutoavaliacaoAluno';
+import { AutoavaliacaoGruposProfessorView } from './views/professor/AutoavaliacaoGruposProfessor';
+import { AutoavaliacaoGruposAdminView } from './views/admin/AutoavaliacaoGruposAdmin';
 
 /**
  * Separa o caminho da query string do hash. Os links enviados por e-mail
@@ -173,6 +176,7 @@ export const App: React.FC = () => {
       if (currentRoute === '/admin/cronograma') return <CronogramaAdminView />;
       if (currentRoute === '/admin/auditoria') return <AuditoriaAdminView />;
       if (currentRoute === '/admin/configuracoes') return <ConfiguracoesAdminView />;
+      if (currentRoute === '/admin/autoavaliacao-grupos') return <AutoavaliacaoGruposAdminView />;
     }
 
     // PROFESSOR ROUTES
@@ -190,6 +194,7 @@ export const App: React.FC = () => {
       if (currentRoute === '/professor/materiais') return <MateriaisRecebidosProfessorView />;
       if (currentRoute === '/professor/calendario')
         return <CalendarioPrazosProfessorView navigate={navigate} />;
+      if (currentRoute === '/professor/autoavaliacao-grupos') return <AutoavaliacaoGruposProfessorView />;
     }
 
     // ALUNO ROUTES
@@ -198,6 +203,7 @@ export const App: React.FC = () => {
       if (currentRoute === '/aluno/atividades') return <MinhasAtividadesAlunoView navigate={navigate} />;
       if (currentRoute === '/aluno/grupo') return <MeuGrupoAlunoView />;
       if (currentRoute === '/aluno/contexto') return <ContextoAlunoView />;
+      if (currentRoute === '/aluno/autoavaliacao') return <AutoavaliacaoAlunoView />;
       if (currentRoute === '/aluno/calendario') return <CalendarioPrazosAlunoView navigate={navigate} />;
       if (currentRoute.startsWith('/aluno/atividade/')) {
         const id = currentRoute.split('/aluno/atividade/')[1];
