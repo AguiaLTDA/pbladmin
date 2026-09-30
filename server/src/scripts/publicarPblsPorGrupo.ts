@@ -31,6 +31,36 @@ import { AuthenticatedRequest } from '../middleware/auth';
 const RAIZ = path.resolve(__dirname, '..', '..', '..', 'pbl1prof', 'PBL_Casos_Por_Grupo');
 const MANIFESTO = path.join(RAIZ, '_gerador', 'manifesto.json');
 
+/**
+ * Acha o PDF pelo NOME, em qualquer nivel abaixo da raiz.
+ *
+ * O manifesto guarda so o nome do arquivo, sem caminho. Resolver como
+ * `RAIZ + nome` amarrava o script a uma pasta plana: organizar os casos em
+ * subpastas por curso — que e como a coordenacao le esse acervo — quebrava a
+ * republicacao inteira. Buscando pelo nome, o manifesto segue valido e a pasta
+ * pode ser reorganizada a vontade.
+ */
+function acharArquivo(nome: string): string | null {
+  const direto = path.join(RAIZ, nome);
+  if (fs.existsSync(direto)) return direto;
+
+  const pilha: string[] = [RAIZ];
+  while (pilha.length) {
+    const dir = pilha.pop() as string;
+    for (const entrada of fs.readdirSync(dir, { withFileTypes: true })) {
+      // `_gerador` guarda os scripts e o manifesto, nunca os PDFs.
+      if (entrada.isDirectory()) {
+        if (entrada.name !== '_gerador' && entrada.name !== '__pycache__') {
+          pilha.push(path.join(dir, entrada.name));
+        }
+      } else if (entrada.name === nome) {
+        return path.join(dir, entrada.name);
+      }
+    }
+  }
+  return null;
+}
+
 interface ItemManifesto {
   turmaCodigo: string;
   indiceGrupo: number;
@@ -217,8 +247,8 @@ async function main() {
       continue;
     }
 
-    const caminho = path.join(RAIZ, item.arquivo);
-    if (!fs.existsSync(caminho)) {
+    const caminho = acharArquivo(item.arquivo);
+    if (!caminho) {
       problemas.push(`${rotulo}: arquivo ausente (${item.arquivo}).`);
       continue;
     }
