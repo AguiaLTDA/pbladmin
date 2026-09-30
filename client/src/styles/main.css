@@ -1272,6 +1272,25 @@ textarea.form-control {
 /* Grupo que já ficou com o PBL 1. Cor distinta do selo genérico de material:
    a coordenação varre a coluna procurando quem FALTA, e "recebeu alguma coisa"
    não responde a mesma pergunta que "recebeu o PBL 1". */
+/* Contraparte do selo de PBL entregue: marca a AUSENCIA, que e o que a
+   coordenacao procura na tela durante a distribuicao. Mesmo ambar dos demais
+   avisos do portal, para "algo pendente aqui" ter sempre a mesma cor. */
+.grupo-sem-pbl1 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 9999px;
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
 .grupo-com-pbl1 {
   display: inline-flex;
   align-items: center;

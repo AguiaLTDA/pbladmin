@@ -19,7 +19,8 @@ import {
   Paperclip,
   FileCheck2,
   FileText,
-  Eye
+  Eye,
+  FileWarning
 } from 'lucide-react';
 
 interface GestaoGruposAdminProps {
@@ -53,6 +54,11 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
   // Quem já recebeu material e o que recebeu — a fonte do selo "PBL 1" e do
   // aviso de duplicação no modal de anexo.
   const [materialPorGrupo, setMaterialPorGrupo] = useState<Record<number, GrupoComMaterial>>({});
+  // Sem isto, "não tem PBL 1" e "ainda não sei" ficariam idênticos: enquanto a
+  // consulta não volta, o mapa está vazio e TODOS os grupos pareceriam sem
+  // material. Um alerta disparando em 72 grupos por engano — ou eternamente,
+  // se a consulta falhar — destruiria a confiança no aviso.
+  const [estadoMateriais, setEstadoMateriais] = useState<'carregando' | 'ok' | 'erro'>('carregando');
   const [grupoAnexando, setGrupoAnexando] = useState<GrupoOption | null>(null);
   // Conferir o conteudo do PDF sem sair do portal. Ate aqui a coordenacao via o
   // NOME do arquivo do grupo e nada mais: para saber se o caso certo foi para o
@@ -81,13 +87,18 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
   const temPbl1 = (g: GrupoOption) => Boolean(materialPorGrupo[g.id]?.temPbl1);
 
   const carregarMateriais = () => {
+    setEstadoMateriais('carregando');
     apiRequest<GrupoComMaterial[]>('/files/grupos-com-material')
       .then((lista) => {
         const mapa: Record<number, GrupoComMaterial> = {};
         lista.forEach((g) => (mapa[g.grupoId] = g));
         setMaterialPorGrupo(mapa);
+        setEstadoMateriais('ok');
       })
-      .catch(() => setMaterialPorGrupo({}));
+      .catch(() => {
+        setMaterialPorGrupo({});
+        setEstadoMateriais('erro');
+      });
   };
 
   useEffect(() => {
@@ -123,6 +134,15 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
     return { com, sem: gruposDaTurma.length - com };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gruposDaTurma, materialPorGrupo]);
+
+  // A contagem do alerta é sobre TODOS os grupos, não sobre a turma filtrada:
+  // o alerta responde "quanto falta no total", e mudaria de sentido a cada
+  // filtro se olhasse só o recorte visível.
+  const semPbl1NoTotal = useMemo(
+    () => (estadoMateriais === 'ok' ? grupos.filter((g) => !temPbl1(g)).length : 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [grupos, materialPorGrupo, estadoMateriais]
+  );
 
   const gruposFiltrados = useMemo(() => {
     return gruposDaTurma.filter((g) => {
@@ -258,6 +278,48 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
           <Plus size={16} /> Novo Grupo
         </button>
       </div>
+
+      {/* Alerta da distribuição: enquanto sobrar grupo sem o PBL 1, a aba abre
+          dizendo quantos faltam e leva direto a eles. */}
+      {estadoMateriais === 'ok' && semPbl1NoTotal > 0 && (
+        <div className="card mb-4" style={{ background: '#fffbeb', border: '1px solid #fcd34d' }}>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <FileWarning size={20} color="#b45309" style={{ flexShrink: 0 }} />
+              <div>
+                <strong style={{ color: '#b45309' }}>
+                  {semPbl1NoTotal === 1
+                    ? '1 grupo ainda está sem arquivo PBL'
+                    : `${semPbl1NoTotal} grupos ainda estão sem arquivo PBL`}
+                </strong>
+                <p className="text-sm text-muted" style={{ margin: '0.2rem 0 0' }}>
+                  De {grupos.length} grupos no total. Anexe o caso pelo botão "Anexar PBL" na linha
+                  de cada um.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setTurmaFiltro('');
+                setOcupacaoFiltro('');
+                setPblFiltro('sem_pbl1');
+              }}
+              className="btn btn-secondary btn-sm"
+            >
+              Ver os que faltam
+            </button>
+          </div>
+        </div>
+      )}
+
+      {estadoMateriais === 'erro' && (
+        <div className="card mb-4" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+          <span className="text-sm" style={{ color: '#991b1b' }}>
+            Não foi possível consultar quais grupos já receberam o PBL. A coluna "PBL 1" abaixo não
+            é confiável agora — recarregue a página para tentar de novo.
+          </span>
+        </div>
+      )}
 
       <div className="card mb-4" style={{ padding: '0.85rem 1rem' }}>
         <div className="flex flex-wrap items-center gap-4">
@@ -406,12 +468,22 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
                         <span className="grupo-com-pbl1" title="Este grupo já recebeu o PBL 1">
                           <FileCheck2 size={12} /> PBL 1
                         </span>
-                      ) : materialPorGrupo[g.id] ? (
-                        <span className="text-muted text-sm">
-                          {materialPorGrupo[g.id].total} material(is), sem PBL 1
-                        </span>
-                      ) : (
+                      ) : estadoMateriais !== 'ok' ? (
+                        // Carregando ou falhou: dizer "sem PBL 1" aqui seria afirmar
+                        // algo que ainda não se sabe.
                         <span className="text-muted text-sm">—</span>
+                      ) : (
+                        <span
+                          className="grupo-sem-pbl1"
+                          title={
+                            materialPorGrupo[g.id]
+                              ? `Este grupo tem ${materialPorGrupo[g.id].total} material(is), mas nenhum é o PBL 1`
+                              : 'Este grupo ainda não recebeu nenhum material'
+                          }
+                        >
+                          <FileWarning size={12} /> sem PBL
+                          {materialPorGrupo[g.id] ? ` (${materialPorGrupo[g.id].total} outro(s))` : ''}
+                        </span>
                       )}
                     </td>
                     <td style={{ textAlign: 'right' }}>
