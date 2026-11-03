@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { GraduationCap, Clock, CheckCircle2, AlertTriangle, ArrowRight, Sparkles, Award, Star } from 'lucide-react';
 import { ManualAlunoPBLButton } from '../../components/ManualAlunoPBLButton';
+import { ComunicadoPBLEscrito } from '../../components/ComunicadoPBLEscrito';
 import { useAuth } from '../../context/AuthContext';
 
 interface AlunoDashboardData {
@@ -47,6 +48,8 @@ export const DashboardAlunoView: React.FC<Props> = ({ navigate }) => {
           Ver Minhas Atividades
         </button>
       </div>
+
+      <ComunicadoPBLEscrito />
 
       {/* Chamariz do Contexto do Aluno: some assim que a medalha é conquistada,
           para não virar ruído permanente no painel de quem já respondeu. */}

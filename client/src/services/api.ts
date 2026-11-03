@@ -1,4 +1,4 @@
-import { isSupabaseConfigured } from './supabase';
+import { isDemoMode, isSupabaseConfigured } from './supabase';
 import { CRONOGRAMA_PBL_PADRAO } from '../constants/academico';
 import { supabaseService } from './supabaseService';
 
@@ -32,6 +32,31 @@ export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  if (isDemoMode) {
+    if (endpoint === '/auth/login' && (options.method || 'GET').toUpperCase() === 'POST') {
+      const body = JSON.parse(String(options.body || '{}'));
+      return (await supabaseService.login(body.email, body.senha)) as T;
+    }
+    if (endpoint === '/auth/profile') {
+      const saved = localStorage.getItem('pbl_user_data');
+      if (!saved) throw new Error('Sessão de demonstração não encontrada.');
+      return JSON.parse(saved) as T;
+    }
+    if (['/dashboard', '/notifications', '/audit', '/pbl/activities'].includes(endpoint) && (options.method || 'GET').toUpperCase() === 'GET') {
+      const saved = localStorage.getItem('pbl_user_data');
+      const user = saved ? JSON.parse(saved) : {};
+      if (endpoint !== '/dashboard' || user.perfilNome !== 'ALUNO') {
+        const demo = await handleSupabaseRequest<T>(endpoint, options);
+        if (demo !== undefined) return demo;
+      }
+    }
+    const method = (options.method || 'GET').toUpperCase();
+    if (method !== 'GET' && endpoint !== '/files/upload' && endpoint !== '/student/context' && endpoint !== '/autoavaliacao/meu-grupo') {
+      return { message: 'Demonstração: ação simulada, sem persistência.', demo: true, persistido: false } as T;
+    }
+    return getFallbackResponseForEndpoint<T>(endpoint, options);
+  }
+
   const token = localStorage.getItem('pbl_auth_token');
 
   // 1. Backend Express real — prioridade máxima quando alcançável.
@@ -200,6 +225,29 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
     );
   }
 
+  if (endpoint === '/dashboard') {
+    const saved = localStorage.getItem('pbl_user_data');
+    const user = saved ? JSON.parse(saved) : null;
+    if (isDemoMode && user?.perfilNome === 'ALUNO') return { kpis: { novas: 1, emAndamento: 0, concluidas: 0, atrasadas: 0, total: 1 } } as T;
+  }
+
+  if (isDemoMode && endpoint === '/files/institutional/MANUAL_ALUNO_PBL') {
+    return { chave: 'MANUAL_ALUNO_PBL', atualizado_em: '2026-11-01T12:00:00.000Z', arquivo_id: 900, nome_original: 'Manual do Aluno PBL.pdf', tamanho_bytes: 5000, mime_type: 'application/pdf', categoria: 'PDF' } as T;
+  }
+
+  if (isDemoMode && endpoint === '/student/context') {
+    if ((options.method || 'GET').toUpperCase() !== 'GET') return {
+      ...JSON.parse(String(options.body || '{}')),
+      usuarioId: 5,
+      existe: true,
+      completed: true,
+      message: 'Demonstração: contexto atualizado nesta tela, sem persistência.',
+      demo: true,
+      persistido: false
+    } as T;
+    return { usuarioId: 5, existe: true, workSector: 'Educação', companySize: 'Média empresa', dailyTasks: 'Organização de projetos e estudos.', workplaceChallenges: 'Conciliar prazos e trabalho em equipe.', relevantExperience: 'Participação em projetos acadêmicos.', keyLearnings: 'Comunicação e planejamento.', courseConnection: 'Gestão e processos.', careerGoals: 'Atuar com gestão de projetos.', completed: true, completedAt: '2026-10-20T12:00:00.000Z', respondidas: 6, totalPerguntas: 6, minimoParaMedalha: 4, minimoCaracteres: 15, medalha: null } as T;
+  }
+
   // Contexto do Aluno: sem backend, a tela abre vazia em vez de quebrar. Salvar
   // é que não pode fingir sucesso — a resposta viria de lugar nenhum.
   if (endpoint.startsWith('/student/context')) {
@@ -253,15 +301,19 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
   // Lista de Atividades do Aluno
   if (endpoint.includes('/submissions/student/activities')) {
     if (endpoint.match(/\/submissions\/student\/activities\/\d+/)) {
+      const activityId = Number(endpoint.split('/').pop());
       return {
         atividade: {
-          id: 1,
+          id: activityId,
           codigo_unico: 'ADMCONT010301',
           titulo: 'TRANSFORMAÇÃO DIGITAL E CLIMA ORGANIZACIONAL: DESAFIOS DE GESTÃO NA MARCOPOLO SÃO MATEUS',
           curso_nome: 'Administração e Ciências Contábeis',
           disciplina_nome: 'Gestão Organizacional e Clima',
           professor_nome: 'Profa. Jussara Matos',
-          status: 'PUBLICADO'
+          status: 'PUBLICADO',
+          prazo_entrega: isDemoMode
+            ? (activityId === 2 ? '2026-11-27T23:59:59.000-03:00' : '2026-11-04T23:59:59.000-03:00')
+            : undefined
         },
         versao: {
           id: 1,
@@ -281,24 +333,15 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
           { id: 2, ordem: 2, titulo: 'Formulação de Hipóteses e Plano de Mudança', descricao: 'Elaborar o plano estratégico de comunicação e treinamento.', obrigatoria: 1 },
           { id: 3, ordem: 3, titulo: 'Elaboração do Relatório e Entrega Final', descricao: 'Compilar a solução técnica e submeter o documento final no portal.', obrigatoria: 1 }
         ],
-        arquivosAtividade: [
-          { id: 1, nome_original: 'Guia_Estudo_Caso_Marcopolo.pdf', tamanho_bytes: 1024500, mime_type: 'application/pdf', categoria: 'PDF' }
-        ],
-        entrega: {
-          id: 1,
-          status: 'ENVIADO',
-          conteudo_resposta: 'Prezados Professores, encaminhamos o Relatório de Gestão de Mudança da Marcopolo com a proposta de comitês transversais e indicadores semanais de engajamento.',
-          data_envio: '2026-03-25T14:30:00.000Z',
-          comprovante_hash: 'HASH-DELIVERY-KETLLY-20260325'
-        },
+        arquivosAtividade: [{ id: 1, nome_original: 'Guia_Estudo_Caso_Marcopolo.pdf', tamanho_bytes: 1024500, mime_type: 'application/pdf', categoria: 'PDF' }],
         arquivosEntrega: [],
-        feedback: {
-          nota_escrita: 1.56,
-          nota_oral: 1.29,
-          nota_total: 2.85,
-          observacoes: 'Excelente profundidade na análise da resistência cultural da planta de São Mateus.',
-          liberado_aluno: 1
-        }
+        ...(isDemoMode ? {
+          arquivos: [{ id: 900, nome_original: 'Material da atividade PBL.pdf', tamanho_bytes: 5000, mime_type: 'application/pdf', categoria: 'PDF' }],
+          feedback: null
+        } : {
+          entrega: { id: 1, status: 'ENVIADO', conteudo_resposta: 'Relatório de Gestão de Mudança da Marcopolo.', data_envio: '2026-03-25T14:30:00.000Z', comprovante_hash: 'HASH-DELIVERY-KETLLY-20260325' },
+          feedback: { nota_escrita: 1.56, nota_oral: 1.29, nota_total: 2.85, observacoes: 'Excelente profundidade na análise.', liberado_aluno: 1 }
+        })
       } as unknown as T;
     }
 
@@ -310,10 +353,10 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
         curso_nome: 'Administração e Ciências Contábeis',
         disciplina_nome: 'Gestão Organizacional e Clima',
         professor_nome: 'Profa. Jussara Matos',
-        prazo_entrega: '2026-03-30T23:59:59.000Z',
-        estadoAluno: 'CONCLUIDA',
-        nota_total: 2.85,
-        liberado_aluno: 1
+        prazo_entrega: isDemoMode ? '2026-11-04T23:59:59.000-03:00' : '2026-03-30T23:59:59.000Z',
+        estadoAluno: isDemoMode ? 'PENDENTE' : 'CONCLUIDA',
+        nota_total: isDemoMode ? null : 2.85,
+        liberado_aluno: isDemoMode ? 0 : 1
       },
       {
         id: 2,
@@ -322,7 +365,7 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
         curso_nome: 'Análise e Desenvolvimento de Sistemas',
         disciplina_nome: 'Engenharia de Software e Projetos',
         professor_nome: 'Prof. Nilvans Silva',
-        prazo_entrega: '2026-04-15T23:59:59.000Z',
+        prazo_entrega: isDemoMode ? '2026-11-27T23:59:59.000-03:00' : '2026-04-15T23:59:59.000Z',
         estadoAluno: 'PENDENTE',
         liberado_aluno: 0
       }
@@ -356,7 +399,10 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
   }
 
   if (endpoint.match(/\/academic\/groups\/\d+\/membros/) && (options.method || 'GET').toUpperCase() === 'GET') {
-    return [] as unknown as T;
+    return isDemoMode ? [
+      { id: 5, nome: 'Ketlly Beatriz Souza Rodrigues', email: 'aluno.ketlly@pbl.edu.br' },
+      { id: 6, nome: 'Kaila Cristina da Silva Lima', email: 'aluno.kaila@pbl.edu.br' }
+    ] as unknown as T : [] as unknown as T;
   }
 
   if (endpoint.includes('/academic/groups')) {
@@ -368,8 +414,17 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
   }
 
   if (endpoint.includes('/academic/my-enrollment')) {
-    return [] as unknown as T;
+    return isDemoMode ? [{ matricula_id: 5, turma_id: 1, turma_nome: 'Turma A - 1º e 3º Período ADMCONT', turma_codigo: 'ADMCONT-010301', grupo_id: 1, grupo_nome: 'Grupo Marcopolo' }] as unknown as T : [] as unknown as T;
   }
+
+  if (isDemoMode && endpoint === '/autoavaliacao/meu-grupo' && (options.method || 'GET').toUpperCase() === 'POST') return { message: 'Demonstração: autoavaliação simulada, não persistida.', demo: true, persistido: false } as unknown as T;
+  if (isDemoMode && endpoint === '/autoavaliacao/meu-grupo') return {
+    janela: { id: 1, rodada: 1, titulo: 'Autoavaliação PBL 2026/1', abreEm: '2026-10-01T00:00:00.000-03:00', fechaEm: '2026-11-30T23:59:59.000-03:00', status: 'ABERTA' },
+    status: 'ABERTA',
+    turmas: [{ turmaId: 1, turmaNome: 'Turma A - 1º e 3º Período ADMCONT', grupoId: 1, grupoNome: 'Grupo Marcopolo', colegas: [{ id: 6, nome: 'Kaila Cristina da Silva Lima', nota: null }], completo: false }]
+  } as unknown as T;
+
+  if (isDemoMode && endpoint === '/notifications') return [] as unknown as T;
 
   if (endpoint.includes('/academic/students/search')) {
     return [] as unknown as T;
@@ -391,6 +446,10 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
       { id: 6, nome: 'Kaila Cristina da Silva Lima', email: 'aluno.kaila@pbl.edu.br', perfilId: 3, perfilNome: 'ALUNO', ativo: 1 },
       { id: 15, nome: 'André Alves Oliveira', email: 'aluno.andre@pbl.edu.br', perfilId: 3, perfilNome: 'ALUNO', ativo: 1 }
     ] as unknown as T;
+  }
+
+  if (isDemoMode && endpoint === '/files/upload' && (options.method || 'GET').toUpperCase() === 'POST') {
+    return { id: 901, nome_original: 'anexo-demo.pdf', mime_type: 'application/pdf', tamanho_bytes: 5000, demo: true, persistido: false } as unknown as T;
   }
 
   if (endpoint.includes('/pbl/mandatory-fields')) {
@@ -454,6 +513,7 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
 }
 
 export function getDownloadUrl(fileId: number): string {
+  if (isDemoMode) return `${import.meta.env.BASE_URL}demo/material-pbl.pdf`;
   const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
 
   if (isSupabaseConfigured && supabaseUrl) {
@@ -496,6 +556,11 @@ export async function baixarArquivoAutenticado(fileId: number, nomeArquivo: stri
 }
 
 export async function fetchFileObjectUrl(fileId: number): Promise<string> {
+  if (isDemoMode) {
+    const response = await fetch(`${import.meta.env.BASE_URL}demo/material-pbl.pdf`);
+    if (!response.ok) throw new Error('Não foi possível abrir o arquivo de demonstração.');
+    return URL.createObjectURL(await response.blob());
+  }
   const token = localStorage.getItem('pbl_auth_token');
 
   const response = await fetch(`${API_BASE_URL}/files/download/${fileId}`, {

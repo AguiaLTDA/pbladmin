@@ -3,6 +3,7 @@ import { apiRequest, baixarArquivoAutenticado } from '../../services/api';
 import { VisualizadorArquivo } from '../../components/VisualizadorArquivo';
 import { useToast } from '../../context/ToastContext';
 import { ComentariosMaterial } from '../../components/ComentariosMaterial';
+import { useCronograma } from '../../services/cronograma';
 import {
   FileText,
   Download,
@@ -27,11 +28,12 @@ interface Props {
 
 export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) => {
   const { showToast } = useToast();
+  const { dados: cronograma } = useCronograma();
   const [data, setData] = useState<any>(null);
   // Abrir o material dentro do portal. O link direto para a rota de download nao
   // carrega o cabecalho Authorization, e o aluno terminava numa aba com o JSON
   // "Token de autenticacao nao fornecido." em vez do PDF.
-  const [arquivoEmFoco, setArquivoEmFoco] = useState<{ id: number; nome: string; mime?: string } | null>(null);
+  const [arquivoEmFoco, setArquivoEmFoco] = useState<{ id?: number; url?: string; downloadUrl?: string; nome: string; mime?: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Student Submission state
@@ -91,6 +93,12 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
   // Atalho "enviar arquivo para grupo": material de apoio, sem entrega esperada
   // (a menos que o aluno já tenha respondido mesmo assim — aí mantém a entrega visível).
   const isInformativa = atividade.natureza === 'INFORMATIVA' && !entrega;
+  const etapaEscrita = cronograma.etapas.find((etapa) => etapa.ordem === 4);
+  const diaEntrega = atividade.prazo_entrega
+    ? new Date(atividade.prazo_entrega).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+    : null;
+  // shortcut: etapas com o mesmo prazo são indistinguíveis; usar vínculo de etapa quando disponível.
+  const mostrarTemplate = !isInformativa && diaEntrega === etapaEscrita?.fim.split('-').reverse().join('/');
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -326,7 +334,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
           )}
 
           <div>
-            <h4 className="font-bold mb-2">Materiais PBL ({arquivos.length})</h4>
+            <h4 className="font-bold mb-2">Materiais PBL ({arquivos.length + (mostrarTemplate ? 1 : 0)})</h4>
             {arquivos.map((f: any) => (
               <div key={f.id} className="flex items-center justify-between p-2 mb-1" style={{ background: 'var(--bg-main)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                 <div className="flex items-center gap-2 text-sm">
@@ -349,6 +357,36 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
                 </div>
               </div>
             ))}
+            {mostrarTemplate && (
+              <div className="flex items-center justify-between p-2 mb-1 gap-2" style={{ flexWrap: 'wrap', background: 'var(--bg-main)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div className="flex items-center gap-2 text-sm">
+                  <FileText size={16} color="var(--primary)" aria-hidden="true" />
+                  <span>Template de relatório (.docx)</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => setArquivoEmFoco({
+                      url: `${import.meta.env.BASE_URL}documentos/template-de-relatorio.pdf`,
+                      downloadUrl: `${import.meta.env.BASE_URL}documentos/template-de-relatorio.docx`,
+                      nome: 'Template de relatório.docx',
+                      mime: 'application/pdf'
+                    })}
+                    aria-label="Ver Template de relatório"
+                  >
+                    <Eye size={14} aria-hidden="true" /> Ver
+                  </button>
+                  <a
+                    className="btn btn-sm btn-secondary"
+                    href={`${import.meta.env.BASE_URL}documentos/template-de-relatorio.docx`}
+                    download="template-de-relatorio.docx"
+                    aria-label="Baixar Template de relatório (DOCX)"
+                  >
+                    <Download size={14} aria-hidden="true" /> Baixar
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -452,6 +490,8 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
       {arquivoEmFoco && (
         <VisualizadorArquivo
           arquivoId={arquivoEmFoco.id}
+          arquivoUrl={arquivoEmFoco.url}
+          downloadUrl={arquivoEmFoco.downloadUrl}
           nomeArquivo={arquivoEmFoco.nome}
           mimeType={arquivoEmFoco.mime}
           onClose={() => setArquivoEmFoco(null)}

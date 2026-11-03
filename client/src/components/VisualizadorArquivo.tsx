@@ -3,7 +3,9 @@ import { Download, FileText, X } from 'lucide-react';
 import { fetchFileObjectUrl } from '../services/api';
 
 interface VisualizadorArquivoProps {
-  arquivoId: number;
+  arquivoId?: number;
+  arquivoUrl?: string;
+  downloadUrl?: string;
   nomeArquivo: string;
   mimeType?: string;
   descricao?: string;
@@ -13,11 +15,12 @@ interface VisualizadorArquivoProps {
 /**
  * Abre um arquivo do acervo dentro da plataforma, sem download prévio.
  * PDFs e imagens são renderizados inline; demais formatos oferecem o download.
- * O conteúdo chega por fetch autenticado, então a autorização do backend
- * (turma/atividade do docente) continua valendo.
+ * Arquivos do acervo usam fetch autenticado; documentos públicos podem usar URL própria.
  */
 export const VisualizadorArquivo: React.FC<VisualizadorArquivoProps> = ({
   arquivoId,
+  arquivoUrl,
+  downloadUrl,
   nomeArquivo,
   mimeType,
   descricao,
@@ -31,7 +34,17 @@ export const VisualizadorArquivo: React.FC<VisualizadorArquivoProps> = ({
     let urlAtual: string | null = null;
     let cancelado = false;
 
-    fetchFileObjectUrl(arquivoId)
+    const carregarArquivo = async () => {
+      if (arquivoUrl) {
+        const response = await fetch(arquivoUrl);
+        if (!response.ok) throw new Error('Não foi possível abrir o arquivo.');
+        return URL.createObjectURL(await response.blob());
+      }
+      if (arquivoId === undefined) throw new Error('Arquivo não informado.');
+      return fetchFileObjectUrl(arquivoId);
+    };
+
+    carregarArquivo()
       .then((url) => {
         if (cancelado) {
           URL.revokeObjectURL(url);
@@ -47,7 +60,7 @@ export const VisualizadorArquivo: React.FC<VisualizadorArquivoProps> = ({
       cancelado = true;
       if (urlAtual) URL.revokeObjectURL(urlAtual);
     };
-  }, [arquivoId]);
+  }, [arquivoId, arquivoUrl]);
 
   const ehPdf = (mimeType || '').includes('pdf') || nomeArquivo.toLowerCase().endsWith('.pdf');
   const ehImagem = (mimeType || '').startsWith('image/');
@@ -102,7 +115,7 @@ export const VisualizadorArquivo: React.FC<VisualizadorArquivoProps> = ({
 
         <div className="modal-footer">
           {objectUrl && (
-            <a href={objectUrl} download={nomeArquivo} className="btn btn-secondary">
+            <a href={downloadUrl || objectUrl} download={nomeArquivo} className="btn btn-secondary">
               <Download size={14} /> Baixar
             </a>
           )}

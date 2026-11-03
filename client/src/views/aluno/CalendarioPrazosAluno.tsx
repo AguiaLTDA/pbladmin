@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { CronogramaPBL } from '../../components/CronogramaPBL';
+import { ComunicadoPBLEscrito } from '../../components/ComunicadoPBLEscrito';
 import { Calendar, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface Props {
@@ -35,6 +36,7 @@ export const CalendarioPrazosAlunoView: React.FC<Props> = ({ navigate }) => {
         </div>
       </div>
 
+      <ComunicadoPBLEscrito />
       <CronogramaPBL />
 
       <h3 className="font-bold mb-2" style={{ fontSize: '1.05rem' }}>

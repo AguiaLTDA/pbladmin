@@ -14,6 +14,19 @@ Uma aplicação Full-Stack responsiva, segura e persistente para gestão de cont
 
 ---
 
+## Demonstração local sem serviços externos
+
+Crie `client/.env.local` com `VITE_DEMO_MODE=true`, `VITE_SUPABASE_URL=` e
+`VITE_SUPABASE_ANON_KEY=`. Execute `cd client && npm ci && npm run dev` e abra
+`http://localhost:3000`. Não é necessário iniciar o backend ou configurar banco,
+Google Drive ou credenciais reais. Os dados e materiais são fictícios.
+
+Acesso de aluno: `aluno.ketlly@pbl.edu.br` / `aluno123`.
+Administrador: `admin@pbl.edu.br` / `admin123`.
+Professor: `prof.jussara@pbl.edu.br` / `prof123`.
+Essas contas servem apenas para a demonstração. Para voltar ao ambiente real,
+remova `VITE_DEMO_MODE=true` e reinicie o Vite.
+
 ## 🔌 Como o frontend resolve as chamadas de API
 
 Toda requisição passa por `apiRequest` em [`client/src/services/api.ts`](client/src/services/api.ts)
