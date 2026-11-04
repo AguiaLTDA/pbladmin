@@ -51,6 +51,21 @@ Credenciais inválidas sempre chegam ao usuário como erro.
 
 ---
 
+## Recuperação de envios por grupo
+
+A matrícula administrativa sincroniza o acesso às atividades dos grupos de origem e
+destino. Arquivos classificados como `PBL_1` enviados para um grupo geram atividades
+avaliativas, com prazo no fim do dia da etapa de entrega escrita do cronograma.
+Reclassificar um arquivo publicado como `PBL_1` também habilita a entrega dos casos
+informativos associados; materiais de apoio continuam informativos.
+
+Na inicialização, as migrações corrigem os casos antigos classificados como `PBL_1`
+e recalculam o público das atividades publicadas por grupo, preservando exclusões
+explícitas e entregas existentes. No ambiente com o banco configurado, essa recuperação
+também pode ser executada com `cd server` e
+`npx tsx src/scripts/aplicarMigracoes.ts`. É seguro repeti-la; atividades já avaliativas
+mantêm seus prazos.
+
 ## 🔑 Acesso à Demonstração
 
 As credenciais dos perfis de demonstração (Administrador, Professor e Aluno)

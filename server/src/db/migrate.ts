@@ -1,6 +1,8 @@
-import { getAsync, runAsync } from '../config/db';
+import { getAsync, queryAsync, runAsync } from '../config/db';
 import { CRONOGRAMA_PBL_PADRAO } from '../config/cronogramaPadrao';
 import { AUTOAVALIACAO_JANELAS_PADRAO } from '../config/autoavaliacaoPadrao';
+import { ressincronizarAudiencia } from '../services/segmentation';
+import { repararPblsInformativosDeGrupo } from '../services/groupPblSubmission';
 
 // schema.sql já cria as tabelas no formato final; o único ajuste que não dá para expressar
 // em CREATE TABLE IF NOT EXISTS é este índice único (parte da chave depende de COALESCE).
@@ -242,5 +244,28 @@ export async function runMigrations() {
        ON CONFLICT (rodada) DO NOTHING`,
       [janela.rodada, janela.titulo, janela.abreEm, janela.fechaEm]
     );
+  }
+
+  // Corrige casos PBL 1 antigos que foram criados como material informativo.
+  // A rotina é idempotente e também é usada quando a coordenação reclassifica
+  // um arquivo; executá-la no boot recupera dados publicados antes da correção.
+  await repararPblsInformativosDeGrupo();
+
+  // A lista de alunos segmentados é uma fotografia da composição do grupo na
+  // publicação. Reprojetar atividades publicadas corrige matrículas administrativas
+  // antigas e garante que todos os grupos publicados incluam seus membros atuais.
+  const atividadesDeGrupo = await queryAsync<{ atividade_id: number }>(
+    `SELECT DISTINCT seg.atividade_id
+       FROM segmentacoes seg
+       JOIN segmentacao_regras sr ON sr.segmentacao_id = seg.id
+       JOIN atividades_pbl a ON a.id = seg.atividade_id
+      WHERE sr.entidade_tipo = 'grupo'
+        AND sr.acao = 'INCLUIR'
+        AND a.status = 'PUBLICADO'
+        AND a.deletado_em IS NULL`
+  );
+
+  for (const { atividade_id } of atividadesDeGrupo) {
+    await ressincronizarAudiencia(atividade_id);
   }
 }

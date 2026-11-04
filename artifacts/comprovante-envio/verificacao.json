@@ -1,0 +1,16 @@
+{
+  "ambiente": "Local, dados sintéticos; API e Postgres reais",
+  "acessoAntesDaTransferencia": 403,
+  "matriculaAdministrativa": 200,
+  "acessoAoGrupoDestino": 200,
+  "acessoAoGrupoAnterior": 403,
+  "entregaPersistida": {
+    "id": 1,
+    "aluno_id": 3,
+    "publicacao_id": 2,
+    "status": "ENVIADO",
+    "comprovante_hash": "PBL-REC-3-1793835560110-BFBC461C",
+    "data_envio": "2026-11-04T23:39:20.110Z"
+  },
+  "comprovanteConferidoAposRecarregar": true
+}

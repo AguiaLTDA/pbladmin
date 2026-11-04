@@ -392,13 +392,14 @@ export async function enrollStudent(req: AuthenticatedRequest, res: Response) {
     // Só existe uma matrícula ativa por aluno/turma (índice único): se ela já
     // existe, isto aqui é um remanejamento de grupo, não uma matrícula nova —
     // sem este ramo o INSERT violava a constraint e devolvia um 500 opaco.
-    const matriculaExistente = await getAsync<{ id: number }>(
-      `SELECT id FROM matriculas WHERE usuario_id = ? AND turma_id = ? AND deletado_em IS NULL`,
+    const matriculaExistente = await getAsync<{ id: number; grupo_id: number | null }>(
+      `SELECT id, grupo_id FROM matriculas WHERE usuario_id = ? AND turma_id = ? AND deletado_em IS NULL`,
       [usuarioId, turmaId]
     );
 
     if (matriculaExistente) {
       await runAsync(`UPDATE matriculas SET grupo_id = ? WHERE id = ?`, [grupoId || null, matriculaExistente.id]);
+      await ressincronizarAudienciaDosGrupos([grupoId || null, matriculaExistente.grupo_id]);
       await logAudit(req.user?.id || null, 'ATUALIZAR_MATRICULA_ALUNO', 'matriculas', matriculaExistente.id, {
         usuarioId,
         turmaId,
@@ -412,6 +413,7 @@ export async function enrollStudent(req: AuthenticatedRequest, res: Response) {
       [usuarioId, turmaId, grupoId || null]
     );
 
+    await ressincronizarAudienciaDosGrupos([grupoId || null]);
     await logAudit(req.user?.id || null, 'MATRICULAR_ALUNO', 'matriculas', resInsert.lastID, { usuarioId, turmaId });
     return res.status(201).json({ message: 'Aluno matriculado com sucesso.' });
   } catch (err) {

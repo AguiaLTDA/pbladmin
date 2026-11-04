@@ -8,6 +8,7 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
 import { uploadToDrive, downloadFromDrive, moverParaExcluidosNoDrive } from '../services/googleDrive';
 import { calculateAudiencePreview, saveSegmentationAndTargetStudents } from '../services/segmentation';
+import { getPrazoPblEscrito, INSTRUCOES_PBL_1, repararPblsInformativosDeGrupo } from '../services/groupPblSubmission';
 
 // Arquivos ficam em buffer só até serem enviados ao Google Drive — nada é gravado em disco local.
 const storage = multer.memoryStorage();
@@ -679,8 +680,8 @@ export async function enviarArquivoParaGrupo(req: AuthenticatedRequest, res: Res
     if (!adminId) return res.status(401).json({ message: 'Não autenticado.' });
     if (!grupoId) return res.status(400).json({ message: 'Selecione o grupo de destino.' });
 
-    const arquivo = await getAsync<{ id: number; nome_original: string }>(
-      `SELECT id, nome_original FROM arquivos WHERE id = ? AND deletado_em IS NULL`,
+    const arquivo = await getAsync<{ id: number; nome_original: string; tipo_documento: string | null }>(
+      `SELECT id, nome_original, tipo_documento FROM arquivos WHERE id = ? AND deletado_em IS NULL`,
       [id]
     );
     if (!arquivo) return res.status(404).json({ message: 'Arquivo não encontrado.' });
@@ -741,13 +742,19 @@ export async function enviarArquivoParaGrupo(req: AuthenticatedRequest, res: Res
       });
     }
 
+    const ehPbl1 = arquivo.tipo_documento === 'PBL_1';
+    const natureza = ehPbl1 ? 'AVALIATIVA' : 'INFORMATIVA';
+    const agora = new Date();
+    const prazoDistante = new Date(agora.getTime());
+    prazoDistante.setFullYear(prazoDistante.getFullYear() + 5);
+    const prazoEntrega = ehPbl1 ? await getPrazoPblEscrito() : prazoDistante.toISOString();
     const codigoUnico = `PBL-${PREFIXO_CODIGO}-${Date.now().toString(36).toUpperCase()}`;
-    const titulo = `${ROTULO_MATERIAL}: ${arquivo.nome_original} — ${grupo.nome}`;
+    const titulo = `${ehPbl1 ? 'PBL 1' : ROTULO_MATERIAL}: ${arquivo.nome_original} — ${grupo.nome}`;
 
     const atRes = await runAsync(
       `INSERT INTO atividades_pbl (codigo_unico, titulo, curso_id, disciplina_id, professor_id, periodo_letivo_id, status, natureza, versao_atual)
-       VALUES (?, ?, ?, ?, ?, ?, 'RASCUNHO', 'INFORMATIVA', 1)`,
-      [codigoUnico, titulo, vinculo.curso_id, vinculo.disciplina_id, vinculo.professor_id, grupo.periodo_letivo_id]
+       VALUES (?, ?, ?, ?, ?, ?, 'RASCUNHO', ?, 1)`,
+      [codigoUnico, titulo, vinculo.curso_id, vinculo.disciplina_id, vinculo.professor_id, grupo.periodo_letivo_id, natureza]
     );
     const atividadeId = atRes.lastID;
 
@@ -756,8 +763,11 @@ export async function enviarArquivoParaGrupo(req: AuthenticatedRequest, res: Res
        VALUES (?, 1, ?, ?, ?)`,
       [
         atividadeId,
-        `Este é um material de apoio disponibilizado pela coordenação para o grupo "${grupo.nome}". Não é necessário responder ou enviar entrega — basta consultar o(s) arquivo(s) em "Materiais de Apoio".`,
-        `Atividade gerada automaticamente pelo atalho "Enviar arquivo para grupo" (arquivo #${arquivo.id}). Não requer avaliação.`,
+        ehPbl1
+          ? INSTRUCOES_PBL_1
+          : `Este é um material de apoio disponibilizado pela coordenação para o grupo "${grupo.nome}". Não é necessário responder ou enviar entrega — basta consultar o(s) arquivo(s) em "Materiais de Apoio".`,
+        `Atividade gerada automaticamente pelo atalho "Enviar arquivo para grupo" (arquivo #${arquivo.id}). ` +
+          (ehPbl1 ? 'PBL 1 avaliativo, requer entrega.' : 'Material informativo, não requer avaliação.'),
         adminId
       ]
     );
@@ -774,14 +784,10 @@ export async function enviarArquivoParaGrupo(req: AuthenticatedRequest, res: Res
       { entidadeTipo: 'grupo', entidadeId: grupo.id, acao: 'INCLUIR' }
     ]);
 
-    const agora = new Date();
-    const prazoDistante = new Date(agora.getTime());
-    prazoDistante.setFullYear(prazoDistante.getFullYear() + 5); // material sem prazo real — só evita marcar "atrasado".
-
     const pubRes = await runAsync(
       `INSERT INTO publicacoes (atividade_id, data_disponibilizacao, prazo_entrega, publicado_por, status_publicacao)
        VALUES (?, ?, ?, ?, 'PUBLICADO')`,
-      [atividadeId, agora.toISOString(), prazoDistante.toISOString(), adminId]
+      [atividadeId, agora.toISOString(), prazoEntrega, adminId]
     );
 
     await runAsync(`UPDATE atividades_pbl SET status = 'PUBLICADO', atualizado_em = CURRENT_TIMESTAMP WHERE id = ?`, [
@@ -1257,6 +1263,7 @@ export async function definirTipoDocumento(req: AuthenticatedRequest, res: Respo
     if (!arquivo) return res.status(404).json({ message: 'Arquivo não encontrado.' });
 
     await runAsync(`UPDATE arquivos SET tipo_documento = ? WHERE id = ?`, [tipo, id]);
+    if (tipo === 'PBL_1') await repararPblsInformativosDeGrupo(Number(id));
     await logAudit(userId, 'DEFINIR_TIPO_DOCUMENTO', 'arquivos', String(id), { tipoDocumento: tipo });
 
     return res.json({ message: 'Tipo de documento atualizado.', tipoDocumento: tipo });
