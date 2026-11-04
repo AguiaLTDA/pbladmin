@@ -13,7 +13,7 @@ export const ComunicadoPBLEscrito: React.FC = () => {
             Comunicado — Entrega do PBL escrito
           </h3>
           <p className="text-muted text-sm" style={{ margin: '0 0 0.85rem' }}>
-            O PBL escrito deverá ser entregue em formato de relatório, elaborado conforme o Template de relatório disponibilizado abaixo. Esta orientação aplica-se à etapa de entrega do PBL escrito. Observe o prazo indicado no calendário e na sua atividade.
+            O PBL escrito deverá ser entregue em formato de relatório. O uso do Template de relatório disponibilizado abaixo é opcional. Esta orientação aplica-se à etapa de entrega do PBL escrito. Observe o prazo indicado no calendário e na sua atividade.
           </p>
           <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
             <span className="flex items-center gap-2 text-sm" style={{ minWidth: 0, flex: '1 1 180px' }}>
