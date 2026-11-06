@@ -232,7 +232,7 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
   }
 
   if (isDemoMode && endpoint === '/files/institutional/MANUAL_ALUNO_PBL') {
-    return { chave: 'MANUAL_ALUNO_PBL', atualizado_em: '2026-11-01T12:00:00.000Z', arquivo_id: 900, nome_original: 'Manual do Aluno PBL.pdf', tamanho_bytes: 5000, mime_type: 'application/pdf', categoria: 'PDF' } as T;
+    return { chave: 'MANUAL_ALUNO_PBL', atualizado_em: '2026-11-06T12:00:00.000Z', arquivo_id: 901, nome_original: 'MANUAL DO ALUNO PBL.pdf', tamanho_bytes: 250052, mime_type: 'application/pdf', categoria: 'PDF' } as T;
   }
 
   if (isDemoMode && endpoint === '/student/context') {
@@ -513,7 +513,10 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
 }
 
 export function getDownloadUrl(fileId: number): string {
-  if (isDemoMode) return `${import.meta.env.BASE_URL}demo/material-pbl.pdf`;
+  if (isDemoMode) {
+    const path = fileId === 901 ? 'documentos/manual-do-aluno-pbl.pdf' : 'demo/material-pbl.pdf';
+    return `${import.meta.env.BASE_URL}${path}`;
+  }
   const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
 
   if (isSupabaseConfigured && supabaseUrl) {
@@ -557,7 +560,8 @@ export async function baixarArquivoAutenticado(fileId: number, nomeArquivo: stri
 
 export async function fetchFileObjectUrl(fileId: number): Promise<string> {
   if (isDemoMode) {
-    const response = await fetch(`${import.meta.env.BASE_URL}demo/material-pbl.pdf`);
+    const path = fileId === 901 ? 'documentos/manual-do-aluno-pbl.pdf' : 'demo/material-pbl.pdf';
+    const response = await fetch(`${import.meta.env.BASE_URL}${path}`);
     if (!response.ok) throw new Error('Não foi possível abrir o arquivo de demonstração.');
     return URL.createObjectURL(await response.blob());
   }
