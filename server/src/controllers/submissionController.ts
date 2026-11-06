@@ -4,6 +4,7 @@ import { queryAsync, runAsync, getAsync } from '../config/db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
 import { professorAlcancaAtividade } from '../services/horarioImport';
+import { calculatePblWrittenPenalty } from '../services/pblWrittenPenalty';
 
 // --- STUDENT PORTAL ENDPOINTS ---
 
@@ -307,9 +308,16 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
              e.*, u.nome as aluno_nome, u.email as aluno_email,
              g.id as grupo_id, g.nome as grupo_nome,
              t.id as turma_id, t.nome as turma_nome, t.codigo as turma_codigo,
-             fb.nota_escrita, fb.nota_oral, fb.nota_total, fb.observacoes, fb.liberado_aluno,
+             fb.nota_escrita, fb.nota_escrita_original, fb.nota_oral, fb.nota_total, fb.observacoes, fb.liberado_aluno,
+             EXISTS (SELECT 1 FROM versoes_atividades va JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
+                     JOIN arquivos ar ON ar.id = aa.arquivo_id
+                     WHERE va.atividade_id = p.atividade_id AND va.numero_versao = a.versao_atual
+                       AND a.natureza = 'AVALIATIVA' AND a.deletado_em IS NULL
+                       AND ar.tipo_documento = 'PBL_1' AND ar.deletado_em IS NULL) as pbl_1,
              (ca.completed_at IS NOT NULL) as contexto_completo
       FROM entregas e
+      JOIN publicacoes p ON p.id = e.publicacao_id
+      JOIN atividades_pbl a ON a.id = p.atividade_id
       JOIN usuarios u ON e.aluno_id = u.id
       LEFT JOIN contexto_aluno ca ON ca.usuario_id = e.aluno_id
       LEFT JOIN grupos g ON e.grupo_id = g.id
@@ -363,10 +371,17 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
 
     if (!evaluatorId) return res.status(401).json({ message: 'Não autenticado.' });
 
-    const entrega = await getAsync<{ id: number; aluno_id: number; atividade_id: number }>(
-      `SELECT e.id, e.aluno_id, p.atividade_id
+    const entrega = await getAsync<{ id: number; aluno_id: number; atividade_id: number; data_envio: string | null; pbl_1: boolean }>(
+      `SELECT e.id, e.aluno_id, p.atividade_id, e.data_envio,
+              EXISTS (SELECT 1 FROM atividades_pbl a
+                      JOIN versoes_atividades va ON va.atividade_id = a.id AND va.numero_versao = a.versao_atual
+                      JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
+                      JOIN arquivos ar ON ar.id = aa.arquivo_id
+                      WHERE a.id = p.atividade_id AND a.natureza = 'AVALIATIVA' AND a.deletado_em IS NULL
+                        AND ar.tipo_documento = 'PBL_1' AND ar.deletado_em IS NULL) as pbl_1
        FROM entregas e
        JOIN publicacoes p ON e.publicacao_id = p.id
+      JOIN atividades_pbl a ON a.id = p.atividade_id
        WHERE e.id = ? AND e.deletado_em IS NULL`,
       [entregaId]
     );
@@ -383,7 +398,9 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
       }
     }
 
-    const nEscrita = Number(notaEscrita || 0);
+    const notaOriginal = Number(notaEscrita || 0);
+    const penalidade = calculatePblWrittenPenalty(notaOriginal, Boolean(entrega.pbl_1), entrega.data_envio);
+    const nEscrita = penalidade.penaltyPercent ? Math.round(penalidade.written * 100) / 100 : notaOriginal;
     const nOral = Number(notaOral || 0);
     const nTotal = nEscrita + nOral;
 
@@ -392,16 +409,16 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
     if (existingFb) {
       await runAsync(
         `UPDATE feedbacks SET 
-          nota_escrita = ?, nota_oral = ?, nota_total = ?, observacoes = ?, liberado_aluno = ?,
+          nota_escrita = ?, nota_escrita_original = ?, nota_oral = ?, nota_total = ?, observacoes = ?, liberado_aluno = ?,
           avaliador_id = ?
          WHERE id = ?`,
-        [nEscrita, nOral, nTotal, observacoes || '', liberadoAluno ? 1 : 0, evaluatorId, existingFb.id]
+        [nEscrita, penalidade.penaltyPercent ? notaOriginal : null, nOral, nTotal, observacoes || '', liberadoAluno ? 1 : 0, evaluatorId, existingFb.id]
       );
     } else {
       await runAsync(
-        `INSERT INTO feedbacks (entrega_id, avaliador_id, nota_escrita, nota_oral, nota_total, observacoes, liberado_aluno)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [entregaId, evaluatorId, nEscrita, nOral, nTotal, observacoes || '', liberadoAluno ? 1 : 0]
+        `INSERT INTO feedbacks (entrega_id, avaliador_id, nota_escrita, nota_escrita_original, nota_oral, nota_total, observacoes, liberado_aluno)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [entregaId, evaluatorId, nEscrita, penalidade.penaltyPercent ? notaOriginal : null, nOral, nTotal, observacoes || '', liberadoAluno ? 1 : 0]
       );
     }
 
@@ -418,7 +435,7 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
     }
 
     await logAudit(evaluatorId, 'AVALIAR_ENTREGA', 'feedbacks', String(entregaId), { nTotal, liberadoAluno });
-    return res.json({ message: 'Avaliação registrada com sucesso.', notaTotal: nTotal });
+    return res.json({ message: 'Avaliação registrada com sucesso.', notaTotal: nTotal, notaEscritaOriginal: penalidade.penaltyPercent ? notaOriginal : null, descontoPercentual: penalidade.penaltyPercent });
   } catch (err) {
     return res.status(500).json({ message: 'Erro ao avaliar entrega.' });
   }

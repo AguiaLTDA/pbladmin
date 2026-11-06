@@ -19,10 +19,22 @@ interface ArquivoEmFoco {
   descricao?: string;
 }
 
+type EntregaComDesconto = StudentSubmission & {
+  nota_escrita_original?: number | null;
+  pbl_1?: boolean;
+};
+
 function formatarTamanho(bytes: number): string {
   if (!bytes) return '-';
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function descontoEscrito(sub: StudentSubmission): number {
+  const dataEnvio = new Date(sub.data_envio || '').getTime();
+  return (sub as EntregaComDesconto).pbl_1 &&
+    dataEnvio > Date.parse('2026-11-04T23:59:59.999-03:00') &&
+    dataEnvio <= Date.parse('2026-11-10T23:59:59.999-03:00') ? 20 : 0;
 }
 
 export const EntregasProfessorView: React.FC = () => {
@@ -147,7 +159,7 @@ export const EntregasProfessorView: React.FC = () => {
 
   const openEvaluationModal = (sub: StudentSubmission) => {
     setSelectedSubmission(sub);
-    setNotaEscrita(sub.nota_escrita || 0);
+    setNotaEscrita((sub as EntregaComDesconto).nota_escrita_original ?? sub.nota_escrita ?? 0);
     setNotaOral(sub.nota_oral || 0);
     setObservacoes(sub.observacoes || '');
     setLiberadoAluno(sub.liberado_aluno !== 0);
@@ -375,6 +387,9 @@ export const EntregasProfessorView: React.FC = () => {
                           </td>
                           <td>
                             <strong>{(sub.nota_total || 0).toFixed(2)} pts</strong>
+                            {(sub as EntregaComDesconto).nota_escrita_original != null && (
+                              <small className="block text-muted">Escrita original: {(sub as EntregaComDesconto).nota_escrita_original!.toFixed(2)}</small>
+                            )}
                           </td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="flex gap-2 justify-end">
@@ -504,7 +519,9 @@ export const EntregasProfessorView: React.FC = () => {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }} className="mb-4">
                   <div className="form-group">
-                    <label className="form-label required">Nota Escrita / Trabalho</label>
+                    <label className="form-label required">
+                      {descontoEscrito(selectedSubmission) > 0 ? 'Nota Escrita antes do desconto / Trabalho' : 'Nota Escrita / Trabalho'}
+                    </label>
                     <input
                       type="number"
                       step="0.01"
@@ -525,6 +542,12 @@ export const EntregasProfessorView: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                {descontoEscrito(selectedSubmission) > 0 && (
+                  <p className="text-muted text-sm mb-4">
+                    Desconto automático de 20% na nota escrita por envio após o prazo. Nota escrita resultante: {(Math.round(notaEscrita * 0.8 * 100) / 100).toFixed(2)} pts. A nota oral não recebe desconto.
+                  </p>
+                )}
 
                 <div className="form-group mb-4">
                   <label className="form-label">Observações e Feedback Qualitativo</label>

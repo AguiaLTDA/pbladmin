@@ -13,7 +13,7 @@ export const ComunicadoPBLEscrito: React.FC = () => {
             Comunicado — Entrega do PBL escrito
           </h3>
           <p className="text-muted text-sm" style={{ margin: '0 0 0.85rem' }}>
-            O PBL escrito deverá ser entregue em formato de relatório. O uso do Template de relatório disponibilizado abaixo é opcional. Esta orientação aplica-se à etapa de entrega do PBL escrito. Observe o prazo indicado no calendário e na sua atividade.
+            O PBL escrito deverá ser entregue em formato de relatório. O uso do Template de relatório disponibilizado abaixo é opcional. Esta orientação aplica-se à etapa de entrega do PBL escrito. O prazo foi prorrogado até 10/11/2026, às 23h59 (horário de Brasília). Envios de 05/11 a 10/11 terão desconto de 20% na nota do PBL escrito. Entregas feitas até 04/11 e a nota da apresentação oral permanecem sem desconto.
           </p>
           <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
             <span className="flex items-center gap-2 text-sm" style={{ minWidth: 0, flex: '1 1 180px' }}>

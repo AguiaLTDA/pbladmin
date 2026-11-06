@@ -66,6 +66,18 @@ também pode ser executada com `cd server` e
 `npx tsx src/scripts/aplicarMigracoes.ts`. É seguro repeti-la; atividades já avaliativas
 mantêm seus prazos.
 
+## Prorrogação do PBL escrito — novembro de 2026
+
+O PBL escrito pode ser enviado até **10/11/2026, às 23h59 (Brasília)**.
+Envios entre 05/11 e 10/11 recebem desconto de **20% na nota escrita**;
+entregas até 04/11 e a nota oral são preservadas. O professor informa a nota
+escrita antes do desconto; o servidor calcula e apresenta a nota final.
+
+Na inicialização, a migração atualiza a etapa escrita de 2026/2 e as publicações
+PBL_1 ainda com o prazo original de 04/11. Prazos personalizados são preservados.
+Avaliações existentes elegíveis recebem o desconto uma única vez, preservando
+a nota original para futuras edições. A demonstração local também usa 10/11.
+
 ## 🔑 Acesso à Demonstração
 
 As credenciais dos perfis de demonstração (Administrador, Professor e Aluno)

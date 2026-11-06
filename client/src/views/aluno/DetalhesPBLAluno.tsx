@@ -194,6 +194,9 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
             <div style={{ background: 'white', padding: '0.75rem', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
               <div className="text-xs text-muted font-bold">NOTA ESCRITA</div>
               <div className="font-bold text-lg" style={{ color: '#15803d' }}>{feedback.nota_escrita.toFixed(2)} pts</div>
+              {feedback.nota_escrita_original != null && feedback.nota_escrita_original > feedback.nota_escrita && (
+                <p className="text-xs text-muted">Desconto de 20% por envio após 04/11. Nota antes do desconto: {feedback.nota_escrita_original.toFixed(2)} pts.</p>
+              )}
             </div>
 
             <div style={{ background: 'white', padding: '0.75rem', borderRadius: '8px', border: '1px solid #bbf7d0' }}>

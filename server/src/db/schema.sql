@@ -443,6 +443,7 @@ CREATE TABLE IF NOT EXISTS feedbacks (
   entrega_id INTEGER NOT NULL,
   avaliador_id INTEGER NOT NULL,
   nota_escrita DOUBLE PRECISION DEFAULT 0,
+  nota_escrita_original DOUBLE PRECISION DEFAULT NULL,
   nota_oral DOUBLE PRECISION DEFAULT 0,
   nota_total DOUBLE PRECISION DEFAULT 0,
   observacoes TEXT,

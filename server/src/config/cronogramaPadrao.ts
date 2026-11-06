@@ -39,8 +39,8 @@ export const CRONOGRAMA_PBL_PADRAO: {
     {
       ordem: 4,
       titulo: 'Entrega do PBL escrito',
-      prazoTexto: 'até 04 de novembro',
-      fim: '2026-11-04',
+      prazoTexto: 'até 10 de novembro (envios após 04/11 com desconto de 20% na nota escrita)',
+      fim: '2026-11-10',
       pontos: '1,0 ponto'
     },
     {

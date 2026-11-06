@@ -312,7 +312,7 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
           professor_nome: 'Profa. Jussara Matos',
           status: 'PUBLICADO',
           prazo_entrega: isDemoMode
-            ? (activityId === 2 ? '2026-11-27T23:59:59.000-03:00' : '2026-11-04T23:59:59.000-03:00')
+            ? (activityId === 2 ? '2026-11-27T23:59:59.000-03:00' : '2026-11-10T23:59:59.000-03:00')
             : undefined
         },
         versao: {
@@ -353,7 +353,7 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
         curso_nome: 'Administração e Ciências Contábeis',
         disciplina_nome: 'Gestão Organizacional e Clima',
         professor_nome: 'Profa. Jussara Matos',
-        prazo_entrega: isDemoMode ? '2026-11-04T23:59:59.000-03:00' : '2026-03-30T23:59:59.000Z',
+        prazo_entrega: isDemoMode ? '2026-11-10T23:59:59.000-03:00' : '2026-03-30T23:59:59.000Z',
         estadoAluno: isDemoMode ? 'PENDENTE' : 'CONCLUIDA',
         nota_total: isDemoMode ? null : 2.85,
         liberado_aluno: isDemoMode ? 0 : 1
