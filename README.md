@@ -68,15 +68,20 @@ mantêm seus prazos.
 
 ## Prorrogação do PBL escrito — novembro de 2026
 
-O PBL escrito pode ser enviado até **10/11/2026, às 23h59 (Brasília)**.
-Envios entre 05/11 e 10/11 recebem desconto de **20% na nota escrita**;
-entregas até 04/11 e a nota oral são preservadas. O professor informa a nota
-escrita antes do desconto; o servidor calcula e apresenta a nota final.
+O PBL escrito pode ser enviado até **15/11/2026, às 23h59 (Brasília)**.
+Primeiras entregas finais entre 05/11 e 15/11 recebem desconto de **20% na nota
+escrita**. Quem fez a primeira entrega final até 04/11 pode editar e reenviar
+até 15/11 sem desconto por atraso. A nota oral permanece sem desconto. O professor
+informa a nota escrita antes do desconto; o servidor calcula e apresenta a nota final.
 
 Na inicialização, a migração atualiza a etapa escrita de 2026/2 e as publicações
-PBL_1 ainda com o prazo original de 04/11. Prazos personalizados são preservados.
-Avaliações existentes elegíveis recebem o desconto uma única vez, preservando
-a nota original para futuras edições. A demonstração local também usa 10/11.
+PBL_1 ainda com o prazo original de 04/11 ou com prazo provisório de 10/11.
+Prazos personalizados são preservados. A coluna `primeira_entrega_final_em`
+registra o primeiro envio final; a migração recupera a data mínima nos logs de
+auditoria ou usa `data_envio` como fallback. Rascunhos não recebem data inicial.
+Avaliações de reenvios elegíveis feitas com desconto são restauradas, preservando
+a nota oral. As demais avaliações elegíveis recebem o desconto uma única vez,
+com a nota original preservada para futuras edições. A demonstração local também usa 15/11.
 
 ## 🔑 Acesso à Demonstração
 

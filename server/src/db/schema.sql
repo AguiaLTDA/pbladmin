@@ -418,6 +418,7 @@ CREATE TABLE IF NOT EXISTS entregas (
   status TEXT DEFAULT 'RASCUNHO', -- 'RASCUNHO', 'ENVIADO', 'ATRASADO'
   conteudo_resposta TEXT,
   data_envio TIMESTAMPTZ DEFAULT NULL,
+  primeira_entrega_final_em TIMESTAMPTZ DEFAULT NULL,
   comprovante_hash TEXT UNIQUE DEFAULT NULL,
   deletado_em TIMESTAMPTZ DEFAULT NULL, -- exclusão pela coordenadoria; some das telas mas é recuperável
   criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,

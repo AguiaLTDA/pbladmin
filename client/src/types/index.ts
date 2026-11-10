@@ -170,6 +170,9 @@ export interface StudentSubmission {
   status: 'RASCUNHO' | 'ENVIADO' | 'ATRASADO';
   conteudo_resposta?: string;
   data_envio?: string;
+  primeira_entrega_final_em?: string | null;
+  periodo_nome?: string;
+  pbl_1?: boolean;
   comprovante_hash?: string;
   nota_escrita?: number;
   nota_oral?: number;

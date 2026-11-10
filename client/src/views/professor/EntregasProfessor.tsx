@@ -22,6 +22,8 @@ interface ArquivoEmFoco {
 type EntregaComDesconto = StudentSubmission & {
   nota_escrita_original?: number | null;
   pbl_1?: boolean;
+  periodo_nome?: string;
+  primeira_entrega_final_em?: string | null;
 };
 
 function formatarTamanho(bytes: number): string {
@@ -31,10 +33,14 @@ function formatarTamanho(bytes: number): string {
 }
 
 function descontoEscrito(sub: StudentSubmission): number {
+  const entrega = sub as EntregaComDesconto;
   const dataEnvio = new Date(sub.data_envio || '').getTime();
-  return (sub as EntregaComDesconto).pbl_1 &&
+  const primeiraFinal = new Date(entrega.primeira_entrega_final_em || '').getTime();
+  const primeiraNoPrazo = primeiraFinal <= Date.parse('2026-11-04T23:59:59.999-03:00') &&
+    dataEnvio <= Date.parse('2026-11-15T23:59:59.999-03:00');
+  return entrega.pbl_1 && entrega.periodo_nome === '2026/2' && !primeiraNoPrazo &&
     dataEnvio > Date.parse('2026-11-04T23:59:59.999-03:00') &&
-    dataEnvio <= Date.parse('2026-11-10T23:59:59.999-03:00') ? 20 : 0;
+    dataEnvio <= Date.parse('2026-11-15T23:59:59.999-03:00') ? 20 : 0;
 }
 
 export const EntregasProfessorView: React.FC = () => {

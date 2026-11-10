@@ -94,7 +94,7 @@ describe('PBL 1 enviado a grupo', () => {
     const update = runAsync.mock.calls.find(([sql]) => sql.includes('WITH atualizada'));
     expect(update?.[1]?.[0]).toBe(71);
     expect(update?.[1]?.[1]).toMatch(/solução/);
-    expect(update?.[1]?.[2]).toBe('2026-11-11T02:59:59.000Z');
+    expect(update?.[1]?.[2]).toBe('2026-11-16T02:59:59.000Z');
   });
 
   it('reclassificar arquivo PBL 1 converte atividade existente', async () => {

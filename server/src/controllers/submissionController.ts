@@ -4,7 +4,7 @@ import { queryAsync, runAsync, getAsync } from '../config/db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
 import { professorAlcancaAtividade } from '../services/horarioImport';
-import { calculatePblWrittenPenalty } from '../services/pblWrittenPenalty';
+import { calculatePblWrittenPenalty, canResubmitEarlyPblWrittenSubmission, PBL_WRITTEN_RESUBMISSION_END } from '../services/pblWrittenPenalty';
 
 // --- STUDENT PORTAL ENDPOINTS ---
 
@@ -94,12 +94,19 @@ export async function getStudentActivityDetails(req: AuthenticatedRequest, res: 
 
     const act = await getAsync<any>(
       `SELECT a.*, c.nome as curso_nome, d.nome as disciplina_nome, p.nome as professor_nome,
-              pub.id as publicacao_id, pub.data_disponibilizacao, pub.prazo_entrega, pub.status_publicacao
+              pub.id as publicacao_id, pub.data_disponibilizacao, pub.prazo_entrega, pub.status_publicacao,
+              pl.nome as periodo_nome,
+              EXISTS (SELECT 1 FROM versoes_atividades va
+                      JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
+                      JOIN arquivos ar ON ar.id = aa.arquivo_id
+                      WHERE va.atividade_id = a.id AND va.numero_versao = a.versao_atual
+                        AND ar.tipo_documento = 'PBL_1' AND ar.deletado_em IS NULL) as pbl_1
        FROM atividades_pbl a
        JOIN publicacoes pub ON a.id = pub.atividade_id
        JOIN cursos c ON a.curso_id = c.id
        JOIN disciplinas d ON a.disciplina_id = d.id
        JOIN usuarios p ON a.professor_id = p.id
+       JOIN periodos_letivos pl ON pl.id = a.periodo_letivo_id
        WHERE a.id = ? AND a.status = 'PUBLICADO' AND a.deletado_em IS NULL`,
       [id]
     );
@@ -174,6 +181,11 @@ export async function getStudentActivityDetails(req: AuthenticatedRequest, res: 
       etapas,
       arquivos,
       entrega,
+      podeReenviar: Boolean(
+        entrega && ['ENVIADO', 'ATRASADO'].includes(entrega.status) && act.pbl_1 &&
+        act.periodo_nome === '2026/2' &&
+        canResubmitEarlyPblWrittenSubmission(entrega.primeira_entrega_final_em)
+      ),
       arquivosEntrega,
       feedback,
       turmaId: matricula?.turma_id ?? null,
@@ -202,8 +214,17 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
 
     if (!access) return res.status(403).json({ message: 'Acesso negado.' });
 
-    const pub = await getAsync<{ id: number; prazo_entrega: string }>(
-      "SELECT id, prazo_entrega FROM publicacoes WHERE atividade_id = ? AND status_publicacao = 'PUBLICADO'",
+    const pub = await getAsync<{ id: number; prazo_entrega: string; pbl_1: boolean; periodo_nome: string }>(
+      `SELECT pub.id, pub.prazo_entrega, pl.nome as periodo_nome,
+              EXISTS (SELECT 1 FROM versoes_atividades va
+                      JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
+                      JOIN arquivos ar ON ar.id = aa.arquivo_id
+                      WHERE va.atividade_id = a.id AND va.numero_versao = a.versao_atual
+                        AND ar.tipo_documento = 'PBL_1' AND ar.deletado_em IS NULL) as pbl_1
+         FROM publicacoes pub
+         JOIN atividades_pbl a ON a.id = pub.atividade_id
+         JOIN periodos_letivos pl ON pl.id = a.periodo_letivo_id
+        WHERE pub.atividade_id = ? AND pub.status_publicacao = 'PUBLICADO'`,
       [atividadeId]
     );
 
@@ -221,31 +242,40 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
     }
 
     // Entrega excluída pela coordenadoria não conta: o aluno recomeça numa entrega nova.
-    const existingEntrega = await getAsync<{ id: number; status: string }>(
-      'SELECT id, status FROM entregas WHERE publicacao_id = ? AND aluno_id = ? AND deletado_em IS NULL',
+    const existingEntrega = await getAsync<{ id: number; status: string; primeira_entrega_final_em: string | null }>(
+      'SELECT id, status, primeira_entrega_final_em FROM entregas WHERE publicacao_id = ? AND aluno_id = ? AND deletado_em IS NULL',
       [pub.id, studentId]
     );
+
+    if (finalSubmit && existingEntrega && ['ENVIADO', 'ATRASADO'].includes(existingEntrega.status) &&
+      pub.pbl_1 && pub.periodo_nome === '2026/2' && now.getTime() > PBL_WRITTEN_RESUBMISSION_END) {
+      return res.status(400).json({ message: 'O prazo para reenviar o PBL escrito terminou em 15/11/2026.' });
+    }
 
     let entregaId: number;
 
     if (existingEntrega) {
-      if (existingEntrega.status === 'ENVIADO' && !finalSubmit) {
+      if (['ENVIADO', 'ATRASADO'].includes(existingEntrega.status) && !finalSubmit) {
         return res.status(400).json({ message: 'Esta entrega já foi finalizada e não pode ser revertida para rascunho.' });
       }
 
       await runAsync(
         `UPDATE entregas SET 
-          status = ?, conteudo_resposta = ?, data_envio = ?, comprovante_hash = COALESCE(?, comprovante_hash),
+          status = ?, conteudo_resposta = ?, data_envio = ?,
+          primeira_entrega_final_em = COALESCE(primeira_entrega_final_em, ?),
+          comprovante_hash = COALESCE(?, comprovante_hash),
           atualizado_em = CURRENT_TIMESTAMP
          WHERE id = ?`,
-        [statusFinal, conteudoResposta || '', finalSubmit ? now.toISOString() : null, receiptHash, existingEntrega.id]
+        [statusFinal, conteudoResposta || '', finalSubmit ? now.toISOString() : null,
+          finalSubmit ? now.toISOString() : null, receiptHash, existingEntrega.id]
       );
       entregaId = existingEntrega.id;
     } else {
       const resIns = await runAsync(
-        `INSERT INTO entregas (publicacao_id, aluno_id, status, conteudo_resposta, data_envio, comprovante_hash)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [pub.id, studentId, statusFinal, conteudoResposta || '', finalSubmit ? now.toISOString() : null, receiptHash]
+        `INSERT INTO entregas (publicacao_id, aluno_id, status, conteudo_resposta, data_envio, primeira_entrega_final_em, comprovante_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [pub.id, studentId, statusFinal, conteudoResposta || '', finalSubmit ? now.toISOString() : null,
+          finalSubmit ? now.toISOString() : null, receiptHash]
       );
       entregaId = resIns.lastID;
     }
@@ -309,6 +339,7 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
              g.id as grupo_id, g.nome as grupo_nome,
              t.id as turma_id, t.nome as turma_nome, t.codigo as turma_codigo,
              fb.nota_escrita, fb.nota_escrita_original, fb.nota_oral, fb.nota_total, fb.observacoes, fb.liberado_aluno,
+             pl.nome as periodo_nome,
              EXISTS (SELECT 1 FROM versoes_atividades va JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
                      JOIN arquivos ar ON ar.id = aa.arquivo_id
                      WHERE va.atividade_id = p.atividade_id AND va.numero_versao = a.versao_atual
@@ -318,6 +349,7 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
       FROM entregas e
       JOIN publicacoes p ON p.id = e.publicacao_id
       JOIN atividades_pbl a ON a.id = p.atividade_id
+      JOIN periodos_letivos pl ON pl.id = a.periodo_letivo_id
       JOIN usuarios u ON e.aluno_id = u.id
       LEFT JOIN contexto_aluno ca ON ca.usuario_id = e.aluno_id
       LEFT JOIN grupos g ON e.grupo_id = g.id
@@ -371,8 +403,9 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
 
     if (!evaluatorId) return res.status(401).json({ message: 'Não autenticado.' });
 
-    const entrega = await getAsync<{ id: number; aluno_id: number; atividade_id: number; data_envio: string | null; pbl_1: boolean }>(
-      `SELECT e.id, e.aluno_id, p.atividade_id, e.data_envio,
+    const entrega = await getAsync<{ id: number; aluno_id: number; atividade_id: number; data_envio: string | null; primeira_entrega_final_em: string | null; pbl_1: boolean; periodo_nome: string }>(
+      `SELECT e.id, e.aluno_id, p.atividade_id, e.data_envio, e.primeira_entrega_final_em,
+              pl.nome as periodo_nome,
               EXISTS (SELECT 1 FROM atividades_pbl a
                       JOIN versoes_atividades va ON va.atividade_id = a.id AND va.numero_versao = a.versao_atual
                       JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
@@ -382,6 +415,7 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
        FROM entregas e
        JOIN publicacoes p ON e.publicacao_id = p.id
       JOIN atividades_pbl a ON a.id = p.atividade_id
+       JOIN periodos_letivos pl ON pl.id = a.periodo_letivo_id
        WHERE e.id = ? AND e.deletado_em IS NULL`,
       [entregaId]
     );
@@ -399,7 +433,10 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
     }
 
     const notaOriginal = Number(notaEscrita || 0);
-    const penalidade = calculatePblWrittenPenalty(notaOriginal, Boolean(entrega.pbl_1), entrega.data_envio);
+    const penalidade = calculatePblWrittenPenalty(
+      notaOriginal, Boolean(entrega.pbl_1) && entrega.periodo_nome === '2026/2',
+      entrega.data_envio, entrega.primeira_entrega_final_em
+    );
     const nEscrita = penalidade.penaltyPercent ? Math.round(penalidade.written * 100) / 100 : notaOriginal;
     const nOral = Number(notaOral || 0);
     const nTotal = nEscrita + nOral;

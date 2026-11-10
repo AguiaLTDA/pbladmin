@@ -78,7 +78,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
     return <div className="p-4 text-center text-muted">Carregando detalhes da atividade PBL...</div>;
   }
 
-  const { atividade, versao, etapas, arquivos, entrega, feedback, turmaId, grupoId } = data;
+  const { atividade, versao, etapas, arquivos, entrega, feedback, turmaId, grupoId, podeReenviar } = data;
 
   // O atalho "enviar para grupo" cria a atividade so com o PDF: cenario, problema
   // central, objetivos, etapas e criterios ficam vazios. Renderizar os titulos
@@ -89,7 +89,8 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
     versao?.contexto_problema || versao?.problema_central || versao?.objetivos_aprendizagem
   );
 
-  const isFinalSubmitted = entrega && (entrega.status === 'ENVIADO' || entrega.status === 'ATRASADO');
+  const isFinalSubmitted = Boolean(entrega && (entrega.status === 'ENVIADO' || entrega.status === 'ATRASADO'));
+  const isEditingLocked = isFinalSubmitted && !podeReenviar;
   // Atalho "enviar arquivo para grupo": material de apoio, sem entrega esperada
   // (a menos que o aluno já tenha respondido mesmo assim — aí mantém a entrega visível).
   const isInformativa = atividade.natureza === 'INFORMATIVA' && !entrega;
@@ -227,6 +228,9 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
             <span>Comprovante Oficial de Entrega Emitido</span>
           </div>
           <p className="text-sm mb-2">Sua resposta foi transmitida e registrada com sucesso no banco de dados da instituição.</p>
+          {podeReenviar && (
+            <p className="text-sm mb-2">Sua primeira entrega foi feita até 04/11. Você pode editar e reenviar até 15/11, às 23h59 (Brasília), sem desconto por atraso. O reenvio substitui a versão anterior; uma nova avaliação pode alterar a nota.</p>
+          )}
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted font-bold">HASH DE COMPROVAÇÃO:</span>
             <code style={{ background: 'var(--bg-surface)', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 'bold' }}>
@@ -425,7 +429,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
             placeholder="Digite aqui o relatório, diagnóstico e respostas das etapas do PBL..."
             value={conteudoResposta}
             onChange={(e) => setConteudoResposta(e.target.value)}
-            disabled={isFinalSubmitted}
+            disabled={isEditingLocked}
           />
         </div>
 
@@ -433,7 +437,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
         <div className="form-group mb-4">
           <div className="flex justify-between items-center mb-2">
             <label className="form-label font-bold">Arquivos da Sua Entrega ({uploadedFiles.length})</label>
-            {!isFinalSubmitted && (
+            {!isEditingLocked && (
               <label className="btn btn-secondary btn-sm cursor-pointer">
                 <Paperclip size={14} />
                 {uploading ? 'Anexando...' : 'Anexar Arquivo'}
@@ -449,7 +453,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
                   <FileText size={16} color="var(--primary)" />
                   <span className="font-bold">{f.nome_original}</span>
                 </div>
-                {!isFinalSubmitted && (
+                {!isEditingLocked && (
                   <button type="button" onClick={() => handleRemoveAttachedFile(f.id)} className="btn btn-sm btn-secondary">
                     <Trash2 size={14} color="#ef4444" />
                   </button>
@@ -460,16 +464,18 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
         </div>
 
         {/* Botões de Envio */}
-        {!isFinalSubmitted ? (
+        {!isEditingLocked ? (
           <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => handleSaveSubmission(false)}
-              disabled={submitting}
-              className="btn btn-secondary"
-            >
-              <Save size={18} /> Salvar Rascunho
-            </button>
+            {!isFinalSubmitted && (
+              <button
+                type="button"
+                onClick={() => handleSaveSubmission(false)}
+                disabled={submitting}
+                className="btn btn-secondary"
+              >
+                <Save size={18} /> Salvar Rascunho
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleSaveSubmission(true)}
@@ -477,13 +483,13 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
               className="btn btn-success"
               style={{ padding: '0.75rem 1.5rem', fontSize: '1rem' }}
             >
-              <Send size={18} /> {submitting ? 'Enviando...' : 'Realizar Entrega Final'}
+              <Send size={18} /> {submitting ? 'Enviando...' : isFinalSubmitted ? 'Reenviar Entrega Final' : 'Realizar Entrega Final'}
             </button>
           </div>
         ) : (
           <div className="p-3 text-center" style={{ background: 'var(--bg-main)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
             <span className="font-bold text-sm" style={{ color: '#16a34a' }}>
-              ✓ Entrega finalizada. Para alterações, entre em contato com o professor ou coordenador.
+              Entrega finalizada. Para alterações, entre em contato com o professor ou coordenador.
             </span>
           </div>
         )}
