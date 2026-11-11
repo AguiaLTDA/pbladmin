@@ -77,6 +77,13 @@ describe.skipIf(process.env.PBL_MIGRATION_TEST !== 'true')('entrega de slides em
 
   it('provisiona uma entrega por atividade fonte, copia o público e preserva o cronograma ao repetir', async () => {
     await ensureSlidesPresentationDelivery(client);
+    const criadas = await client.query('SELECT ordem FROM cronograma_pbl_etapas ORDER BY posicao');
+    expect(criadas.rows.map((row) => row.ordem)).toEqual([7, 8, 9]);
+    // Reproduz a etapa sem número já publicada, com as etapas seguintes em 7 e 8.
+    await client.query(`UPDATE cronograma_pbl_etapas SET ordem = CASE
+      WHEN titulo = 'Entrega obrigatória dos slides da apresentação (sem nota)' THEN NULL
+      WHEN titulo = 'Apresentação do PBL oral' THEN 7 ELSE 8 END`);
+    await ensureSlidesPresentationDelivery(client);
     await ensureSlidesPresentationDelivery(client);
 
     const slides = await client.query(`
@@ -101,9 +108,9 @@ describe.skipIf(process.env.PBL_MIGRATION_TEST !== 'true')('entrega de slides em
     expect(regras.rows).toHaveLength(2);
     const etapas = await client.query('SELECT posicao, ordem, titulo, fim, pontos FROM cronograma_pbl_etapas ORDER BY posicao');
     expect(etapas.rows.map((row) => [row.posicao, row.ordem, row.titulo, row.fim, row.pontos])).toEqual([
-      [7, null, 'Entrega obrigatória dos slides da apresentação (sem nota)', '2026-11-19', null],
-      [8, 7, 'Apresentação do PBL oral', '2026-11-27', '1,5 ponto'],
-      [9, 8, 'Divulgação das notas', '2026-12-04', null]
+      [7, 7, 'Entrega obrigatória dos slides da apresentação (sem nota)', '2026-11-19', null],
+      [8, 8, 'Apresentação do PBL oral', '2026-11-27', '1,5 ponto'],
+      [9, 9, 'Divulgação das notas', '2026-12-04', null]
     ]);
   });
 });

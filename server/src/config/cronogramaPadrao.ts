@@ -56,20 +56,20 @@ export const CRONOGRAMA_PBL_PADRAO: {
       fim: '2026-11-22'
     },
     {
-      ordem: null,
+      ordem: 7,
       titulo: 'Entrega obrigatória dos slides da apresentação (sem nota)',
       prazoTexto: 'somente .pptx, até 19 de novembro',
       fim: '2026-11-19'
     },
     {
-      ordem: 7,
+      ordem: 8,
       titulo: 'Apresentação do PBL oral',
       prazoTexto: 'de 23 a 27 de novembro',
       fim: '2026-11-27',
       pontos: '1,5 ponto'
     },
     {
-      ordem: 8,
+      ordem: 9,
       titulo: 'Divulgação das notas e feedback final do semestre',
       prazoTexto: 'até 04 de dezembro',
       fim: '2026-12-04'

@@ -36,6 +36,17 @@ export async function ensureSlidesPresentationDelivery(existingClient?: PoolClie
       );
     }
 
+    if (cronogramaAtual.rowCount) {
+      // Corrige também a etapa sem número já publicada; repetir não renumera novamente.
+      await client.query(`UPDATE cronograma_pbl_etapas SET ordem = ordem + 1
+        WHERE ordem >= 7 AND EXISTS (
+          SELECT 1 FROM cronograma_pbl_etapas
+          WHERE titulo = 'Entrega obrigatória dos slides da apresentação (sem nota)' AND ordem IS NULL
+        )`);
+      await client.query(`UPDATE cronograma_pbl_etapas SET ordem = 7
+        WHERE titulo = 'Entrega obrigatória dos slides da apresentação (sem nota)' AND ordem IS NULL`);
+    }
+
     const fontes = await client.query<{ id: number; titulo: string; curso_id: number; disciplina_id: number; professor_id: number; periodo_letivo_id: number }>(
       `SELECT DISTINCT a.id, a.titulo, a.curso_id, a.disciplina_id, a.professor_id, a.periodo_letivo_id
          FROM atividades_pbl a
