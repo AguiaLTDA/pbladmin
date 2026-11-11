@@ -67,6 +67,7 @@ export const EntregasProfessorView: React.FC = () => {
   const [observacoes, setObservacoes] = useState('');
   const [liberadoAluno, setLiberadoAluno] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const entregaSemNota = activities.find((activity) => activity.id === Number(selectedActivityId))?.natureza === 'OBRIGATORIA_SEM_NOTA';
 
   useEffect(() => {
     apiRequest<PBLActivity[]>('/pbl/activities')
@@ -220,7 +221,7 @@ export const EntregasProfessorView: React.FC = () => {
     <div>
       <div className="mb-4">
         <h2 style={{ fontSize: '1.4rem' }}>
-          {isAdmin ? 'Entregas & Relatórios PBL' : 'Acompanhamento de Entregas & Lançamento de Notas'}
+          {entregaSemNota ? 'Acompanhamento da entrega de slides' : isAdmin ? 'Entregas & Relatórios PBL' : 'Acompanhamento de Entregas & Lançamento de Notas'}
         </h2>
         <p className="text-muted text-sm">
           {isAdmin
@@ -350,7 +351,7 @@ export const EntregasProfessorView: React.FC = () => {
                         <th>Envio</th>
                         <th>Arquivos entregues (PDF)</th>
                         <th>Comprovante</th>
-                        <th>Nota</th>
+                        <th>{entregaSemNota ? 'Avaliação' : 'Nota'}</th>
                         <th style={{ textAlign: 'right' }}>Ações</th>
                       </tr>
                     </thead>
@@ -392,16 +393,18 @@ export const EntregasProfessorView: React.FC = () => {
                             </code>
                           </td>
                           <td>
-                            <strong>{(sub.nota_total || 0).toFixed(2)} pts</strong>
-                            {(sub as EntregaComDesconto).nota_escrita_original != null && (
+                            {entregaSemNota ? <span className="text-muted">Sem nota</span> : <strong>{(sub.nota_total || 0).toFixed(2)} pts</strong>}
+                            {!entregaSemNota && (sub as EntregaComDesconto).nota_escrita_original != null && (
                               <small className="block text-muted">Escrita original: {(sub as EntregaComDesconto).nota_escrita_original!.toFixed(2)}</small>
                             )}
                           </td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="flex gap-2 justify-end">
-                              <button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm">
-                                <Award size={14} /> Avaliar
-                              </button>
+                              {!entregaSemNota && (
+                                <button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm">
+                                  <Award size={14} /> Avaliar
+                                </button>
+                              )}
                               {isAdmin && (
                                 <button
                                   onClick={() => handleExcluir(sub)}

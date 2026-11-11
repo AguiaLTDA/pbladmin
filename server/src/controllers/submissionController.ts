@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
 import { professorAlcancaAtividade } from '../services/horarioImport';
 import { calculatePblWrittenPenalty, canResubmitEarlyPblWrittenSubmission, PBL_WRITTEN_RESUBMISSION_END } from '../services/pblWrittenPenalty';
+import { SLIDES_PRESENTATION_DEADLINE, SLIDES_PRESENTATION_NATURE } from '../services/slidesPresentationDelivery';
 
 // --- STUDENT PORTAL ENDPOINTS ---
 
@@ -214,8 +215,8 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
 
     if (!access) return res.status(403).json({ message: 'Acesso negado.' });
 
-    const pub = await getAsync<{ id: number; prazo_entrega: string; pbl_1: boolean; periodo_nome: string }>(
-      `SELECT pub.id, pub.prazo_entrega, pl.nome as periodo_nome,
+    const pub = await getAsync<{ id: number; prazo_entrega: string; pbl_1: boolean; periodo_nome: string; natureza: string }>(
+      `SELECT pub.id, pub.prazo_entrega, pl.nome as periodo_nome, a.natureza,
               EXISTS (SELECT 1 FROM versoes_atividades va
                       JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
                       JOIN arquivos ar ON ar.id = aa.arquivo_id
@@ -224,14 +225,47 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
          FROM publicacoes pub
          JOIN atividades_pbl a ON a.id = pub.atividade_id
          JOIN periodos_letivos pl ON pl.id = a.periodo_letivo_id
-        WHERE pub.atividade_id = ? AND pub.status_publicacao = 'PUBLICADO'`,
+        WHERE pub.atividade_id = ? AND pub.status_publicacao = 'PUBLICADO'
+          AND a.status = 'PUBLICADO' AND a.deletado_em IS NULL`,
       [atividadeId]
     );
 
     if (!pub) return res.status(404).json({ message: 'Publicação não encontrada.' });
 
-    const status = finalSubmit ? 'ENVIADO' : 'RASCUNHO';
     const now = new Date();
+    const isSlidesDelivery = pub.natureza === SLIDES_PRESENTATION_NATURE;
+    const submittedFileIds = Array.isArray(arquivoIds) ? arquivoIds : [];
+    if (isSlidesDelivery) {
+      if (typeof conteudoResposta === 'string' && conteudoResposta.trim()) {
+        return res.status(400).json({ message: 'Esta entrega aceita somente arquivos PowerPoint (.pptx), sem resposta em texto.' });
+      }
+      if (!submittedFileIds.every((fileId: unknown) => Number.isInteger(fileId) && Number(fileId) > 0) ||
+        new Set(submittedFileIds).size !== submittedFileIds.length) {
+        return res.status(400).json({ message: 'Selecione apenas arquivos PPTX válidos para esta entrega.' });
+      }
+      if (finalSubmit && submittedFileIds.length === 0) {
+        return res.status(400).json({ message: 'Anexe ao menos um arquivo PowerPoint (.pptx) para finalizar a entrega.' });
+      }
+      if (finalSubmit && now > SLIDES_PRESENTATION_DEADLINE) {
+        return res.status(400).json({ message: 'O prazo para enviar os slides terminou em 19/11/2026, às 23h59 (horário de Brasília).' });
+      }
+      if (submittedFileIds.length > 0) {
+        const placeholders = submittedFileIds.map(() => '?').join(', ');
+        const files = await queryAsync<{ id: number; nome_original: string; mime_type: string; enviado_por: number; deletado_em: string | null }>(
+          `SELECT id, nome_original, mime_type, enviado_por, deletado_em
+             FROM arquivos WHERE id IN (${placeholders})`, submittedFileIds
+        );
+        const validPptx = files.length === submittedFileIds.length && files.every((file) =>
+          !file.deletado_em && file.enviado_por === studentId && /\.pptx$/i.test(file.nome_original) &&
+          file.mime_type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        );
+        if (!validPptx) {
+          return res.status(400).json({ message: 'Esta entrega aceita somente arquivos .pptx enviados por você.' });
+        }
+      }
+    }
+
+    const status = finalSubmit ? 'ENVIADO' : 'RASCUNHO';
     const isLate = new Date(pub.prazo_entrega) < now;
     const statusFinal = finalSubmit && isLate ? 'ATRASADO' : status;
 
@@ -312,8 +346,8 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
     const { atividadeId } = req.params;
     const user = req.user;
 
-    const act = await getAsync<{ id: number; professor_id: number }>(
-      'SELECT id, professor_id FROM atividades_pbl WHERE id = ? AND deletado_em IS NULL',
+    const act = await getAsync<{ id: number; professor_id: number; natureza: string }>(
+      'SELECT id, professor_id, natureza FROM atividades_pbl WHERE id = ? AND deletado_em IS NULL',
       [atividadeId]
     );
 
@@ -339,7 +373,7 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
              g.id as grupo_id, g.nome as grupo_nome,
              t.id as turma_id, t.nome as turma_nome, t.codigo as turma_codigo,
              fb.nota_escrita, fb.nota_escrita_original, fb.nota_oral, fb.nota_total, fb.observacoes, fb.liberado_aluno,
-             pl.nome as periodo_nome,
+             pl.nome as periodo_nome, a.natureza,
              EXISTS (SELECT 1 FROM versoes_atividades va JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
                      JOIN arquivos ar ON ar.id = aa.arquivo_id
                      WHERE va.atividade_id = p.atividade_id AND va.numero_versao = a.versao_atual
@@ -403,8 +437,8 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
 
     if (!evaluatorId) return res.status(401).json({ message: 'Não autenticado.' });
 
-    const entrega = await getAsync<{ id: number; aluno_id: number; atividade_id: number; data_envio: string | null; primeira_entrega_final_em: string | null; pbl_1: boolean; periodo_nome: string }>(
-      `SELECT e.id, e.aluno_id, p.atividade_id, e.data_envio, e.primeira_entrega_final_em,
+    const entrega = await getAsync<{ id: number; aluno_id: number; atividade_id: number; data_envio: string | null; primeira_entrega_final_em: string | null; pbl_1: boolean; periodo_nome: string; natureza: string }>(
+      `SELECT e.id, e.aluno_id, p.atividade_id, e.data_envio, e.primeira_entrega_final_em, a.natureza,
               pl.nome as periodo_nome,
               EXISTS (SELECT 1 FROM atividades_pbl a
                       JOIN versoes_atividades va ON va.atividade_id = a.id AND va.numero_versao = a.versao_atual
@@ -421,6 +455,10 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
     );
 
     if (!entrega) return res.status(404).json({ message: 'Entrega não encontrada.' });
+
+    if (entrega.natureza === SLIDES_PRESENTATION_NATURE) {
+      return res.status(400).json({ message: 'Esta entrega é obrigatória, mas não recebe avaliação ou nota.' });
+    }
 
     // O docente só avalia entregas de atividades/turmas sob sua responsabilidade.
     if (req.user?.perfilNome === 'PROFESSOR') {

@@ -1,16 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getAsync, queryAsync, runAsync, repararPblsInformativosDeGrupo, ressincronizarAudiencia } = vi.hoisted(() => ({
+const { getAsync, queryAsync, runAsync, repararPblsInformativosDeGrupo, ressincronizarAudiencia, ensureSlidesPresentationDelivery } = vi.hoisted(() => ({
   getAsync: vi.fn(),
   queryAsync: vi.fn(),
   runAsync: vi.fn(),
   repararPblsInformativosDeGrupo: vi.fn(),
-  ressincronizarAudiencia: vi.fn()
+  ressincronizarAudiencia: vi.fn(),
+  ensureSlidesPresentationDelivery: vi.fn()
 }));
 
 vi.mock('../config/db', () => ({ getAsync, queryAsync, runAsync }));
 vi.mock('../services/groupPblSubmission', () => ({ repararPblsInformativosDeGrupo }));
 vi.mock('../services/segmentation', () => ({ ressincronizarAudiencia }));
+vi.mock('../services/slidesPresentationDelivery', () => ({ ensureSlidesPresentationDelivery }));
 
 import { runMigrations } from '../db/migrate';
 
@@ -29,6 +31,7 @@ describe('recuperação de entregas por grupo na inicialização', () => {
     runAsync.mockResolvedValue({ lastID: 0, changes: 0 });
     repararPblsInformativosDeGrupo.mockResolvedValue(undefined);
     ressincronizarAudiencia.mockResolvedValue(undefined);
+    ensureSlidesPresentationDelivery.mockResolvedValue(undefined);
   });
 
   it('repara casos PBL informativos e refaz a audiência das atividades de grupo publicadas', async () => {
@@ -48,6 +51,10 @@ describe('recuperação de entregas por grupo na inicialização', () => {
       runAsync.mock.invocationCallOrder[semeaduraCronograma]
     );
     expect(ressincronizarAudiencia.mock.calls.map(([id]) => id)).toEqual([31, 44]);
+    expect(ensureSlidesPresentationDelivery).toHaveBeenCalledOnce();
+    expect(ensureSlidesPresentationDelivery.mock.invocationCallOrder[0]).toBeGreaterThan(
+      ressincronizarAudiencia.mock.invocationCallOrder[1]
+    );
   });
 
   it('propaga falha na correção dos PBLs para impedir a inicialização com recuperação incompleta', async () => {
@@ -56,6 +63,7 @@ describe('recuperação de entregas por grupo na inicialização', () => {
 
     await expect(runMigrations()).rejects.toBe(falha);
     expect(ressincronizarAudiencia).not.toHaveBeenCalled();
+    expect(ensureSlidesPresentationDelivery).not.toHaveBeenCalled();
   });
 
   it('propaga falha na ressincronização de audiência para impedir recuperação parcial', async () => {
@@ -65,5 +73,6 @@ describe('recuperação de entregas por grupo na inicialização', () => {
     await expect(runMigrations()).rejects.toBe(falha);
     expect(repararPblsInformativosDeGrupo).toHaveBeenCalledOnce();
     expect(ressincronizarAudiencia).toHaveBeenCalledOnce();
+    expect(ensureSlidesPresentationDelivery).not.toHaveBeenCalled();
   });
 });

@@ -91,6 +91,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
 
   const isFinalSubmitted = Boolean(entrega && (entrega.status === 'ENVIADO' || entrega.status === 'ATRASADO'));
   const isEditingLocked = isFinalSubmitted && !podeReenviar;
+  const isSlidesDelivery = atividade.natureza === 'OBRIGATORIA_SEM_NOTA';
   // Atalho "enviar arquivo para grupo": material de apoio, sem entrega esperada
   // (a menos que o aluno já tenha respondido mesmo assim — aí mantém a entrega visível).
   const isInformativa = atividade.natureza === 'INFORMATIVA' && !entrega;
@@ -104,6 +105,12 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (isSlidesDelivery && (!file.name.toLowerCase().endsWith('.pptx') ||
+      file.type !== 'application/vnd.openxmlformats-officedocument.presentationml.presentation')) {
+      showToast('Anexe somente arquivos PowerPoint no formato .pptx.', 'warning');
+      e.target.value = '';
+      return;
+    }
 
     const formData = new FormData();
     formData.append('file', file);
@@ -128,6 +135,14 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
   };
 
   const handleSaveSubmission = async (finalSubmit: boolean) => {
+    if (isSlidesDelivery && conteudoResposta.trim()) {
+      showToast('Esta entrega aceita somente arquivos PowerPoint (.pptx), sem resposta em texto.', 'warning');
+      return;
+    }
+    if (isSlidesDelivery && finalSubmit && uploadedFiles.length === 0) {
+      showToast('Anexe ao menos um arquivo PowerPoint (.pptx) para finalizar a entrega.', 'warning');
+      return;
+    }
     if (finalSubmit && !conteudoResposta.trim() && uploadedFiles.length === 0) {
       showToast('Preencha uma resposta em texto ou anexe um arquivo para enviar.', 'warning');
       return;
@@ -175,6 +190,8 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
             <span className="pill-tag" style={{ background: '#ede9fe', color: '#6d28d9' }}>
               <Info size={12} /> Material informativo
             </span>
+          ) : isSlidesDelivery ? (
+            <span className="pill-tag" style={{ background: '#e0f2fe', color: '#0369a1' }}>Entrega obrigatória sem nota</span>
           ) : (
             <span className="text-sm text-muted">Prazo de Entrega: <strong>{new Date(atividade.prazo_entrega).toLocaleString('pt-BR')}</strong></span>
           )}
@@ -184,7 +201,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
       </div>
 
       {/* Resultado & Feedback Liberado pelo Docente */}
-      {feedback && (
+      {feedback && !isSlidesDelivery && (
         <div className="card mb-4" style={{ background: '#dcfce7', border: '2px solid #16a34a' }}>
           <div className="flex items-center gap-2 mb-2 font-bold" style={{ color: '#15803d', fontSize: '1.1rem' }}>
             <Award size={22} />
@@ -415,13 +432,15 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
       <div className="card">
         <h3 className="font-bold mb-2 flex items-center gap-2">
           <Send size={20} color="var(--primary)" />
-          Área de Envio da Sua Resposta / Entrega
+          {isSlidesDelivery ? 'Entrega obrigatória dos slides (sem nota)' : 'Área de Envio da Sua Resposta / Entrega'}
         </h3>
         <p className="text-muted text-sm mb-4">
-          Digite a solução do problema central ou anexe os arquivos da sua resposta. Você pode salvar como rascunho quantas vezes quiser antes de realizar a entrega final.
+          {isSlidesDelivery
+            ? 'Anexe os slides da apresentação em PowerPoint (.pptx) até 19/11/2026, às 23h59min59s (horário de Brasília). Esta entrega é obrigatória e não recebe nota.'
+            : 'Digite a solução do problema central ou anexe os arquivos da sua resposta. Você pode salvar como rascunho quantas vezes quiser antes de realizar a entrega final.'}
         </p>
 
-        <div className="form-group mb-4">
+        {!isSlidesDelivery && <div className="form-group mb-4">
           <label className="form-label font-bold">Sua Solução / Resposta em Texto</label>
           <textarea
             className="form-control"
@@ -431,7 +450,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
             onChange={(e) => setConteudoResposta(e.target.value)}
             disabled={isEditingLocked}
           />
-        </div>
+        </div>}
 
         {/* Anexos da Entrega */}
         <div className="form-group mb-4">
@@ -441,7 +460,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
               <label className="btn btn-secondary btn-sm cursor-pointer">
                 <Paperclip size={14} />
                 {uploading ? 'Anexando...' : 'Anexar Arquivo'}
-                <input type="file" onChange={handleFileUpload} style={{ display: 'none' }} disabled={uploading} />
+                <input type="file" accept={isSlidesDelivery ? '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation' : undefined} onChange={handleFileUpload} style={{ display: 'none' }} disabled={uploading} />
               </label>
             )}
           </div>

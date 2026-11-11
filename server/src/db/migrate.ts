@@ -4,6 +4,7 @@ import { AUTOAVALIACAO_JANELAS_PADRAO } from '../config/autoavaliacaoPadrao';
 import { ressincronizarAudiencia } from '../services/segmentation';
 import { repararPblsInformativosDeGrupo } from '../services/groupPblSubmission';
 import { prorrogarPblEscritoNovembro2026 } from '../services/pblDeadlineExtension';
+import { ensureSlidesPresentationDelivery } from '../services/slidesPresentationDelivery';
 
 // schema.sql já cria as tabelas no formato final; o único ajuste que não dá para expressar
 // em CREATE TABLE IF NOT EXISTS é este índice único (parte da chave depende de COALESCE).
@@ -270,4 +271,6 @@ export async function runMigrations() {
   for (const { atividade_id } of atividadesDeGrupo) {
     await ressincronizarAudiencia(atividade_id);
   }
+
+  await ensureSlidesPresentationDelivery();
 }

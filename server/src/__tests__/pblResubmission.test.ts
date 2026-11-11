@@ -80,4 +80,102 @@ describe('reenvio do PBL escrito', () => {
     expect(res.statusCode).toBe(400);
     expect(runAsync).not.toHaveBeenCalled();
   });
+
+  it('exige arquivo PPTX válido antes de finalizar a entrega de slides', async () => {
+    vi.setSystemTime(new Date('2026-11-19T12:00:00-03:00'));
+    getAsync
+      .mockResolvedValueOnce({ id: 1 })
+      .mockResolvedValueOnce({
+        id: 20, prazo_entrega: '2026-11-20T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
+      });
+    const res = resposta();
+
+    await submitStudentAnswer({
+      params: { atividadeId: '20' }, body: { conteudoResposta: 'texto', arquivoIds: [], finalSubmit: true },
+      user: { id: 7, perfilNome: 'ALUNO' }
+    } as any, res as any);
+
+    expect(res.statusCode).toBe(400);
+    expect(runAsync).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { nome_original: 'slides.pdf', mime_type: 'application/pdf' },
+    { nome_original: 'slides.pptx', mime_type: 'application/pdf' }
+  ])('rejeita anexo que não seja PPTX ($nome_original)', async (arquivo) => {
+    vi.setSystemTime(new Date('2026-11-19T12:00:00-03:00'));
+    getAsync
+      .mockResolvedValueOnce({ id: 1 })
+      .mockResolvedValueOnce({
+        id: 20, prazo_entrega: '2026-11-20T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
+      });
+    queryAsync.mockResolvedValue([{ id: 33, enviado_por: 7, ...arquivo }]);
+    const res = resposta();
+
+    await submitStudentAnswer({
+      params: { atividadeId: '20' }, body: { arquivoIds: [33], finalSubmit: true },
+      user: { id: 7, perfilNome: 'ALUNO' }
+    } as any, res as any);
+
+    expect(res.statusCode).toBe(400);
+    expect(runAsync).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { enviado_por: 8, nome_original: 'slides.pptx', mime_type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+    { enviado_por: 7, nome_original: 'slides.pptx', mime_type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', deletado_em: new Date() }
+  ])('não aceita arquivo PPTX que não pertença ao aluno ou esteja excluído', async (file) => {
+    vi.setSystemTime(new Date('2026-11-19T12:00:00-03:00'));
+    getAsync
+      .mockResolvedValueOnce({ id: 1 })
+      .mockResolvedValueOnce({
+        id: 20, prazo_entrega: '2026-11-20T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
+      });
+    queryAsync.mockResolvedValue([{ id: 33, ...file }]);
+    const res = resposta();
+
+    await submitStudentAnswer({
+      params: { atividadeId: '20' }, body: { arquivoIds: [33], finalSubmit: true },
+      user: { id: 7, perfilNome: 'ALUNO' }
+    } as any, res as any);
+
+    expect(res.statusCode).toBe(400);
+    expect(runAsync).not.toHaveBeenCalled();
+  });
+
+  it('aceita PPTX próprio até o último milissegundo e bloqueia depois do prazo de slides', async () => {
+    vi.setSystemTime(new Date('2026-11-19T23:59:59.999-03:00'));
+    getAsync
+      .mockResolvedValueOnce({ id: 1 })
+      .mockResolvedValueOnce({
+        id: 20, prazo_entrega: '2026-11-20T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
+      })
+      .mockResolvedValueOnce(undefined);
+    queryAsync.mockResolvedValue([{
+      id: 33, enviado_por: 7, nome_original: 'slides.pptx',
+      mime_type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    }]);
+    const accepted = resposta();
+    await submitStudentAnswer({
+      params: { atividadeId: '20' }, body: { arquivoIds: [33], finalSubmit: true },
+      user: { id: 7, perfilNome: 'ALUNO' }
+    } as any, accepted as any);
+    expect(accepted.statusCode).toBe(200);
+
+    vi.setSystemTime(new Date('2026-11-20T00:00:00-03:00'));
+    getAsync.mockReset();
+    getAsync
+      .mockResolvedValueOnce({ id: 1 })
+      .mockResolvedValueOnce({
+        id: 20, prazo_entrega: '2026-11-20T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
+      });
+    runAsync.mockClear();
+    const late = resposta();
+    await submitStudentAnswer({
+      params: { atividadeId: '20' }, body: { arquivoIds: [33], finalSubmit: true },
+      user: { id: 7, perfilNome: 'ALUNO' }
+    } as any, late as any);
+    expect(late.statusCode).toBe(400);
+    expect(runAsync).not.toHaveBeenCalled();
+  });
 });

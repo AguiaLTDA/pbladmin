@@ -79,8 +79,8 @@ export interface PBLActivity {
   periodo_letivo_id: number;
   periodo_nome?: string;
   status: PBLStatus;
-  /** 'INFORMATIVA' = atalho "enviar arquivo para grupo" (sem entrega esperada). */
-  natureza?: 'AVALIATIVA' | 'INFORMATIVA';
+  /** INFORMATIVA não espera entrega; OBRIGATORIA_SEM_NOTA exige arquivo, mas não nota. */
+  natureza?: 'AVALIATIVA' | 'INFORMATIVA' | 'OBRIGATORIA_SEM_NOTA';
   versao_atual: number;
   criado_em: string;
   atualizado_em: string;
