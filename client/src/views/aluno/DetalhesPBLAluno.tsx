@@ -358,7 +358,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
           )}
 
           <div>
-            <h4 className="font-bold mb-2">Materiais PBL ({arquivos.length + (mostrarTemplate ? 1 : 0)})</h4>
+            <h4 className="font-bold mb-2">Materiais PBL ({arquivos.length + (mostrarTemplate ? 1 : 0) + (isSlidesDelivery ? 1 : 0)})</h4>
             {arquivos.map((f: any) => (
               <div key={f.id} className="flex items-center justify-between p-2 mb-1" style={{ background: 'var(--bg-main)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                 <div className="flex items-center gap-2 text-sm">
@@ -381,6 +381,22 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
                 </div>
               </div>
             ))}
+            {isSlidesDelivery && (
+              <div className="flex items-center justify-between p-2 mb-1 gap-2" style={{ flexWrap: 'wrap', background: 'var(--bg-main)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div className="flex items-center gap-2 text-sm">
+                  <FileText size={16} color="var(--primary)" aria-hidden="true" />
+                  <span>Template PBL 2 2026-2 (.pptx)</span>
+                </div>
+                <a
+                  className="btn btn-sm btn-secondary"
+                  href={`${import.meta.env.BASE_URL}documentos/template-pbl-2-2026-2.pptx`}
+                  download="Template PBL 2 2026-2.pptx"
+                  aria-label="Baixar template PBL 2 2026-2 (PPTX)"
+                >
+                  <Download size={14} aria-hidden="true" /> Baixar template (.pptx)
+                </a>
+              </div>
+            )}
             {mostrarTemplate && (
               <div className="flex items-center justify-between p-2 mb-1 gap-2" style={{ flexWrap: 'wrap', background: 'var(--bg-main)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                 <div className="flex items-center gap-2 text-sm">
