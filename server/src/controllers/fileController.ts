@@ -9,6 +9,7 @@ import { logAudit } from '../services/audit';
 import { uploadToDrive, downloadFromDrive, moverParaExcluidosNoDrive } from '../services/googleDrive';
 import { calculateAudiencePreview, saveSegmentationAndTargetStudents } from '../services/segmentation';
 import { getPrazoPblEscrito, INSTRUCOES_PBL_1, repararPblsInformativosDeGrupo } from '../services/groupPblSubmission';
+import { studentDeliveryCte } from '../services/studentGroupDelivery';
 
 // Arquivos ficam em buffer só até serem enviados ao Google Drive — nada é gravado em disco local.
 const storage = multer.memoryStorage();
@@ -132,7 +133,17 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response) {
         [id, user.id]
       );
 
-      if (!isOwner && !isActivityFile) {
+      const isSharedSubmissionFile = await getAsync<{ id: number }>(
+        `${studentDeliveryCte}
+         SELECT ae.id
+         FROM entrega_aluno_visivel ent
+         JOIN arquivos_entregas ae ON ae.entrega_id = ent.id
+         WHERE ent.viewer_id = ? AND ent.entrega_compartilhada = true
+           AND ent.status IN ('ENVIADO', 'ATRASADO') AND ae.arquivo_id = ?`,
+        [user.id, user.id, id]
+      );
+
+      if (!isOwner && !isActivityFile && !isSharedSubmissionFile) {
         return res.status(403).json({ message: 'Acesso negado para este arquivo.' });
       }
     }

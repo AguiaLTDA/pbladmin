@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { queryAsync, getAsync } from '../config/db';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { studentDeliveryCte } from '../services/studentGroupDelivery';
 
 export async function getDashboardData(req: AuthenticatedRequest, res: Response) {
   try {
@@ -168,11 +169,12 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
       // Materiais informativos (atalho "enviar arquivo para grupo") ficam fora
       // destes contadores — não são atividade avaliativa com prazo/entrega.
       const activities = await queryAsync<any>(
-        `SELECT a.id, pub.prazo_entrega, ent.status as entrega_status
+        `${studentDeliveryCte}
+         SELECT a.id, pub.prazo_entrega, ent.status as entrega_status
          FROM alunos_segmentados als
          JOIN atividades_pbl a ON als.atividade_id = a.id
          JOIN publicacoes pub ON a.id = pub.atividade_id
-         LEFT JOIN entregas ent ON pub.id = ent.publicacao_id AND ent.aluno_id = ? AND ent.deletado_em IS NULL
+         LEFT JOIN entrega_aluno_visivel ent ON pub.id = ent.publicacao_id AND ent.viewer_id = als.aluno_id
          WHERE als.aluno_id = ? AND a.status = 'PUBLICADO' AND a.deletado_em IS NULL
            AND COALESCE(a.natureza, 'AVALIATIVA') != 'INFORMATIVA'`,
         [user.id, user.id]
@@ -186,7 +188,7 @@ export async function getDashboardData(req: AuthenticatedRequest, res: Response)
 
       activities.forEach((act: any) => {
         const prazo = new Date(act.prazo_entrega);
-        if (act.entrega_status === 'ENVIADO') {
+        if (['ENVIADO', 'ATRASADO'].includes(act.entrega_status)) {
           concluidas++;
         } else if (act.entrega_status === 'RASCUNHO') {
           emAndamento++;

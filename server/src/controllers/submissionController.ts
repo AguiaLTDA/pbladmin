@@ -6,6 +6,7 @@ import { logAudit } from '../services/audit';
 import { professorAlcancaAtividade } from '../services/horarioImport';
 import { calculatePblWrittenPenalty, canResubmitEarlyPblWrittenSubmission, PBL_WRITTEN_RESUBMISSION_END } from '../services/pblWrittenPenalty';
 import { SLIDES_PRESENTATION_DEADLINE, SLIDES_PRESENTATION_NATURE } from '../services/slidesPresentationDelivery';
+import { studentDeliveryCte } from '../services/studentGroupDelivery';
 
 // --- STUDENT PORTAL ENDPOINTS ---
 
@@ -18,10 +19,12 @@ export async function getStudentActivities(req: AuthenticatedRequest, res: Respo
     const { statusFiltro } = req.query; // 'PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDA', 'ATRASADA'
 
     let sql = `
+      ${studentDeliveryCte}
       SELECT a.id, a.codigo_unico, a.titulo, a.natureza, c.nome as curso_nome, d.nome as disciplina_nome,
              p.nome as professor_nome, pub.id as publicacao_id, pub.data_disponibilizacao,
              pub.prazo_entrega, pub.status_publicacao,
              ent.id as entrega_id, ent.status as entrega_status, ent.data_envio, ent.comprovante_hash,
+             ent.entrega_compartilhada, ent.enviado_por_nome,
              fb.nota_total, fb.liberado_aluno
       FROM alunos_segmentados als
       JOIN atividades_pbl a ON als.atividade_id = a.id
@@ -29,7 +32,7 @@ export async function getStudentActivities(req: AuthenticatedRequest, res: Respo
       JOIN cursos c ON a.curso_id = c.id
       JOIN disciplinas d ON a.disciplina_id = d.id
       JOIN usuarios p ON a.professor_id = p.id
-      LEFT JOIN entregas ent ON pub.id = ent.publicacao_id AND ent.aluno_id = ? AND ent.deletado_em IS NULL
+      LEFT JOIN entrega_aluno_visivel ent ON pub.id = ent.publicacao_id AND ent.viewer_id = als.aluno_id
       LEFT JOIN feedbacks fb ON ent.id = fb.entrega_id
       WHERE als.aluno_id = ? AND a.status = 'PUBLICADO' AND a.deletado_em IS NULL
     `;
@@ -41,7 +44,7 @@ export async function getStudentActivities(req: AuthenticatedRequest, res: Respo
       const prazo = new Date(item.prazo_entrega);
       let estadoAluno = 'PENDENTE';
 
-      if (item.entrega_status === 'ENVIADO') {
+      if (['ENVIADO', 'ATRASADO'].includes(item.entrega_status)) {
         estadoAluno = 'CONCLUIDA';
       } else if (item.entrega_status === 'RASCUNHO') {
         estadoAluno = 'EM_ANDAMENTO';
@@ -141,8 +144,10 @@ export async function getStudentActivityDetails(req: AuthenticatedRequest, res: 
 
     // Fetch existing submission for student if any
     const entrega = await getAsync<any>(
-      `SELECT * FROM entregas WHERE publicacao_id = ? AND aluno_id = ? AND deletado_em IS NULL`,
-      [act.publicacao_id, studentId]
+      `${studentDeliveryCte}
+       SELECT * FROM entrega_aluno_visivel
+        WHERE publicacao_id = ? AND viewer_id = ?`,
+      [studentId, act.publicacao_id, studentId]
     );
 
     let feedback = null;
@@ -170,10 +175,13 @@ export async function getStudentActivityDetails(req: AuthenticatedRequest, res: 
     // sobre um material são endereçados a uma turma, não à atividade: sem este
     // id, a tela do aluno não teria como pedi-los.
     const matricula = await getAsync<{ turma_id: number; grupo_id: number | null }>(
-      `SELECT turma_id, grupo_id FROM matriculas
-        WHERE usuario_id = ? AND deletado_em IS NULL
-        ORDER BY criado_em DESC LIMIT 1`,
-      [studentId]
+      `SELECT m.turma_id, m.grupo_id FROM matriculas m
+        JOIN turmas t ON t.id = m.turma_id
+        WHERE m.usuario_id = ? AND m.ativo = 1 AND m.deletado_em IS NULL
+          AND t.ativo = 1 AND t.deletado_em IS NULL
+          AND t.curso_id = ? AND t.periodo_letivo_id = ?
+        ORDER BY (m.grupo_id IS NOT NULL) DESC, m.grupo_id ASC, m.id ASC LIMIT 1`,
+      [studentId, act.curso_id, act.periodo_letivo_id]
     );
 
     return res.json({
@@ -183,7 +191,7 @@ export async function getStudentActivityDetails(req: AuthenticatedRequest, res: 
       arquivos,
       entrega,
       podeReenviar: Boolean(
-        entrega && ['ENVIADO', 'ATRASADO'].includes(entrega.status) && act.pbl_1 &&
+        entrega && !entrega.entrega_compartilhada && ['ENVIADO', 'ATRASADO'].includes(entrega.status) && act.pbl_1 &&
         act.periodo_nome === '2026/2' &&
         canResubmitEarlyPblWrittenSubmission(entrega.primeira_entrega_final_em)
       ),
@@ -231,6 +239,17 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
     );
 
     if (!pub) return res.status(404).json({ message: 'Publicação não encontrada.' });
+
+    const entregaCompartilhada = await getAsync<{ id: number }>(
+      `${studentDeliveryCte}
+       SELECT id FROM entrega_aluno_visivel
+        WHERE publicacao_id = ? AND viewer_id = ? AND entrega_compartilhada = true
+          AND status IN ('ENVIADO', 'ATRASADO')`,
+      [studentId, pub.id, studentId]
+    );
+    if (entregaCompartilhada) {
+      return res.status(409).json({ message: 'Seu grupo já realizou a entrega final. Consulte a resposta compartilhada.' });
+    }
 
     const now = new Date();
     const isSlidesDelivery = pub.natureza === SLIDES_PRESENTATION_NATURE;

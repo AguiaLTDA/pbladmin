@@ -28,6 +28,7 @@ function setupExistingPblEntrega(firstFinal: string) {
   getAsync
     .mockResolvedValueOnce({ id: 1 })
     .mockResolvedValueOnce({ id: 8, prazo_entrega: '2026-11-15T23:59:59-03:00', pbl_1: true, periodo_nome: '2026/2' })
+    .mockResolvedValueOnce(undefined) // no final de outro integrante visível para o grupo
     .mockResolvedValueOnce({ id: 12, status: 'ENVIADO', primeira_entrega_final_em: firstFinal });
 }
 
@@ -68,6 +69,7 @@ describe('reenvio do PBL escrito', () => {
     getAsync
       .mockResolvedValueOnce({ id: 1 })
       .mockResolvedValueOnce({ id: 8, prazo_entrega: '2026-11-15T23:59:59-03:00', pbl_1: true, periodo_nome: '2026/2' })
+      .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({ id: 12, status, primeira_entrega_final_em: '2026-11-04T18:00:00-03:00' });
     const res = resposta();
 

@@ -55,7 +55,8 @@ export const CalendarioPrazosAlunoView: React.FC<Props> = ({ navigate }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {activities.map((act) => {
             const prazoDate = new Date(act.prazo_entrega);
-            const isLate = prazoDate < new Date() && act.entrega_status !== 'ENVIADO';
+            const isConcluida = ['ENVIADO', 'ATRASADO'].includes(act.entrega_status);
+            const isLate = prazoDate < new Date() && !isConcluida;
 
             return (
               <div
@@ -63,7 +64,7 @@ export const CalendarioPrazosAlunoView: React.FC<Props> = ({ navigate }) => {
                 className="card flex items-center justify-between"
                 style={{
                   borderLeft: `6px solid ${
-                    act.entrega_status === 'ENVIADO' ? '#10b981' : isLate ? '#ef4444' : '#3b82f6'
+                    isConcluida ? '#10b981' : isLate ? '#ef4444' : '#3b82f6'
                   }`
                 }}
               >
@@ -95,11 +96,11 @@ export const CalendarioPrazosAlunoView: React.FC<Props> = ({ navigate }) => {
                   <span
                     className="status-badge"
                     style={{
-                      background: act.entrega_status === 'ENVIADO' ? '#dcfce7' : isLate ? '#fee2e2' : '#e0f2fe',
-                      color: act.entrega_status === 'ENVIADO' ? '#15803d' : isLate ? '#b91c1c' : '#0369a1'
+                      background: isConcluida ? '#dcfce7' : isLate ? '#fee2e2' : '#e0f2fe',
+                      color: isConcluida ? '#15803d' : isLate ? '#b91c1c' : '#0369a1'
                     }}
                   >
-                    {act.entrega_status === 'ENVIADO' ? 'CONCLUÍDO' : isLate ? 'ATRASADO' : 'PENDENTE'}
+                    {isConcluida ? 'CONCLUÍDO' : isLate ? 'ATRASADO' : 'PENDENTE'}
                   </span>
 
                   <button onClick={() => navigate(`/aluno/atividade/${act.id}`)} className="btn btn-secondary btn-sm">

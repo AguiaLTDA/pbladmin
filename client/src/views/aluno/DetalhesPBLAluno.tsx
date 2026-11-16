@@ -90,7 +90,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
   );
 
   const isFinalSubmitted = Boolean(entrega && (entrega.status === 'ENVIADO' || entrega.status === 'ATRASADO'));
-  const isEditingLocked = isFinalSubmitted && !podeReenviar;
+  const isEditingLocked = isFinalSubmitted && (Boolean(entrega.entrega_compartilhada) || !podeReenviar);
   const isSlidesDelivery = atividade.natureza === 'OBRIGATORIA_SEM_NOTA';
   // Atalho "enviar arquivo para grupo": material de apoio, sem entrega esperada
   // (a menos que o aluno já tenha respondido mesmo assim — aí mantém a entrega visível).
@@ -245,6 +245,12 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
             <span>Comprovante Oficial de Entrega Emitido</span>
           </div>
           <p className="text-sm mb-2">Sua resposta foi transmitida e registrada com sucesso no banco de dados da instituição.</p>
+          {entrega.enviado_por_nome && (
+            <p className="text-sm mb-2">
+              Enviada por <strong>{entrega.enviado_por_nome}</strong>
+              {entrega.entrega_compartilhada && ' · Entrega do grupo'}
+            </p>
+          )}
           {podeReenviar && (
             <p className="text-sm mb-2">Sua primeira entrega foi feita até 04/11. Você pode editar e reenviar até 15/11, às 23h59 (Brasília), sem desconto por atraso. O reenvio substitui a versão anterior; uma nova avaliação pode alterar a nota.</p>
           )}
