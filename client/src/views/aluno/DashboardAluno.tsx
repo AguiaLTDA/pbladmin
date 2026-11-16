@@ -4,6 +4,7 @@ import { GraduationCap, Clock, CheckCircle2, AlertTriangle, ArrowRight, Sparkles
 import { ManualAlunoPBLButton } from '../../components/ManualAlunoPBLButton';
 import { ComunicadoPBLEscrito } from '../../components/ComunicadoPBLEscrito';
 import { useAuth } from '../../context/AuthContext';
+import { MeuGrupoAutoavaliacao } from '../../types';
 
 interface AlunoDashboardData {
   kpis: {
@@ -23,6 +24,9 @@ export const DashboardAlunoView: React.FC<Props> = ({ navigate }) => {
   const { user } = useAuth();
   const [data, setData] = useState<AlunoDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [autoavaliacao, setAutoavaliacao] = useState<MeuGrupoAutoavaliacao | null>(null);
+  const [autoavaliacaoCarregando, setAutoavaliacaoCarregando] = useState(true);
+  const [autoavaliacaoFalhou, setAutoavaliacaoFalhou] = useState(false);
 
   useEffect(() => {
     apiRequest<AlunoDashboardData>('/dashboard')
@@ -31,9 +35,57 @@ export const DashboardAlunoView: React.FC<Props> = ({ navigate }) => {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    apiRequest<MeuGrupoAutoavaliacao>('/autoavaliacao/meu-grupo')
+      .then((res) => setAutoavaliacao(res))
+      .catch(() => setAutoavaliacaoFalhou(true))
+      .finally(() => setAutoavaliacaoCarregando(false));
+  }, []);
+
   if (loading) return <div className="p-4 text-center">Carregando portal do aluno...</div>;
 
   const k = data?.kpis;
+  const gruposAvaliaveis = autoavaliacao?.turmas.filter((turma) => turma.colegas.length > 0) || [];
+  const gruposConcluidos = gruposAvaliaveis.filter(
+    (turma) => turma.completo && turma.colegas.every((colega) => colega.nota !== null)
+  ).length;
+  const autoavaliacaoConcluida = Boolean(
+    autoavaliacao?.janela && autoavaliacao.status !== 'FUTURA' && autoavaliacao.status !== 'INEXISTENTE' &&
+    gruposAvaliaveis.length > 0 && gruposConcluidos === gruposAvaliaveis.length
+  );
+  const janelaAutoavaliacao = autoavaliacao?.janela;
+  let resumoAutoavaliacao = 'Consultando o status da sua autoavaliação…';
+  let acaoAutoavaliacao = 'Consultar autoavaliação';
+  if (!autoavaliacaoCarregando) {
+    if (autoavaliacaoFalhou) {
+      resumoAutoavaliacao = 'Não foi possível carregar o status agora.';
+    } else if (!janelaAutoavaliacao || autoavaliacao?.status === 'INEXISTENTE') {
+      resumoAutoavaliacao = 'Não há uma rodada de autoavaliação cadastrada no momento.';
+    } else if (autoavaliacao?.status === 'FUTURA') {
+      resumoAutoavaliacao = `${janelaAutoavaliacao.titulo} ainda não abriu.`;
+    } else if (autoavaliacao?.status === 'ENCERRADA') {
+      resumoAutoavaliacao = !autoavaliacao?.turmas.length
+        ? 'Você não tinha um grupo disponível nesta rodada.'
+        : !gruposAvaliaveis.length
+          ? `${janelaAutoavaliacao.titulo} foi encerrada. Sem colegas para avaliar.`
+          : autoavaliacaoConcluida
+            ? `Sua avaliação foi registrada — ${gruposConcluidos} de ${gruposAvaliaveis.length} avaliações de grupo concluídas.`
+            : `${janelaAutoavaliacao.titulo} foi encerrada. ${gruposConcluidos} de ${gruposAvaliaveis.length} avaliações registradas.`;
+      acaoAutoavaliacao = 'Ver autoavaliação';
+    } else if (!autoavaliacao?.turmas.length) {
+      resumoAutoavaliacao = 'Você ainda não está em um grupo disponível para avaliar colegas.';
+      acaoAutoavaliacao = 'Ver autoavaliação';
+    } else if (!gruposAvaliaveis.length) {
+      resumoAutoavaliacao = 'Sem colegas para avaliar nos seus grupos.';
+      acaoAutoavaliacao = 'Ver autoavaliação';
+    } else if (autoavaliacaoConcluida) {
+      resumoAutoavaliacao = `Sua autoavaliação foi registrada — ${gruposConcluidos} de ${gruposAvaliaveis.length} avaliações de grupo concluídas.`;
+      acaoAutoavaliacao = 'Ver autoavaliação';
+    } else {
+      resumoAutoavaliacao = `${gruposConcluidos} de ${gruposAvaliaveis.length} avaliações de grupo concluídas.`;
+      acaoAutoavaliacao = 'Fazer autoavaliação';
+    }
+  }
 
   return (
     <div>
@@ -134,16 +186,31 @@ export const DashboardAlunoView: React.FC<Props> = ({ navigate }) => {
               <ArrowRight size={16} />
             </button>
 
-            <button onClick={() => navigate('/aluno/autoavaliacao')} className="btn btn-secondary justify-between">
-              <span className="flex items-center gap-2">
-                <Star size={16} />
-                Autoavaliação do Grupo
-              </span>
-              <ArrowRight size={16} />
-            </button>
-
             <ManualAlunoPBLButton />
           </div>
+        </div>
+
+        <div className="card" style={{ borderLeft: `4px solid ${autoavaliacaoConcluida ? 'var(--success, #16a34a)' : autoavaliacao?.status === 'ABERTA' && gruposAvaliaveis.length > 0 ? '#d97706' : 'var(--border-color, #e5e7eb)'}` }}>
+          <div className="flex items-start gap-3 mb-3">
+            {autoavaliacaoConcluida ? (
+              <CheckCircle2 size={24} color="var(--success, #16a34a)" style={{ flexShrink: 0 }} />
+            ) : autoavaliacao?.status === 'FUTURA' || autoavaliacao?.status === 'ENCERRADA' || autoavaliacao?.status === 'ABERTA' && gruposAvaliaveis.length > 0 ? (
+              <Clock size={24} color="#b45309" style={{ flexShrink: 0 }} />
+            ) : (
+              <Star size={24} color="var(--text-muted, #64748b)" style={{ flexShrink: 0 }} />
+            )}
+            <div>
+              <h3 className="font-bold mb-1">
+                {autoavaliacaoConcluida ? 'Autoavaliação concluída' : 'Autoavaliação do Grupo'}
+              </h3>
+              {janelaAutoavaliacao?.titulo && <div className="text-xs text-muted mb-1">{janelaAutoavaliacao.titulo}</div>}
+              <p className="text-sm text-muted" style={{ margin: 0 }}>{resumoAutoavaliacao}</p>
+            </div>
+          </div>
+          <button onClick={() => navigate('/aluno/autoavaliacao')} className="btn btn-secondary justify-between" style={{ width: '100%' }}>
+            <span>{acaoAutoavaliacao}</span>
+            <ArrowRight size={16} />
+          </button>
         </div>
       </div>
     </div>

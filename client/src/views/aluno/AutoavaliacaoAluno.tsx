@@ -3,7 +3,7 @@ import { apiRequest } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { MeuGrupoAutoavaliacao, TurmaParaAutoavaliar } from '../../types';
 import { SeletorEstrelas } from '../../components/SeletorEstrelas';
-import { Star, Lock, Clock, CheckCircle2 } from 'lucide-react';
+import { Star, Lock, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 function formatarData(iso: string): string {
   return new Date(iso).toLocaleDateString('pt-BR');
@@ -27,6 +27,9 @@ const CartaoGrupo: React.FC<CartaoGrupoProps> = ({ turma, podeEditar, onSalvo })
   }, [turma.colegas]);
 
   const faltam = turma.colegas.filter((c) => notas[c.id] == null).length;
+  const temColegas = turma.colegas.length > 0;
+  const completa = temColegas && turma.completo && faltam === 0;
+  const notasPreenchidas = turma.colegas.length - faltam;
 
   const handleSalvar = async () => {
     const semNota = turma.colegas.filter((c) => notas[c.id] == null);
@@ -40,7 +43,13 @@ const CartaoGrupo: React.FC<CartaoGrupoProps> = ({ turma, podeEditar, onSalvo })
         grupoId: turma.grupoId,
         notas: Object.fromEntries(turma.colegas.map((c) => [c.id, notas[c.id]]))
       };
-      await apiRequest('/autoavaliacao/meu-grupo', { method: 'POST', body: JSON.stringify(corpo) });
+      const resposta = await apiRequest<{ persistido?: boolean; message?: string }>(
+        '/autoavaliacao/meu-grupo', { method: 'POST', body: JSON.stringify(corpo) }
+      );
+      if (resposta.persistido === false) {
+        showToast(resposta.message || 'Esta resposta não foi salva no servidor.', 'info');
+        return;
+      }
       showToast('Autoavaliação registrada com sucesso.', 'success');
       onSalvo(
         turma.turmaId,
@@ -60,17 +69,28 @@ const CartaoGrupo: React.FC<CartaoGrupoProps> = ({ turma, podeEditar, onSalvo })
           <div className="font-bold">{turma.grupoNome}</div>
           <div className="text-muted text-sm">{turma.turmaNome}</div>
         </div>
-        {turma.completo && (
-          <span className="pill-tag pill-tag-green">
-            <CheckCircle2 size={12} /> Autoavaliação enviada
+        {completa ? (
+          <span className="pill-tag pill-tag-green" style={{ background: 'var(--success-light, #dcfce7)', color: '#14532d' }}>
+            <CheckCircle2 size={12} /> Sua avaliação concluída
+          </span>
+        ) : !temColegas ? (
+          <span className="pill-tag">Sem colegas para avaliar</span>
+        ) : (
+          <span className="pill-tag" style={{ color: 'var(--warning, #b45309)' }}>
+            <Clock size={12} /> Pendente de envio
           </span>
         )}
       </div>
 
-      {turma.colegas.length === 0 ? (
+      {!temColegas ? (
         <div className="text-muted text-sm">Você é o único integrante deste grupo até o momento.</div>
       ) : (
         <>
+          <p className="text-muted text-sm" style={{ margin: '0.25rem 0 0' }}>
+            {completa
+              ? `Sua avaliação foi registrada para ${turma.colegas.length} ${turma.colegas.length === 1 ? 'colega' : 'colegas'}.`
+              : `${notasPreenchidas} de ${turma.colegas.length} colegas com nota escolhida; envie para registrar.`}
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', marginTop: '0.75rem' }}>
             {turma.colegas.map((colega) => (
               <div
@@ -92,10 +112,10 @@ const CartaoGrupo: React.FC<CartaoGrupoProps> = ({ turma, podeEditar, onSalvo })
             <button
               onClick={handleSalvar}
               disabled={salvando}
-              className="btn btn-primary"
+              className={`btn ${completa ? 'btn-success' : 'btn-primary'}`}
               style={{ marginTop: '1rem' }}
             >
-              {salvando ? 'Enviando...' : faltam > 0 ? `Enviar (faltam ${faltam})` : 'Enviar Autoavaliação'}
+              {salvando ? 'Enviando...' : faltam > 0 ? `Enviar (faltam ${faltam})` : completa ? 'Atualizar autoavaliação' : 'Enviar Autoavaliação'}
             </button>
           )}
         </>
@@ -108,6 +128,7 @@ export const AutoavaliacaoAlunoView: React.FC = () => {
   const { showToast } = useToast();
   const [dados, setDados] = useState<MeuGrupoAutoavaliacao | null>(null);
   const [loading, setLoading] = useState(true);
+  const [erroCarregamento, setErroCarregamento] = useState(false);
 
   const carregar = async () => {
     setLoading(true);
@@ -115,6 +136,7 @@ export const AutoavaliacaoAlunoView: React.FC = () => {
       const res = await apiRequest<MeuGrupoAutoavaliacao>('/autoavaliacao/meu-grupo');
       setDados(res);
     } catch (err: any) {
+      setErroCarregamento(true);
       showToast(err.message || 'Erro ao carregar sua autoavaliação.', 'error');
     } finally {
       setLoading(false);
@@ -142,6 +164,14 @@ export const AutoavaliacaoAlunoView: React.FC = () => {
 
   const status = dados?.status;
   const janela = dados?.janela;
+  const gruposAvaliaveis = dados?.turmas.filter((turma) => turma.colegas.length > 0) || [];
+  const gruposConcluidos = gruposAvaliaveis.filter(
+    (turma) => turma.completo && turma.colegas.every((colega) => colega.nota !== null)
+  ).length;
+  const autoavaliacaoConcluida = Boolean(
+    janela && status !== 'FUTURA' && status !== 'INEXISTENTE' && gruposAvaliaveis.length > 0 &&
+    gruposConcluidos === gruposAvaliaveis.length
+  );
 
   return (
     <div>
@@ -153,7 +183,29 @@ export const AutoavaliacaoAlunoView: React.FC = () => {
         </p>
       </div>
 
-      {!janela && (
+      {autoavaliacaoConcluida && (
+        <div
+          role="status"
+          className="card flex items-center gap-3 mb-4"
+          style={{ background: 'var(--success-light, #dcfce7)', borderLeft: '5px solid var(--success, #16a34a)', color: '#14532d', padding: '1rem 1.25rem' }}
+        >
+          <CheckCircle2 size={30} color="var(--success, #16a34a)" style={{ flexShrink: 0 }} />
+          <div>
+            <div className="font-bold" style={{ color: 'var(--success, #15803d)' }}>Autoavaliação concluída</div>
+            <p className="text-sm" style={{ margin: '0.2rem 0 0' }}>
+              Sua autoavaliação foi registrada na rodada <strong>{janela?.titulo}</strong> — {gruposConcluidos} de {gruposAvaliaveis.length} avaliações de grupo concluídas.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {erroCarregamento ? (
+        <div className="card text-center py-8">
+          <AlertTriangle size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
+          <h3 className="font-bold">Não foi possível carregar sua autoavaliação</h3>
+          <p className="text-muted text-sm">Tente consultar novamente em instantes.</p>
+        </div>
+      ) : !janela && (
         <div className="card text-center py-8">
           <Star size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
           <h3 className="font-bold">Nenhuma rodada de autoavaliação cadastrada</h3>
