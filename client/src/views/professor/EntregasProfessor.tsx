@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { apiRequest, baixarArquivoAutenticado } from '../../services/api';
 import { MedalhaContexto } from '../../components/MedalhaContexto';
 import { PBLActivity, StudentSubmission, SubmissionFile, EntregaExcluida } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { VisualizadorArquivo } from '../../components/VisualizadorArquivo';
-import { Award, Download, Eye, FileText, Users, BookOpen, Trash2, RotateCcw } from 'lucide-react';
+import { Award, Download, Eye, FileText, BookOpen, Trash2, RotateCcw, Search, X } from 'lucide-react';
 
 interface ArquivoOrientativo extends SubmissionFile {
   aprovado_pelo_admin?: number;
@@ -32,6 +32,10 @@ function formatarTamanho(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function normalizarBusca(texto: string): string {
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+}
+
 function descontoEscrito(sub: StudentSubmission): number {
   const entrega = sub as EntregaComDesconto;
   const dataEnvio = new Date(sub.data_envio || '').getTime();
@@ -52,9 +56,15 @@ export const EntregasProfessorView: React.FC = () => {
   const [excluidas, setExcluidas] = useState<EntregaExcluida[]>([]);
   const [mostrarLixeira, setMostrarLixeira] = useState(false);
   const [selectedActivityId, setSelectedActivityId] = useState<number | ''>('');
+  const [selectedGroup, setSelectedGroup] = useState('');
+  const [search, setSearch] = useState('');
   const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
   const [orientativos, setOrientativos] = useState<ArquivoOrientativo[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [orientativosLoading, setOrientativosLoading] = useState(false);
+  const [orientativosError, setOrientativosError] = useState('');
+  const orientativosRequest = useRef(0);
 
   // Visualização de arquivo dentro da plataforma (orientativo ou entrega do grupo)
   const [arquivoEmFoco, setArquivoEmFoco] = useState<ArquivoEmFoco | null>(null);
@@ -67,40 +77,51 @@ export const EntregasProfessorView: React.FC = () => {
   const [observacoes, setObservacoes] = useState('');
   const [liberadoAluno, setLiberadoAluno] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const entregaSemNota = activities.find((activity) => activity.id === Number(selectedActivityId))?.natureza === 'OBRIGATORIA_SEM_NOTA';
-
   useEffect(() => {
     apiRequest<PBLActivity[]>('/pbl/activities')
       .then((res) => {
         const published = res.filter((a) => a.status === 'PUBLICADO');
         setActivities(published);
-        if (published.length > 0) {
-          setSelectedActivityId(published[0].id);
-        }
       })
       .catch((err) => showToast(err.message, 'error'));
   }, []);
 
-  const carregarAtividade = (actId: number) => {
+  const carregarSubmissoes = () => {
     setLoading(true);
-
-    // Material orientativo aprovado + entregas dos grupos da minha turma.
-    Promise.all([
-      apiRequest<any>(`/pbl/activities/${actId}`),
-      apiRequest<StudentSubmission[]>(`/submissions/activity/${actId}`)
-    ])
-      .then(([detalhes, entregas]) => {
-        setOrientativos(detalhes?.arquivos || []);
+    setLoadError('');
+    apiRequest<StudentSubmission[]>('/submissions')
+      .then((entregas) => {
+        if (!Array.isArray(entregas)) throw new Error('A listagem de entregas está indisponível. Tente novamente mais tarde.');
         setSubmissions(entregas);
       })
-      .catch((err) => showToast(err.message, 'error'))
+      .catch((err) => setLoadError(err.message || 'Não foi possível carregar as entregas.'))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    if (selectedActivityId) {
-      carregarAtividade(Number(selectedActivityId));
+    carregarSubmissoes();
+  }, []);
+
+  useEffect(() => {
+    const request = ++orientativosRequest.current;
+    setOrientativos([]);
+    setOrientativosError('');
+    if (!selectedActivityId) {
+      setOrientativosLoading(false);
+      return;
     }
+
+    setOrientativosLoading(true);
+    apiRequest<any>(`/pbl/activities/${selectedActivityId}`)
+      .then((detalhes) => {
+        if (request === orientativosRequest.current) setOrientativos(detalhes?.arquivos || []);
+      })
+      .catch((err) => {
+        if (request === orientativosRequest.current) setOrientativosError(err.message || 'Não foi possível carregar o material orientativo.');
+      })
+      .finally(() => {
+        if (request === orientativosRequest.current) setOrientativosLoading(false);
+      });
   }, [selectedActivityId]);
 
   const carregarExcluidas = () => {
@@ -126,7 +147,7 @@ export const EntregasProfessorView: React.FC = () => {
     try {
       const res = await apiRequest<{ message: string }>(`/submissions/${sub.id}`, { method: 'DELETE' });
       showToast(res.message, 'success');
-      if (selectedActivityId) carregarAtividade(Number(selectedActivityId));
+      carregarSubmissoes();
       carregarExcluidas();
     } catch (err: any) {
       showToast(err.message || 'Erro ao excluir a entrega.', 'error');
@@ -137,32 +158,42 @@ export const EntregasProfessorView: React.FC = () => {
     try {
       const res = await apiRequest<{ message: string }>(`/submissions/${entrega.id}/restaurar`, { method: 'POST' });
       showToast(res.message, 'success');
-      if (selectedActivityId) carregarAtividade(Number(selectedActivityId));
+      carregarSubmissoes();
       carregarExcluidas();
     } catch (err: any) {
       showToast(err.message || 'Erro ao restaurar a entrega.', 'error');
     }
   };
 
-  /** Entregas agrupadas por turma e, dentro dela, por grupo PBL. */
-  const porTurmaEGrupo = useMemo(() => {
-    const mapa = new Map<string, Map<string, StudentSubmission[]>>();
-
+  const grupos = useMemo(() => {
+    const opcoes = new Map<string, string>();
     for (const sub of submissions) {
-      const turma = sub.turma_nome || 'Turma não identificada';
-      const grupo = sub.grupo_nome || 'Entregas individuais';
-
-      if (!mapa.has(turma)) mapa.set(turma, new Map());
-      const grupos = mapa.get(turma)!;
-      if (!grupos.has(grupo)) grupos.set(grupo, []);
-      grupos.get(grupo)!.push(sub);
+      opcoes.set(String(sub.grupo_id ?? 'individual'), sub.grupo_id == null
+        ? 'Entregas individuais'
+        : `${sub.grupo_nome || 'Grupo sem nome'}${sub.turma_nome ? ` — ${sub.turma_nome}` : ''}`);
     }
-
-    return Array.from(mapa.entries()).map(([turma, grupos]) => ({
-      turma,
-      grupos: Array.from(grupos.entries()).map(([grupo, itens]) => ({ grupo, itens }))
-    }));
+    return Array.from(opcoes, ([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   }, [submissions]);
+  const linhas = useMemo(() => {
+    const termo = normalizarBusca(search.trim());
+    return submissions.flatMap((sub) => {
+      const atividade = activities.find((a) => a.id === sub.atividade_id);
+      if (selectedActivityId && sub.atividade_id !== Number(selectedActivityId)) return [];
+      if (selectedGroup && String(sub.grupo_id ?? 'individual') !== selectedGroup) return [];
+      const arquivos = sub.arquivos?.length ? sub.arquivos : [null];
+      return arquivos.flatMap((arquivo) => {
+        if (termo && ![
+          arquivo?.nome_original,
+          sub.grupo_nome,
+          sub.atividade_titulo,
+          sub.codigo_unico
+        ].some((campo) => normalizarBusca(campo || '').includes(termo))) return [];
+        return [{ sub, arquivo, atividade }];
+      });
+    });
+  }, [activities, search, selectedActivityId, selectedGroup, submissions]);
+  const activeFilters = Boolean(selectedActivityId || selectedGroup || search.trim());
+  const clearFilters = () => { setSelectedActivityId(''); setSelectedGroup(''); setSearch(''); };
 
   const openEvaluationModal = (sub: StudentSubmission) => {
     setSelectedSubmission(sub);
@@ -186,7 +217,7 @@ export const EntregasProfessorView: React.FC = () => {
 
       showToast('Avaliação e feedback registrados com sucesso!', 'success');
       setShowModal(false);
-      if (selectedActivityId) carregarAtividade(Number(selectedActivityId));
+      carregarSubmissoes();
     } catch (err: any) {
       showToast(err.message || 'Erro ao registrar avaliação.', 'error');
     } finally {
@@ -238,35 +269,43 @@ export const EntregasProfessorView: React.FC = () => {
     <div>
       <div className="mb-4">
         <h2 style={{ fontSize: '1.4rem' }}>
-          {entregaSemNota ? 'Acompanhamento da entrega de slides' : isAdmin ? 'Entregas & Relatórios PBL' : 'Acompanhamento de Entregas & Lançamento de Notas'}
+          {isAdmin ? 'Entregas & Relatórios PBL' : 'Acompanhamento de Entregas & Lançamento de Notas'}
         </h2>
         <p className="text-muted text-sm">
           {isAdmin
             ? 'Consulte, avalie e exclua as entregas recebidas. A exclusão é recuperável: o registro vai para a lixeira no fim da página.'
-            : 'Revise o material orientativo do PBL e consulte ou baixe os arquivos dos grupos das turmas em que você leciona.'}
+            : 'Consulte os arquivos enviados pelas turmas, filtre por atividade ou grupo e acompanhe as avaliações.'}
         </p>
       </div>
 
       <div className="card mb-4" style={{ padding: '1rem' }}>
-        <div className="form-group mb-0">
-          <label className="form-label font-bold">Selecione a Atividade Publicada:</label>
-          <select
-            className="form-control"
-            value={selectedActivityId}
-            onChange={(e: any) => setSelectedActivityId(e.target.value)}
-          >
-            {activities.length === 0 && <option value="">Nenhuma atividade publicada disponível</option>}
-            {activities.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.codigo_unico} - {a.titulo} ({a.curso_nome})
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="form-group mb-0" style={{ flex: '1 1 240px' }}>
+            <label className="form-label font-bold" htmlFor="entrega-atividade">Atividade</label>
+            <select id="entrega-atividade" className="form-control" value={selectedActivityId} onChange={(e) => setSelectedActivityId(e.target.value ? Number(e.target.value) : '')}>
+              <option value="">Todas as atividades</option>
+              {activities.map((a) => <option key={a.id} value={a.id}>{a.codigo_unico} — {a.titulo}</option>)}
+            </select>
+          </div>
+          <div className="form-group mb-0" style={{ flex: '1 1 190px' }}>
+            <label className="form-label font-bold" htmlFor="entrega-grupo">Grupo</label>
+            <select id="entrega-grupo" className="form-control" value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value)}>
+              <option value="">Todos os grupos</option>
+              {selectedGroup && !grupos.some((grupo) => grupo.id === selectedGroup) && <option value={selectedGroup}>Grupo selecionado (sem entregas)</option>}
+              {grupos.map((grupo) => <option key={grupo.id} value={grupo.id}>{grupo.nome}</option>)}
+            </select>
+          </div>
+          <div className="form-group mb-0" style={{ flex: '2 1 280px' }}>
+            <label className="form-label font-bold" htmlFor="entrega-busca">Buscar arquivo, grupo ou atividade</label>
+            <div className="flex items-center gap-2"><Search size={18} className="text-muted" /><input id="entrega-busca" type="search" className="form-control" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nome do arquivo, grupo, título ou código" /></div>
+          </div>
+          {activeFilters && <button type="button" onClick={clearFilters} className="btn btn-secondary" aria-label="Limpar filtros"><X size={15} /> Limpar filtros</button>}
         </div>
+        <div className="text-muted text-sm mt-2" aria-live="polite">{loading ? 'Carregando arquivos…' : `${linhas.length} ${linhas.length === 1 ? 'resultado' : 'resultados'}`}</div>
       </div>
 
       {/* 1. Material orientativo do PBL, revisado dentro da plataforma */}
-      <div className="card mb-4" style={{ padding: '1rem' }}>
+      {selectedActivityId && <div className="card mb-4" style={{ padding: '1rem' }}>
         <h3 className="font-bold flex items-center gap-2 mb-1">
           <BookOpen size={18} color="var(--primary)" /> Material orientativo do PBL
         </h3>
@@ -274,7 +313,7 @@ export const EntregasProfessorView: React.FC = () => {
           Abra e revise os documentos aprovados sem sair da plataforma. O Arquivo 1 é o primeiro da lista.
         </p>
 
-        {orientativos.length === 0 ? (
+        {orientativosLoading ? <span className="text-muted text-sm">Carregando material orientativo…</span> : orientativosError ? <span role="alert" className="text-sm">{orientativosError}</span> : orientativos.length === 0 ? (
           <span className="text-muted text-sm">Nenhum material anexado a esta atividade.</span>
         ) : (
           <div className="table-responsive">
@@ -328,125 +367,69 @@ export const EntregasProfessorView: React.FC = () => {
             </table>
           </div>
         )}
-      </div>
+      </div>}
 
-      {/* 2. Entregas dos grupos, por turma */}
+      {/* 2. Arquivos das entregas, com filtros combináveis */}
       {loading ? (
-        <div className="text-center py-8 text-muted">Carregando entregas dos alunos...</div>
-      ) : submissions.length === 0 ? (
+        <div className="text-center py-8 text-muted" role="status">Carregando arquivos enviados…</div>
+      ) : loadError ? (
+        <div className="card text-center py-8" role="alert"><h3 className="font-bold">Não foi possível carregar as entregas</h3><p className="text-muted text-sm">{loadError}</p><button className="btn btn-primary btn-sm" onClick={carregarSubmissoes}>Tentar novamente</button></div>
+      ) : linhas.length === 0 ? (
         <div className="card text-center py-8">
           <Award size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
-          <h3 className="font-bold">Nenhuma entrega recebida ainda</h3>
+          <h3 className="font-bold">{submissions.length === 0 ? 'Nenhuma entrega recebida ainda' : 'Nenhum arquivo corresponde aos filtros'}</h3>
           <p className="text-muted text-sm">
-            {isAdmin
-              ? 'Nenhum grupo finalizou a submissão desta atividade.'
-              : 'Os grupos das turmas em que você leciona ainda não finalizaram a submissão.'}
+            {submissions.length === 0 ? 'As entregas enviadas pelas turmas aparecerão nesta lista.' : 'Altere a busca ou os filtros para ver outros arquivos.'}
           </p>
+          {activeFilters && <button type="button" onClick={clearFilters} className="btn btn-secondary btn-sm">Limpar filtros</button>}
         </div>
       ) : (
-        porTurmaEGrupo.map(({ turma, grupos }) => (
-          <div key={turma} className="mb-4">
-            <h3 className="font-bold flex items-center gap-2 mb-2">
-              <Users size={18} color="var(--primary)" /> {turma}
-            </h3>
-
-            {grupos.map(({ grupo, itens }) => (
-              <div key={grupo} className="card mb-3" style={{ padding: '1rem' }}>
-                <div className="flex items-center justify-between mb-2">
-                  <strong>{grupo}</strong>
-                  <span className="text-muted text-sm">
-                    {itens.length} {itens.length === 1 ? 'entrega' : 'entregas'}
-                  </span>
-                </div>
-
-                <div className="table-responsive">
+        <div className="table-responsive">
                   <table className="table">
                     <thead>
                       <tr>
-                        <th>Aluno</th>
-                        <th>Status</th>
+                        <th>Arquivo</th>
+                        <th>Grupo</th>
+                        <th>Turma</th>
+                        <th>Atividade</th>
                         <th>Envio</th>
-                        <th>Arquivos entregues</th>
-                        <th>Comprovante</th>
-                        <th>{entregaSemNota ? 'Avaliação' : 'Nota'}</th>
                         <th style={{ textAlign: 'right' }}>Ações</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {itens.map((sub) => (
-                        <tr key={sub.id}>
+                      {linhas.map(({ sub, arquivo, atividade }) => {
+                        const semNota = sub.natureza === 'OBRIGATORIA_SEM_NOTA' || atividade?.natureza === 'OBRIGATORIA_SEM_NOTA';
+                        return <tr key={`${sub.id}-${arquivo?.id ?? 'sem-arquivo'}`}>
                           <td>
-                            <div className="font-bold">
-                              {sub.aluno_nome}
-                              <MedalhaContexto completo={sub.contexto_completo} tamanho={13} />
-                            </div>
-                            <div className="text-muted text-sm">{sub.aluno_email}</div>
+                            {arquivo ? <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+                              <button className="btn btn-secondary btn-sm" onClick={() => setArquivoEmFoco({ id: arquivo.id, nome: arquivo.nome_original, mimeType: arquivo.mime_type, descricao: `Entrega de ${sub.aluno_nome || 'aluno'}` })}><FileText size={13} /> {arquivo.nome_original}</button>
+                              <button className="btn btn-outline btn-sm" onClick={() => baixarArquivo(arquivo)} aria-label={`Baixar ${arquivo.nome_original}`}><Download size={13} /> {/\.pptx$/i.test(arquivo.nome_original) ? 'Baixar PPTX' : 'Baixar'}</button>
+                            </div> : <span className="text-muted text-sm">Nenhum arquivo anexado</span>}
+                            <div className="text-muted text-sm">{sub.aluno_nome} <MedalhaContexto completo={sub.contexto_completo} tamanho={13} /> · {sub.aluno_email}</div>
                           </td>
                           <td>
-                            <span
-                              className="status-badge"
-                              style={{
-                                background:
-                                  sub.status === 'ENVIADO' ? '#dcfce7' : sub.status === 'ATRASADO' ? '#fee2e2' : '#f1f5f9',
-                                color:
-                                  sub.status === 'ENVIADO' ? '#15803d' : sub.status === 'ATRASADO' ? '#b91c1c' : '#475569'
-                              }}
-                            >
-                              {sub.status}
-                            </span>
+                            {sub.grupo_nome || 'Entrega individual'}
                           </td>
-                          <td>{sub.data_envio ? new Date(sub.data_envio).toLocaleString('pt-BR') : '-'}</td>
-                          <td>{renderArquivos(sub.arquivos, `${grupo} — ${sub.aluno_nome}`)}</td>
-                          <td>
-                            <code
-                              style={{
-                                fontSize: '0.72rem',
-                                background: 'var(--bg-main)',
-                                padding: '0.2rem 0.4rem',
-                                borderRadius: '4px'
-                              }}
-                            >
-                              {sub.comprovante_hash || 'Sem comprovante'}
-                            </code>
-                          </td>
-                          <td>
-                            {entregaSemNota ? <span className="text-muted">Sem nota</span> : <strong>{(sub.nota_total || 0).toFixed(2)} pts</strong>}
-                            {!entregaSemNota && (sub as EntregaComDesconto).nota_escrita_original != null && (
-                              <small className="block text-muted">Escrita original: {(sub as EntregaComDesconto).nota_escrita_original!.toFixed(2)}</small>
-                            )}
-                          </td>
+                          <td>{sub.turma_nome || '-'}</td>
+                          <td><div className="font-bold">{sub.atividade_titulo}</div><div className="text-muted text-sm">{sub.codigo_unico}</div></td>
+                          <td>{sub.data_envio ? new Date(sub.data_envio).toLocaleString('pt-BR') : '-'}<div className="text-muted text-sm">{sub.status} · {sub.comprovante_hash ? `Comprovante ${sub.comprovante_hash}` : 'Sem comprovante'}</div></td>
                           <td style={{ textAlign: 'right' }}>
-                            <div className="flex gap-2 justify-end">
-                              {!entregaSemNota && (
-                                <button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm">
-                                  <Award size={14} /> Avaliar
-                                </button>
-                              )}
-                              {isAdmin && (
-                                <button
-                                  onClick={() => handleExcluir(sub)}
-                                  className="btn btn-secondary btn-sm"
-                                  title="Excluir esta entrega (recuperável)"
-                                >
-                                  <Trash2 size={14} /> Excluir
-                                </button>
-                              )}
+                            <div className="flex gap-2 justify-end" style={{ flexWrap: 'wrap' }}>
+                              {semNota ? <span className="text-muted text-sm">Sem nota</span> : <><strong>{(sub.nota_total || 0).toFixed(2)} pts</strong><button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm"><Award size={14} /> Avaliar</button></>}
+                              {isAdmin && <button onClick={() => handleExcluir(sub)} className="btn btn-secondary btn-sm" title="Excluir esta entrega (recuperável)"><Trash2 size={14} /> Excluir</button>}
                             </div>
+                            {!semNota && (sub as EntregaComDesconto).nota_escrita_original != null && <small className="block text-muted">Escrita original: {(sub as EntregaComDesconto).nota_escrita_original!.toFixed(2)}</small>}
                           </td>
-                        </tr>
-                      ))}
+                        </tr>;
+                      })}
                     </tbody>
                   </table>
-                </div>
-              </div>
-            ))}
-          </div>
-        ))
+        </div>
       )}
 
       {/* 3. Lixeira de entregas — só a coordenadoria vê e restaura */}
       {isAdmin && (
-        <div className="card mb-4" style={{ padding: '1rem' }}>
+        <div className="card mt-4 mb-4" style={{ padding: '1rem' }}>
           <div className="flex items-center justify-between">
             <h3 className="font-bold flex items-center gap-2">
               <Trash2 size={18} color="var(--primary)" /> Lixeira de entregas ({excluidas.length})

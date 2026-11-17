@@ -359,29 +359,35 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
 
 // --- TEACHER / ADMIN EVALUATION & FEEDBACK ---
 
-// List submissions for an activity (Teacher / Admin)
+// Lista geral ou por atividade, mantendo o mesmo escopo docente.
 export async function listSubmissionsForActivity(req: AuthenticatedRequest, res: Response) {
   try {
     const { atividadeId } = req.params;
     const user = req.user;
 
-    const act = await getAsync<{ id: number; professor_id: number; natureza: string }>(
-      'SELECT id, professor_id, natureza FROM atividades_pbl WHERE id = ? AND deletado_em IS NULL',
-      [atividadeId]
-    );
-
-    if (!act) return res.status(404).json({ message: 'Atividade não encontrada.' });
-
     const isTeacher = user?.perfilNome === 'PROFESSOR';
+    const params: any[] = [];
+    let filtroAtividade = "a.status = 'PUBLICADO' AND a.deletado_em IS NULL";
 
-    if (isTeacher && !(await professorAlcancaAtividade(user!.id, String(atividadeId)))) {
-      return res.status(403).json({
-        message: 'Acesso negado. Esta atividade não pertence a você nem às turmas que você leciona.'
-      });
+    if (atividadeId) {
+      const act = await getAsync<{ id: number; professor_id: number; natureza: string }>(
+        'SELECT id, professor_id, natureza FROM atividades_pbl WHERE id = ? AND deletado_em IS NULL',
+        [atividadeId]
+      );
+
+      if (!act) return res.status(404).json({ message: 'Atividade não encontrada.' });
+
+      if (isTeacher && !(await professorAlcancaAtividade(user!.id, String(atividadeId)))) {
+        return res.status(403).json({
+          message: 'Acesso negado. Esta atividade não pertence a você nem às turmas que você leciona.'
+        });
+      }
+
+      const pub = await getAsync<{ id: number }>('SELECT id FROM publicacoes WHERE atividade_id = ?', [atividadeId]);
+      if (!pub) return res.json([]);
+      filtroAtividade = 'e.publicacao_id = ? AND a.deletado_em IS NULL';
+      params.push(pub.id);
     }
-
-    const pub = await getAsync<{ id: number }>('SELECT id FROM publicacoes WHERE atividade_id = ?', [atividadeId]);
-    if (!pub) return res.json([]);
 
     // Um aluno pode ter mais de uma matrícula ativa, então o LEFT JOIN em matriculas/turmas
     // pode multiplicar linhas por entrega; DISTINCT ON (e.id) mantém uma linha por entrega,
@@ -393,6 +399,7 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
              t.id as turma_id, t.nome as turma_nome, t.codigo as turma_codigo,
              fb.nota_escrita, fb.nota_escrita_original, fb.nota_oral, fb.nota_total, fb.observacoes, fb.liberado_aluno,
              pl.nome as periodo_nome, a.natureza,
+             a.id as atividade_id, a.titulo as atividade_titulo, a.codigo_unico,
              EXISTS (SELECT 1 FROM versoes_atividades va JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
                      JOIN arquivos ar ON ar.id = aa.arquivo_id
                      WHERE va.atividade_id = p.atividade_id AND va.numero_versao = a.versao_atual
@@ -409,12 +416,26 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
       LEFT JOIN matriculas m ON m.usuario_id = e.aluno_id AND m.deletado_em IS NULL
       LEFT JOIN turmas t ON m.turma_id = t.id
       LEFT JOIN feedbacks fb ON e.id = fb.entrega_id
-      WHERE e.publicacao_id = ? AND e.deletado_em IS NULL
+      WHERE ${filtroAtividade} AND e.deletado_em IS NULL
     `;
-    const params: any[] = [pub.id];
 
     // O docente só recebe as entregas de alunos matriculados nas turmas que leciona.
     if (isTeacher) {
+      if (!atividadeId) {
+        // Mesmas três formas de alcançar uma atividade de professorAlcancaAtividade.
+        sql += ` AND (
+          a.professor_id = ? OR EXISTS (
+            SELECT 1 FROM vinculos_professores vp
+            JOIN matriculas m ON m.turma_id = vp.turma_id AND m.deletado_em IS NULL
+            JOIN alunos_segmentados als ON als.aluno_id = m.usuario_id
+            WHERE vp.usuario_id = ? AND vp.ativo = 1 AND als.atividade_id = a.id
+          ) OR EXISTS (
+            SELECT 1 FROM vinculos_professores vp
+            WHERE vp.usuario_id = ? AND vp.ativo = 1 AND a.disciplina_id = vp.disciplina_id
+          )
+        )`;
+        params.push(user!.id, user!.id, user!.id);
+      }
       sql += ` AND EXISTS (
         SELECT 1 FROM matriculas m2
         JOIN vinculos_professores vp ON vp.turma_id = m2.turma_id
@@ -428,16 +449,24 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
 
     const submissions = await queryAsync<any>(sql, params);
 
-    // Anexa os PDFs/arquivos de cada entrega — é o material que o docente precisa avaliar.
+    // Busca os anexos em lote também na visão geral, sem uma consulta por entrega.
+    const arquivos = submissions.length ? await queryAsync<any>(
+      `SELECT ae.entrega_id, ar.id, ar.nome_original, ar.tamanho_bytes, ar.mime_type,
+              ar.categoria, ar.hash_md5, ar.criado_em
+       FROM arquivos_entregas ae
+       JOIN arquivos ar ON ae.arquivo_id = ar.id
+       WHERE ae.entrega_id = ANY(?::int[]) AND ar.deletado_em IS NULL
+       ORDER BY ar.criado_em ASC, ar.id ASC`,
+      [submissions.map((sub) => sub.id)]
+    ) : [];
+    const arquivosPorEntrega = new Map<number, any[]>();
+    for (const { entrega_id, ...arquivo } of arquivos) {
+      const anexos = arquivosPorEntrega.get(entrega_id) || [];
+      anexos.push(arquivo);
+      arquivosPorEntrega.set(entrega_id, anexos);
+    }
     for (const sub of submissions) {
-      sub.arquivos = await queryAsync(
-        `SELECT ar.id, ar.nome_original, ar.tamanho_bytes, ar.mime_type, ar.categoria, ar.hash_md5, ar.criado_em
-         FROM arquivos_entregas ae
-         JOIN arquivos ar ON ae.arquivo_id = ar.id
-         WHERE ae.entrega_id = ? AND ar.deletado_em IS NULL
-         ORDER BY ar.criado_em ASC`,
-        [sub.id]
-      );
+      sub.arquivos = arquivosPorEntrega.get(sub.id) || [];
     }
 
     return res.json(submissions);
