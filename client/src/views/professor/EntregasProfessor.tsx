@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { apiRequest } from '../../services/api';
+import { apiRequest, baixarArquivoAutenticado } from '../../services/api';
 import { MedalhaContexto } from '../../components/MedalhaContexto';
 import { PBLActivity, StudentSubmission, SubmissionFile, EntregaExcluida } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { VisualizadorArquivo } from '../../components/VisualizadorArquivo';
-import { Award, Eye, FileText, Users, BookOpen, Trash2, RotateCcw } from 'lucide-react';
+import { Award, Download, Eye, FileText, Users, BookOpen, Trash2, RotateCcw } from 'lucide-react';
 
 interface ArquivoOrientativo extends SubmissionFile {
   aprovado_pelo_admin?: number;
@@ -56,7 +56,7 @@ export const EntregasProfessorView: React.FC = () => {
   const [orientativos, setOrientativos] = useState<ArquivoOrientativo[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Visualização de arquivo dentro da plataforma (orientativo ou PDF do grupo)
+  // Visualização de arquivo dentro da plataforma (orientativo ou entrega do grupo)
   const [arquivoEmFoco, setArquivoEmFoco] = useState<ArquivoEmFoco | null>(null);
 
   // Avaliação
@@ -194,6 +194,14 @@ export const EntregasProfessorView: React.FC = () => {
     }
   };
 
+  const baixarArquivo = async (arquivo: SubmissionFile) => {
+    try {
+      await baixarArquivoAutenticado(arquivo.id, arquivo.nome_original);
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível baixar o arquivo.', 'error');
+    }
+  };
+
   const renderArquivos = (arquivos: SubmissionFile[] | undefined, contexto: string) => {
     if (!arquivos || arquivos.length === 0) {
       return <span className="text-muted text-sm">Nenhum arquivo anexado.</span>;
@@ -202,16 +210,25 @@ export const EntregasProfessorView: React.FC = () => {
     return (
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
         {arquivos.map((f) => (
-          <button
-            key={f.id}
-            className="btn btn-secondary btn-sm"
-            onClick={() =>
-              setArquivoEmFoco({ id: f.id, nome: f.nome_original, mimeType: f.mime_type, descricao: contexto })
-            }
-            title={`${f.nome_original} — ${formatarTamanho(f.tamanho_bytes)}`}
-          >
-            <FileText size={13} /> {f.nome_original}
-          </button>
+          <div key={f.id} className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() =>
+                setArquivoEmFoco({ id: f.id, nome: f.nome_original, mimeType: f.mime_type, descricao: contexto })
+              }
+              title={`${f.nome_original} — ${formatarTamanho(f.tamanho_bytes)}`}
+            >
+              <FileText size={13} /> {f.nome_original}
+            </button>
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => baixarArquivo(f)}
+              aria-label={`Baixar ${f.nome_original}`}
+              title={`Baixar ${f.nome_original}`}
+            >
+              <Download size={13} /> {/\.pptx$/i.test(f.nome_original) ? 'Baixar PPTX' : 'Baixar'}
+            </button>
+          </div>
         ))}
       </div>
     );
@@ -226,7 +243,7 @@ export const EntregasProfessorView: React.FC = () => {
         <p className="text-muted text-sm">
           {isAdmin
             ? 'Consulte, avalie e exclua as entregas recebidas. A exclusão é recuperável: o registro vai para a lixeira no fim da página.'
-            : 'Revise o material orientativo do PBL e receba os PDFs dos grupos das turmas em que você leciona.'}
+            : 'Revise o material orientativo do PBL e consulte ou baixe os arquivos dos grupos das turmas em que você leciona.'}
         </p>
       </div>
 
@@ -349,7 +366,7 @@ export const EntregasProfessorView: React.FC = () => {
                         <th>Aluno</th>
                         <th>Status</th>
                         <th>Envio</th>
-                        <th>Arquivos entregues (PDF)</th>
+                        <th>Arquivos entregues</th>
                         <th>Comprovante</th>
                         <th>{entregaSemNota ? 'Avaliação' : 'Nota'}</th>
                         <th style={{ textAlign: 'right' }}>Ações</th>
