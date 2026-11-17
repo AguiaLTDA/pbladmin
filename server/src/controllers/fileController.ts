@@ -920,15 +920,20 @@ export async function enviarArquivoParaGrupo(req: AuthenticatedRequest, res: Res
 export async function listarGruposComMaterial(_req: AuthenticatedRequest, res: Response) {
   try {
     const linhas = await queryAsync<any>(
-      `SELECT sr.entidade_id AS grupo_id,
+      `SELECT DISTINCT sr.entidade_id AS grupo_id,
               a.id AS atividade_id, a.titulo, a.criado_em,
-              ar.id AS arquivo_id, ar.nome_original, ar.tipo_documento
+              ar.id AS arquivo_id, ar.nome_original, ar.tipo_documento, ar.mime_type
          FROM atividades_pbl a
          JOIN segmentacoes seg ON seg.atividade_id = a.id
          JOIN segmentacao_regras sr ON sr.segmentacao_id = seg.id
          LEFT JOIN versoes_atividades va ON va.atividade_id = a.id
          LEFT JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
-         LEFT JOIN arquivos ar ON ar.id = aa.arquivo_id AND ar.deletado_em IS NULL
+         LEFT JOIN publicacoes pub ON pub.atividade_id = a.id
+           AND a.natureza = 'OBRIGATORIA_SEM_NOTA' AND pub.status_publicacao = 'PUBLICADO'
+         LEFT JOIN entregas e ON e.publicacao_id = pub.id AND e.grupo_id = sr.entidade_id
+           AND e.status IN ('ENVIADO', 'ATRASADO') AND e.deletado_em IS NULL
+         LEFT JOIN arquivos_entregas ae ON ae.entrega_id = e.id
+         LEFT JOIN arquivos ar ON ar.id = COALESCE(ae.arquivo_id, aa.arquivo_id) AND ar.deletado_em IS NULL
         WHERE a.deletado_em IS NULL
           AND sr.entidade_tipo = 'grupo' AND sr.acao = 'INCLUIR'
         ORDER BY sr.entidade_id, a.criado_em DESC`
@@ -952,6 +957,7 @@ export async function listarGruposComMaterial(_req: AuthenticatedRequest, res: R
         titulo: l.titulo,
         arquivoId: l.arquivo_id,
         arquivoNome: l.nome_original,
+        arquivoMimeType: l.mime_type,
         tipoDocumento: l.tipo_documento || null,
         criadoEm: l.criado_em
       });

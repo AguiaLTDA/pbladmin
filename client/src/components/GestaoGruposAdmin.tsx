@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { apiRequest } from '../services/api';
+import { apiRequest, baixarArquivoAutenticado } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { GrupoOption, GrupoMembro, TurmaOption, GrupoComMaterial } from '../types';
 import { MAX_INTEGRANTES_GRUPO, rotuloTipoDocumento } from '../constants/academico';
@@ -20,6 +20,7 @@ import {
   FileCheck2,
   FileText,
   Eye,
+  Download,
   FileWarning
 } from 'lucide-react';
 
@@ -64,7 +65,15 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
   // NOME do arquivo do grupo e nada mais: para saber se o caso certo foi para o
   // grupo certo era preciso abrir a pasta do Drive, onde os arquivos estao com
   // nome gerado e nao dizem a que grupo pertencem.
-  const [arquivoEmFoco, setArquivoEmFoco] = useState<{ id: number; nome: string; grupo: string } | null>(null);
+  const [arquivoEmFoco, setArquivoEmFoco] = useState<{ id: number; nome: string; mimeType?: string | null; grupo: string } | null>(null);
+
+  const baixar = async (id: number, nome: string) => {
+    try {
+      await baixarArquivoAutenticado(id, nome);
+    } catch (err: any) {
+      showToast(err.message || 'Não foi possível baixar o arquivo.', 'error');
+    }
+  };
 
   const [turmaFiltro, setTurmaFiltro] = useState<number | ''>('');
   // Grupo vazio é um problema a resolver, não um estado normal: ou ninguém entrou
@@ -519,22 +528,35 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
                               <ul style={{ listStyle: 'none', padding: 0, margin: '0.4rem 0 0' }}>
                                 {materialPorGrupo[g.id].materiais.map((m) => (
                                   <li
-                                    key={m.atividadeId}
+                                    key={`${m.atividadeId}-${m.arquivoId}`}
                                     className="flex items-center gap-2 text-sm"
                                     style={{ padding: '0.2rem 0' }}
                                   >
                                     <FileText size={14} className="text-muted" />
                                     <span>{m.arquivoNome || m.titulo}</span>
-                                    <span className="text-muted">
-                                      — {rotuloTipoDocumento(m.tipoDocumento)}
-                                    </span>
-                                    {m.arquivoId && (
+                                    {m.tipoDocumento && (
+                                      <span className="text-muted">
+                                        — {rotuloTipoDocumento(m.tipoDocumento)}
+                                      </span>
+                                    )}
+                                    {typeof m.arquivoId === 'number' && (
+                                      <button
+                                        className="btn btn-sm btn-outline"
+                                        onClick={() => baixar(m.arquivoId as number, m.arquivoNome || m.titulo)}
+                                        aria-label={`Baixar ${m.arquivoNome || m.titulo}`}
+                                        title="Baixar o arquivo"
+                                      >
+                                        <Download size={13} /> {/\.pptx$/i.test(m.arquivoNome || '') ? 'Baixar PPTX' : 'Baixar'}
+                                      </button>
+                                    )}
+                                    {typeof m.arquivoId === 'number' && (
                                       <button
                                         className="btn btn-sm btn-outline"
                                         onClick={() =>
                                           setArquivoEmFoco({
                                             id: m.arquivoId as number,
                                             nome: m.arquivoNome || m.titulo,
+                                            mimeType: m.arquivoMimeType,
                                             grupo: g.nome
                                           })
                                         }
@@ -543,12 +565,15 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
                                         <Eye size={13} /> Abrir
                                       </button>
                                     )}
+                                    {typeof m.arquivoId !== 'number' && (
+                                      <span className="text-muted">Nenhum arquivo enviado</span>
+                                    )}
                                   </li>
                                 ))}
                               </ul>
                             ) : (
                               <div className="text-muted text-sm" style={{ margin: '0.4rem 0' }}>
-                                Nenhum arquivo anexado a este grupo ainda.
+                                Nenhum arquivo enviado
                               </div>
                             )}
                             <button
@@ -667,7 +692,7 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
         <VisualizadorArquivo
           arquivoId={arquivoEmFoco.id}
           nomeArquivo={arquivoEmFoco.nome}
-          mimeType="application/pdf"
+          mimeType={arquivoEmFoco.mimeType || undefined}
           descricao={`Arquivo do grupo ${arquivoEmFoco.grupo}`}
           onClose={() => setArquivoEmFoco(null)}
         />

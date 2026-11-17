@@ -126,6 +126,7 @@ export interface GrupoComMaterial {
     titulo: string;
     arquivoId: number | null;
     arquivoNome: string | null;
+    arquivoMimeType?: string | null;
     tipoDocumento: string | null;
     criadoEm: string;
   }[];
@@ -158,6 +159,10 @@ export interface StudentSubmission {
   contexto_completo?: boolean;
   id: number;
   publicacao_id: number;
+  atividade_id: number;
+  atividade_titulo: string;
+  codigo_unico: string;
+  natureza?: PBLActivity['natureza'];
   aluno_id: number;
   aluno_nome?: string;
   aluno_email?: string;

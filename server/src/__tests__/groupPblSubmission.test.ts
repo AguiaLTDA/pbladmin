@@ -11,7 +11,7 @@ vi.mock('../services/segmentation', () => ({ calculateAudiencePreview, saveSegme
 vi.mock('../services/googleDrive', () => ({ uploadToDrive, downloadFromDrive: vi.fn(), moverParaExcluidosNoDrive: vi.fn() }));
 
 import { repararPblsInformativosDeGrupo } from '../services/groupPblSubmission';
-import { definirTipoDocumento, enviarArquivoParaGrupo } from '../controllers/fileController';
+import { definirTipoDocumento, enviarArquivoParaGrupo, listarGruposComMaterial } from '../controllers/fileController';
 
 function resposta() {
   const res: any = { statusCode: 200, body: undefined, status(code: number) { this.statusCode = code; return this; }, json(body: any) { this.body = body; return this; } };
@@ -32,6 +32,27 @@ beforeEach(() => {
 });
 
 describe('PBL 1 enviado a grupo', () => {
+  it('inclui os anexos de slides por grupo com MIME para visualizar e baixar o original', async () => {
+    queryAsync.mockResolvedValue([
+      { grupo_id: 9, atividade_id: 20, titulo: 'Slides', arquivo_id: 77, nome_original: 'slides.pptx', mime_type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', criado_em: '2026-11-17' },
+      { grupo_id: 9, atividade_id: 10, titulo: 'Caso', arquivo_id: 8, nome_original: 'caso.pdf', mime_type: 'application/pdf', tipo_documento: 'PBL_1', criado_em: '2026-11-16' },
+      { grupo_id: 12, atividade_id: 21, titulo: 'Slides pendentes', arquivo_id: null, nome_original: null, criado_em: '2026-11-17' }
+    ]);
+    const res = resposta();
+
+    await listarGruposComMaterial(request(), res);
+
+    expect(res.body[0]).toMatchObject({ grupoId: 9, temPbl1: true, materiais: [
+      { atividadeId: 20, arquivoId: 77, arquivoNome: 'slides.pptx', arquivoMimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+      { atividadeId: 10, arquivoId: 8, arquivoMimeType: 'application/pdf' }
+    ] });
+    expect(res.body[1].materiais[0].arquivoId).toBeNull();
+    const sql = queryAsync.mock.calls[0][0];
+    expect(sql).toContain('e.grupo_id = sr.entidade_id');
+    expect(sql).toContain("e.status IN ('ENVIADO', 'ATRASADO')");
+    expect(sql).toContain('e.deletado_em IS NULL');
+  });
+
   it('cria atividade avaliativa com prazo do cronograma e texto de entrega', async () => {
     getAsync.mockImplementation(async (sql: string) => {
       if (sql.includes('cronograma_pbl_etapas')) return { fim: '2026-11-08' };
