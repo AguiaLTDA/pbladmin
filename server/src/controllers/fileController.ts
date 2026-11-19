@@ -930,7 +930,17 @@ export async function listarGruposComMaterial(_req: AuthenticatedRequest, res: R
          LEFT JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
          LEFT JOIN publicacoes pub ON pub.atividade_id = a.id
            AND a.natureza = 'OBRIGATORIA_SEM_NOTA' AND pub.status_publicacao = 'PUBLICADO'
-         LEFT JOIN entregas e ON e.publicacao_id = pub.id AND e.grupo_id = sr.entidade_id
+         LEFT JOIN entregas e ON e.publicacao_id = pub.id
+           AND (
+             e.grupo_id = sr.entidade_id
+             OR (e.grupo_id IS NULL AND EXISTS (
+               SELECT 1 FROM matriculas m
+               JOIN grupos g ON g.id = m.grupo_id AND g.turma_id = m.turma_id
+               WHERE m.usuario_id = e.aluno_id AND g.id = sr.entidade_id
+                 AND m.ativo = 1 AND m.deletado_em IS NULL
+                 AND g.ativo = 1 AND g.deletado_em IS NULL
+             ))
+           )
            AND e.status IN ('ENVIADO', 'ATRASADO') AND e.deletado_em IS NULL
          LEFT JOIN arquivos_entregas ae ON ae.entrega_id = e.id
          LEFT JOIN arquivos ar ON ar.id = COALESCE(ae.arquivo_id, aa.arquivo_id) AND ar.deletado_em IS NULL

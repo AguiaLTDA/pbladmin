@@ -49,6 +49,9 @@ describe('PBL 1 enviado a grupo', () => {
     expect(res.body[1].materiais[0].arquivoId).toBeNull();
     const sql = queryAsync.mock.calls[0][0];
     expect(sql).toContain('e.grupo_id = sr.entidade_id');
+    expect(sql).toContain('e.grupo_id IS NULL AND EXISTS');
+    expect(sql).toContain('m.usuario_id = e.aluno_id AND g.id = sr.entidade_id');
+    expect(sql).toContain('m.ativo = 1 AND m.deletado_em IS NULL');
     expect(sql).toContain("e.status IN ('ENVIADO', 'ATRASADO')");
     expect(sql).toContain('e.deletado_em IS NULL');
   });
