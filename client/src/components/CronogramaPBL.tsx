@@ -3,16 +3,28 @@ import { EtapaCronogramaPBL } from '../constants/academico';
 import { useCronograma } from '../services/cronograma';
 import { CalendarDays, CheckCircle2, Clock, Award } from 'lucide-react';
 
-type SituacaoEtapa = 'ENCERRADA' | 'PROXIMA' | 'PREVISTA';
+type SituacaoEtapa = 'ENCERRADA' | 'HOJE' | 'PROXIMA' | 'PREVISTA';
 
-/** Etapa encerrada = último dia já passou. A primeira que sobra é a "próxima". */
+/** Data local no formato YYYY-MM-DD, o mesmo usado em `etapa.fim`. */
+function dataLocalISO(data: Date): string {
+  const mes = String(data.getMonth() + 1).padStart(2, '0');
+  const dia = String(data.getDate()).padStart(2, '0');
+  return `${data.getFullYear()}-${mes}-${dia}`;
+}
+
+/**
+ * Etapa encerrada = último dia já passou. Etapa cujo último dia é hoje fica em
+ * destaque vermelho. Das que sobram, a primeira é a "próxima".
+ */
 function calcularSituacoes(etapas: EtapaCronogramaPBL[]): SituacaoEtapa[] {
   const agora = new Date();
+  const hoje = dataLocalISO(agora);
   let proximaMarcada = false;
 
   return etapas.map((etapa) => {
     const fim = new Date(`${etapa.fim}T23:59:59`);
     if (fim < agora) return 'ENCERRADA';
+    if (etapa.fim === hoje) return 'HOJE';
     if (!proximaMarcada) {
       proximaMarcada = true;
       return 'PROXIMA';
@@ -23,6 +35,7 @@ function calcularSituacoes(etapas: EtapaCronogramaPBL[]): SituacaoEtapa[] {
 
 const ESTILO_SITUACAO: Record<SituacaoEtapa, { rotulo: string; fundo: string; cor: string; borda: string }> = {
   ENCERRADA: { rotulo: 'ENCERRADA', fundo: '#f1f5f9', cor: '#475569', borda: '#cbd5e1' },
+  HOJE: { rotulo: 'PRAZO HOJE', fundo: '#fee2e2', cor: '#b91c1c', borda: '#ef4444' },
   PROXIMA: { rotulo: 'PRÓXIMO PRAZO', fundo: '#fef3c7', cor: '#b45309', borda: '#f59e0b' },
   PREVISTA: { rotulo: 'PREVISTA', fundo: '#e0f2fe', cor: '#0369a1', borda: '#7dd3fc' }
 };
@@ -101,7 +114,10 @@ export const CronogramaPBL: React.FC = () => {
                   empurrar os selos para fora do card no celular. */}
               <div style={{ flex: '1 1 150px', minWidth: 0 }}>
                 <div className="font-bold text-sm">{etapa.titulo}</div>
-                <div className="text-muted text-sm flex items-center" style={{ gap: '0.25rem' }}>
+                <div
+                  className={`text-sm flex items-center${situacao === 'HOJE' ? ' font-bold' : ' text-muted'}`}
+                  style={{ gap: '0.25rem', color: situacao === 'HOJE' ? estilo.cor : undefined }}
+                >
                   {situacao === 'ENCERRADA' ? <CheckCircle2 size={13} /> : <Clock size={13} />}
                   {etapa.prazoTexto}
                 </div>
