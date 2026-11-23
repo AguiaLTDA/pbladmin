@@ -359,6 +359,91 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
 
 // --- TEACHER / ADMIN EVALUATION & FEEDBACK ---
 
+// Grupos com atividades publicadas de slides ou PBL 1 ainda sem entrega final.
+export async function listPendingGroups(_req: AuthenticatedRequest, res: Response) {
+  try {
+    const groups = await queryAsync<{ grupo_id: number; sem_slides: boolean; sem_escrito: boolean }>(
+      `WITH atividades_publicadas AS (
+         SELECT a.id, pub.id AS publicacao_id, a.curso_id, a.periodo_letivo_id,
+                va.forma_realizacao, a.natureza = ? AS slides,
+                a.natureza = 'AVALIATIVA' AND EXISTS (
+                  SELECT 1 FROM arquivos_atividades aa
+                  JOIN arquivos ar ON ar.id = aa.arquivo_id
+                  WHERE aa.versao_atividade_id = va.id
+                    AND ar.tipo_documento = 'PBL_1' AND ar.deletado_em IS NULL
+                ) AS escrito
+         FROM atividades_pbl a
+         JOIN publicacoes pub ON pub.atividade_id = a.id AND pub.status_publicacao = 'PUBLICADO'
+         JOIN versoes_atividades va ON va.atividade_id = a.id AND va.numero_versao = a.versao_atual
+         WHERE a.status = 'PUBLICADO' AND a.deletado_em IS NULL
+       ), grupo_atividades AS (
+         SELECT DISTINCT g.id AS grupo_id, t.id AS turma_id, ap.id AS atividade_id,
+                ap.publicacao_id, ap.slides, ap.escrito
+         FROM atividades_publicadas ap
+         JOIN alunos_segmentados als ON als.atividade_id = ap.id
+         JOIN matriculas m ON m.usuario_id = als.aluno_id
+           AND m.ativo = 1 AND m.deletado_em IS NULL
+         JOIN turmas t ON t.id = m.turma_id
+           AND t.ativo = 1 AND t.deletado_em IS NULL
+           AND t.curso_id = ap.curso_id AND t.periodo_letivo_id = ap.periodo_letivo_id
+         JOIN grupos g ON g.id = m.grupo_id AND g.turma_id = t.id
+           AND g.ativo = 1 AND g.deletado_em IS NULL
+         WHERE (ap.slides OR ap.escrito) AND NOT EXISTS (
+           SELECT 1 FROM segmentacoes seg
+           JOIN segmentacao_regras sr ON sr.segmentacao_id = seg.id
+           WHERE seg.atividade_id = ap.id AND sr.entidade_tipo = 'grupo'
+             AND sr.entidade_id = g.id AND sr.acao = 'EXCLUIR'
+         )
+           AND (
+             EXISTS (
+               SELECT 1 FROM segmentacoes seg
+               JOIN segmentacao_regras sr ON sr.segmentacao_id = seg.id
+               WHERE seg.atividade_id = ap.id AND sr.entidade_tipo = 'grupo'
+                 AND sr.entidade_id = g.id AND sr.acao = 'INCLUIR'
+             ) OR (
+               ap.forma_realizacao = 'GRUPO' AND NOT EXISTS (
+                 SELECT 1 FROM segmentacoes seg
+                 JOIN segmentacao_regras sr ON sr.segmentacao_id = seg.id
+                 WHERE seg.atividade_id = ap.id AND sr.entidade_tipo = 'grupo'
+               )
+             )
+           )
+       ), grupo_status AS (
+         SELECT ga.*,
+                EXISTS (
+                  SELECT 1 FROM entregas e
+                  WHERE e.publicacao_id = ga.publicacao_id
+                    AND e.deletado_em IS NULL AND e.status IN ('ENVIADO', 'ATRASADO')
+                    AND (e.grupo_id = ga.grupo_id OR (e.grupo_id IS NULL AND EXISTS (
+                      SELECT 1 FROM alunos_segmentados als_autor
+                      JOIN matriculas ma ON ma.usuario_id = als_autor.aluno_id
+                        AND ma.ativo = 1 AND ma.deletado_em IS NULL
+                        AND ma.grupo_id = ga.grupo_id AND ma.turma_id = ga.turma_id
+                      WHERE als_autor.atividade_id = ga.atividade_id AND als_autor.aluno_id = e.aluno_id
+                    )))
+                ) AS entregue
+         FROM grupo_atividades ga
+       )
+       SELECT grupo_id,
+              BOOL_OR(slides AND NOT entregue) AS sem_slides,
+              BOOL_OR(escrito AND NOT entregue) AS sem_escrito
+         FROM grupo_status
+         GROUP BY grupo_id
+         ORDER BY grupo_id`,
+      [SLIDES_PRESENTATION_NATURE]
+    );
+
+    return res.json(groups.map((group) => ({
+      grupoId: group.grupo_id,
+      semSlides: group.sem_slides,
+      semEscrito: group.sem_escrito
+    })));
+  } catch (err) {
+    console.error('Error fetching pending groups:', err);
+    return res.status(500).json({ message: 'Erro ao listar pendências dos grupos.' });
+  }
+}
+
 // Lista geral ou por atividade, mantendo o mesmo escopo docente.
 export async function listSubmissionsForActivity(req: AuthenticatedRequest, res: Response) {
   try {

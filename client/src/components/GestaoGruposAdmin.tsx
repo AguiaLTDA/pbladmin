@@ -30,6 +30,12 @@ interface GestaoGruposAdminProps {
   onChanged: () => void;
 }
 
+interface PendenciasGrupo {
+  grupoId: number;
+  semSlides: boolean;
+  semEscrito: boolean;
+}
+
 /**
  * Gestão de grupos PBL pela coordenadoria: cria, exclui e remaneja integrantes.
  * O aluno continua podendo montar o próprio grupo no portal dele — aqui é a mesma
@@ -82,6 +88,9 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
   // Filtro próprio para o PBL 1: a pergunta "quem ainda não recebeu" é o motivo
   // de a coordenação abrir esta aba durante a distribuição.
   const [pblFiltro, setPblFiltro] = useState<'' | 'com_pbl1' | 'sem_pbl1'>('');
+  const [filtrarSemSlides, setFiltrarSemSlides] = useState(false);
+  const [filtrarSemEscrito, setFiltrarSemEscrito] = useState(false);
+  const [pendenciasPorGrupo, setPendenciasPorGrupo] = useState<Map<number, PendenciasGrupo> | 'carregando' | 'erro'>('carregando');
 
   // Só as turmas que de fato têm grupo — evita um seletor gigante com opções vazias.
   const turmasComGrupos = useMemo(() => {
@@ -114,6 +123,19 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
     carregarMateriais();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    let atual = true;
+    setPendenciasPorGrupo('carregando');
+    apiRequest<PendenciasGrupo[]>('/submissions/pendencias-grupos')
+      .then((lista) => {
+        if (atual) setPendenciasPorGrupo(new Map(lista.map((grupo) => [grupo.grupoId, grupo])));
+      })
+      .catch(() => {
+        if (atual) setPendenciasPorGrupo('erro');
+      });
+    return () => { atual = false; };
+  }, [grupos]);
 
   const gruposDaTurma = useMemo(
     () => (turmaFiltro === '' ? grupos : grupos.filter((g) => g.turma_id === Number(turmaFiltro))),
@@ -161,12 +183,19 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
       if (ocupacaoFiltro === 'com_vagas' && !(total > 0 && total < MAX_INTEGRANTES_GRUPO)) return false;
       if (pblFiltro === 'com_pbl1' && !temPbl1(g)) return false;
       if (pblFiltro === 'sem_pbl1' && temPbl1(g)) return false;
+      if (typeof pendenciasPorGrupo !== 'string') {
+        const pendencias = pendenciasPorGrupo.get(g.id);
+        if (filtrarSemSlides && !pendencias?.semSlides) return false;
+        if (filtrarSemEscrito && !pendencias?.semEscrito) return false;
+      }
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gruposDaTurma, ocupacaoFiltro, pblFiltro, materialPorGrupo]);
+  }, [gruposDaTurma, ocupacaoFiltro, pblFiltro, materialPorGrupo, pendenciasPorGrupo, filtrarSemSlides, filtrarSemEscrito]);
 
-  const algumFiltroAtivo = turmaFiltro !== '' || ocupacaoFiltro !== '' || pblFiltro !== '';
+  const filtraPendencias = filtrarSemSlides || filtrarSemEscrito;
+  const pendenciasDisponiveis = typeof pendenciasPorGrupo !== 'string';
+  const algumFiltroAtivo = turmaFiltro !== '' || ocupacaoFiltro !== '' || pblFiltro !== '' || filtraPendencias;
 
   const carregarMembros = (grupoId: number) => {
     setCarregandoMembrosId(grupoId);
@@ -312,6 +341,8 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
                 setTurmaFiltro('');
                 setOcupacaoFiltro('');
                 setPblFiltro('sem_pbl1');
+                setFiltrarSemSlides(false);
+                setFiltrarSemEscrito(false);
               }}
               className="btn btn-secondary btn-sm"
             >
@@ -373,6 +404,18 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
             </select>
           </div>
 
+          <fieldset className="flex flex-wrap gap-3" style={{ border: 0, padding: 0 }} disabled={!pendenciasDisponiveis}>
+            <legend className="text-sm font-bold mb-1">Pendências de entrega</legend>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={filtrarSemSlides} onChange={(e) => setFiltrarSemSlides(e.target.checked)} />
+              Sem slides
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={filtrarSemEscrito} onChange={(e) => setFiltrarSemEscrito(e.target.checked)} />
+              Sem escrito
+            </label>
+          </fieldset>
+
           <span className="text-muted text-sm">
             Exibindo {gruposFiltrados.length} de {grupos.length} grupo(s).
           </span>
@@ -383,6 +426,8 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
                 setTurmaFiltro('');
                 setOcupacaoFiltro('');
                 setPblFiltro('');
+                setFiltrarSemSlides(false);
+                setFiltrarSemEscrito(false);
               }}
               className="btn btn-secondary btn-sm"
             >
@@ -390,6 +435,9 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
             </button>
           )}
         </div>
+
+        {pendenciasPorGrupo === 'carregando' && <p className="text-muted text-sm mt-2" role="status">Consultando pendências de entrega…</p>}
+        {pendenciasPorGrupo === 'erro' && <p className="text-muted text-sm mt-2" role="status">Não foi possível consultar as pendências de entrega.</p>}
 
         {/* Atalho para o caso que motiva a varredura: grupos sem ninguém dentro.
             Só aparece quando existem, e some assim que o filtro já está aplicado. */}
@@ -412,24 +460,28 @@ export const GestaoGruposAdmin: React.FC<GestaoGruposAdminProps> = ({ grupos, tu
         <div className="card text-center py-8">
           <Users size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
           <h3 className="font-bold">
-            {ocupacaoFiltro === 'vazios'
-              ? 'Nenhum grupo vazio'
-              : ocupacaoFiltro !== ''
-                ? 'Nenhum grupo nesta faixa de ocupação'
-                : turmaFiltro === ''
-                  ? 'Nenhum grupo cadastrado'
-                  : 'Nenhum grupo nesta turma'}
+            {filtraPendencias && pendenciasDisponiveis
+              ? 'Nenhum grupo corresponde aos filtros'
+              : ocupacaoFiltro === 'vazios'
+                ? 'Nenhum grupo vazio'
+                : ocupacaoFiltro !== ''
+                  ? 'Nenhum grupo nesta faixa de ocupação'
+                  : turmaFiltro === ''
+                    ? 'Nenhum grupo cadastrado'
+                    : 'Nenhum grupo nesta turma'}
           </h3>
           <p className="text-muted text-sm">
-            {ocupacaoFiltro === 'vazios'
-              ? turmaFiltro === ''
-                ? 'Todos os grupos têm pelo menos um integrante.'
-                : 'Todos os grupos desta turma têm pelo menos um integrante.'
-              : ocupacaoFiltro !== ''
-                ? 'Ajuste os filtros de turma ou de ocupação para ver outros grupos.'
-                : turmaFiltro === ''
-                  ? 'Crie um grupo aqui ou deixe que os próprios alunos se organizem pelo portal deles.'
-                  : 'Escolha outra turma no filtro ou crie um grupo para esta turma.'}
+            {filtraPendencias && pendenciasDisponiveis
+              ? 'Ajuste os filtros para consultar outros grupos.'
+              : ocupacaoFiltro === 'vazios'
+                ? turmaFiltro === ''
+                  ? 'Todos os grupos têm pelo menos um integrante.'
+                  : 'Todos os grupos desta turma têm pelo menos um integrante.'
+                : ocupacaoFiltro !== ''
+                  ? 'Ajuste os filtros de turma ou de ocupação para ver outros grupos.'
+                  : turmaFiltro === ''
+                    ? 'Crie um grupo aqui ou deixe que os próprios alunos se organizem pelo portal deles.'
+                    : 'Escolha outra turma no filtro ou crie um grupo para esta turma.'}
           </p>
         </div>
       ) : (

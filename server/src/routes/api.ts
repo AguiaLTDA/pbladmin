@@ -160,6 +160,7 @@ router.get('/submissions/student/activities', authenticateToken, requireRole('AL
 router.get('/submissions/student/activities/:id', authenticateToken, requireRole('ALUNO'), subCtrl.getStudentActivityDetails);
 router.post('/submissions/student/activities/:atividadeId/answer', authenticateToken, requireRole('ALUNO'), subCtrl.submitStudentAnswer);
 
+router.get('/submissions/pendencias-grupos', authenticateToken, requireRole('ADMIN'), subCtrl.listPendingGroups);
 router.get('/submissions', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), subCtrl.listSubmissionsForActivity);
 router.get('/submissions/activity/:atividadeId', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), subCtrl.listSubmissionsForActivity);
 router.post('/submissions/:entregaId/evaluate', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), subCtrl.evaluateSubmission);

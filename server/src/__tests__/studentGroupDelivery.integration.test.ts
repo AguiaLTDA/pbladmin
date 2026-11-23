@@ -3,7 +3,7 @@ import type { PoolClient } from 'pg';
 import { vi } from 'vitest';
 import { pool } from '../config/db';
 import { studentDeliveryCte } from '../services/studentGroupDelivery';
-import { getStudentActivities, getStudentActivityDetails, submitStudentAnswer } from '../controllers/submissionController';
+import { getStudentActivities, getStudentActivityDetails, listPendingGroups, submitStudentAnswer } from '../controllers/submissionController';
 import { getDashboardData } from '../controllers/dashboardController';
 
 const { downloadFromDrive } = vi.hoisted(() => ({ downloadFromDrive: vi.fn() }));
@@ -152,5 +152,36 @@ describe.skipIf(process.env.PBL_MIGRATION_TEST !== 'true')('visibilidade de entr
     await downloadFile({ params: { id: '77' }, user: { id: 3, perfilNome: 'ALUNO' } } as any, negado as any);
     expect(negado.statusCode).toBe(403);
     expect(downloadFromDrive).not.toHaveBeenCalled();
+  });
+
+  it('calcula pendências usando regras de grupo e matrícula do autor em entrega sem grupo', async () => {
+    await client.query(`
+      INSERT INTO atividades_pbl VALUES
+        (10,'S10','Slides 10','OBRIGATORIA_SEM_NOTA',1,1,3,1,1,'PUBLICADO',NULL),
+        (11,'S11','Slides 11','OBRIGATORIA_SEM_NOTA',1,1,3,1,1,'PUBLICADO',NULL),
+        (12,'W12','Escrito 12','AVALIATIVA',1,1,3,1,1,'PUBLICADO',NULL);
+      INSERT INTO versoes_atividades VALUES (10,10,1,NULL,NULL),(11,11,1,NULL,NULL),(12,12,1,'GRUPO',NULL);
+      INSERT INTO publicacoes VALUES (10,10),(11,11),(12,12);
+      INSERT INTO alunos_segmentados (atividade_id, aluno_id) VALUES (10,1),(10,2),(11,3),(12,3);
+      INSERT INTO segmentacoes VALUES (10,10),(11,11),(12,12);
+      INSERT INTO segmentacao_regras VALUES
+        (10,'grupo',100,'INCLUIR'),(11,'grupo',101,'INCLUIR'),(12,'grupo',101,'INCLUIR');
+      INSERT INTO arquivos VALUES
+        (78,'caso.pdf',123,'application/pdf','PDF','PBL_1',NULL,'/drive/78',1),
+        (79,'caso-12.pdf',123,'application/pdf','PDF','PBL_1',NULL,'/drive/79',1);
+      INSERT INTO arquivos_atividades (versao_atividade_id, arquivo_id) VALUES (2,78),(12,79);
+      INSERT INTO entregas VALUES
+        (11,10,1,100,'RASCUNHO',NULL,NULL,NULL,'2026-11-10',NULL),
+        (12,11,3,NULL,'ENVIADO','2026-11-10','2026-11-10','HASH-12','2026-11-10',NULL);
+    `);
+    const res: any = { statusCode: 200, body: undefined, status(code: number) { this.statusCode = code; return this; }, json(body: any) { this.body = body; return this; } };
+
+    await listPendingGroups({ user: { id: 4, perfilNome: 'ADMIN' } } as any, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual([
+      { grupoId: 100, semSlides: true, semEscrito: false },
+      { grupoId: 101, semSlides: false, semEscrito: true }
+    ]);
   });
 });

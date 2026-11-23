@@ -7,7 +7,7 @@ vi.mock('../config/db', () => ({ getAsync, queryAsync, runAsync: vi.fn() }));
 vi.mock('../services/audit', () => ({ logAudit: vi.fn() }));
 vi.mock('../services/horarioImport', () => ({ professorAlcancaAtividade }));
 
-import { listSubmissionsForActivity } from '../controllers/submissionController';
+import { listSubmissionsForActivity, listPendingGroups } from '../controllers/submissionController';
 
 function resposta() {
   return { statusCode: 200, body: undefined as any, status(code: number) { this.statusCode = code; return this; }, json(body: any) { this.body = body; return this; } };
@@ -18,6 +18,36 @@ beforeEach(() => {
 });
 
 describe('listagem geral de entregas', () => {
+  it('lista grupos elegíveis com pendências publicadas de slides ou escrito', async () => {
+    queryAsync.mockResolvedValueOnce([
+      { grupo_id: 9, sem_slides: true, sem_escrito: false },
+      { grupo_id: 12, sem_slides: false, sem_escrito: true }
+    ]);
+    const res = resposta();
+
+    await listPendingGroups({ params: {}, user: { id: 4, perfilNome: 'ADMIN' } } as any, res as any);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual([
+      { grupoId: 9, semSlides: true, semEscrito: false },
+      { grupoId: 12, semSlides: false, semEscrito: true }
+    ]);
+    expect(queryAsync).toHaveBeenCalledOnce();
+    const [sql, params] = queryAsync.mock.calls[0];
+    expect(sql).toContain("a.status = 'PUBLICADO'");
+    expect(sql).toContain("pub.status_publicacao = 'PUBLICADO'");
+    expect(sql).toContain('als.atividade_id = ap.id');
+    expect(sql).toContain('m.ativo = 1 AND m.deletado_em IS NULL');
+    expect(sql).toContain('t.ativo = 1 AND t.deletado_em IS NULL');
+    expect(sql).toContain('t.curso_id = ap.curso_id AND t.periodo_letivo_id = ap.periodo_letivo_id');
+    expect(sql).toContain("sr.acao = 'EXCLUIR'");
+    expect(sql).toContain("sr.acao = 'INCLUIR'");
+    expect(sql).toContain('e.grupo_id IS NULL');
+    expect(sql).toContain("e.status IN ('ENVIADO', 'ATRASADO')");
+    expect(sql).toContain('a.versao_atual');
+    expect(params).toEqual(['OBRIGATORIA_SEM_NOTA']);
+  });
+
   it('lista atividades publicadas e seus arquivos em lote, preservando entregas sem anexos', async () => {
     queryAsync.mockResolvedValueOnce([
       { id: 1, atividade_id: 10, atividade_titulo: 'Slides', codigo_unico: 'A10', natureza: 'OBRIGATORIA_SEM_NOTA' },
