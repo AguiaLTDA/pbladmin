@@ -86,8 +86,8 @@ export const CRONOGRAMA_PBL_PADRAO: {
     {
       ordem: 7,
       titulo: 'Entrega obrigatória dos slides da apresentação (sem nota)',
-      prazoTexto: 'somente .pptx, até 19 de novembro',
-      fim: '2026-11-19'
+      prazoTexto: 'somente .pptx, até 23 de novembro',
+      fim: '2026-11-23'
     },
     {
       ordem: 8,

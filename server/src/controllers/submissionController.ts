@@ -266,7 +266,7 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
         return res.status(400).json({ message: 'Anexe ao menos um arquivo PowerPoint (.pptx) para finalizar a entrega.' });
       }
       if (finalSubmit && now > SLIDES_PRESENTATION_DEADLINE) {
-        return res.status(400).json({ message: 'O prazo para enviar os slides terminou em 19/11/2026, às 23h59 (horário de Brasília).' });
+        return res.status(400).json({ message: 'O prazo para enviar os slides terminou em 23/11/2026, às 23h59 (horário de Brasília).' });
       }
       if (submittedFileIds.length > 0) {
         const placeholders = submittedFileIds.map(() => '?').join(', ');

@@ -1,7 +1,7 @@
 import { PoolClient } from 'pg';
 import { pool } from '../config/db';
 
-export const SLIDES_PRESENTATION_DEADLINE = new Date('2026-11-19T23:59:59.999-03:00');
+export const SLIDES_PRESENTATION_DEADLINE = new Date('2026-11-23T23:59:59.999-03:00');
 export const SLIDES_PRESENTATION_NATURE = 'OBRIGATORIA_SEM_NOTA';
 
 /** Acrescenta a janela de slides e provisiona uma entrega por atividade PBL 1 publicada. */
@@ -31,7 +31,7 @@ export async function ensureSlidesPresentationDelivery(existingClient?: PoolClie
       await client.query('UPDATE cronograma_pbl_etapas SET posicao = posicao + 1 WHERE posicao >= $1', [posicao]);
       await client.query(
         `INSERT INTO cronograma_pbl_etapas (posicao, ordem, titulo, prazo_texto, fim, pontos)
-         VALUES ($1, NULL, 'Entrega obrigatória dos slides da apresentação (sem nota)', 'somente .pptx, até 19 de novembro', '2026-11-19', NULL)`,
+         VALUES ($1, NULL, 'Entrega obrigatória dos slides da apresentação (sem nota)', 'somente .pptx, até 23 de novembro', '2026-11-23', NULL)`,
         [posicao]
       );
     }
@@ -94,7 +94,7 @@ export async function ensureSlidesPresentationDelivery(existingClient?: PoolClie
 
       await client.query(
         `INSERT INTO versoes_atividades (atividade_id, numero_versao, instrucoes_gerais, criado_por)
-         SELECT $1, 1, 'Envie os slides da apresentação em formato PowerPoint (.pptx) até 19/11/2026, às 23h59min59s (horário de Brasília). Esta entrega é obrigatória e não recebe nota.', $2
+         SELECT $1, 1, 'Envie os slides da apresentação em formato PowerPoint (.pptx) até 23/11/2026, às 23h59min59s (horário de Brasília). Esta entrega é obrigatória e não recebe nota.', $2
           WHERE NOT EXISTS (SELECT 1 FROM versoes_atividades WHERE atividade_id = $1 AND numero_versao = 1)`,
         [atividadeId, fonte.professor_id]
       );

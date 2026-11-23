@@ -97,7 +97,7 @@ describe.skipIf(process.env.PBL_MIGRATION_TEST !== 'true')('entrega de slides em
     expect(slides.rows).toHaveLength(2);
     expect(slides.rows.map((row) => row.alunos)).toEqual([2, 1]);
     expect(slides.rows.every((row) => row.natureza === 'OBRIGATORIA_SEM_NOTA')).toBe(true);
-    expect(slides.rows.every((row) => row.prazo_entrega.toISOString() === '2026-11-20T02:59:59.999Z')).toBe(true);
+    expect(slides.rows.every((row) => row.prazo_entrega.toISOString() === '2026-11-24T02:59:59.999Z')).toBe(true);
 
     const regras = await client.query(`
       SELECT sr.entidade_tipo, sr.entidade_id FROM atividades_pbl a
@@ -108,7 +108,7 @@ describe.skipIf(process.env.PBL_MIGRATION_TEST !== 'true')('entrega de slides em
     expect(regras.rows).toHaveLength(2);
     const etapas = await client.query('SELECT posicao, ordem, titulo, fim, pontos FROM cronograma_pbl_etapas ORDER BY posicao');
     expect(etapas.rows.map((row) => [row.posicao, row.ordem, row.titulo, row.fim, row.pontos])).toEqual([
-      [7, 7, 'Entrega obrigatória dos slides da apresentação (sem nota)', '2026-11-19', null],
+      [7, 7, 'Entrega obrigatória dos slides da apresentação (sem nota)', '2026-11-23', null],
       [8, 8, 'Apresentação do PBL oral', '2026-11-27', '1,5 ponto'],
       [9, 9, 'Divulgação das notas', '2026-12-04', null]
     ]);

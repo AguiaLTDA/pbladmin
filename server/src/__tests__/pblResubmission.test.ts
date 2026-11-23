@@ -88,7 +88,7 @@ describe('reenvio do PBL escrito', () => {
     getAsync
       .mockResolvedValueOnce({ id: 1 })
       .mockResolvedValueOnce({
-        id: 20, prazo_entrega: '2026-11-20T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
+        id: 20, prazo_entrega: '2026-11-24T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
       });
     const res = resposta();
 
@@ -109,7 +109,7 @@ describe('reenvio do PBL escrito', () => {
     getAsync
       .mockResolvedValueOnce({ id: 1 })
       .mockResolvedValueOnce({
-        id: 20, prazo_entrega: '2026-11-20T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
+        id: 20, prazo_entrega: '2026-11-24T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
       });
     queryAsync.mockResolvedValue([{ id: 33, enviado_por: 7, ...arquivo }]);
     const res = resposta();
@@ -131,7 +131,7 @@ describe('reenvio do PBL escrito', () => {
     getAsync
       .mockResolvedValueOnce({ id: 1 })
       .mockResolvedValueOnce({
-        id: 20, prazo_entrega: '2026-11-20T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
+        id: 20, prazo_entrega: '2026-11-24T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
       });
     queryAsync.mockResolvedValue([{ id: 33, ...file }]);
     const res = resposta();
@@ -146,11 +146,11 @@ describe('reenvio do PBL escrito', () => {
   });
 
   it('aceita PPTX próprio até o último milissegundo e bloqueia depois do prazo de slides', async () => {
-    vi.setSystemTime(new Date('2026-11-19T23:59:59.999-03:00'));
+    vi.setSystemTime(new Date('2026-11-23T23:59:59.999-03:00'));
     getAsync
       .mockResolvedValueOnce({ id: 1 })
       .mockResolvedValueOnce({
-        id: 20, prazo_entrega: '2026-11-20T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
+        id: 20, prazo_entrega: '2026-11-24T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
       })
       .mockResolvedValueOnce(undefined);
     queryAsync.mockResolvedValue([{
@@ -164,12 +164,12 @@ describe('reenvio do PBL escrito', () => {
     } as any, accepted as any);
     expect(accepted.statusCode).toBe(200);
 
-    vi.setSystemTime(new Date('2026-11-20T00:00:00-03:00'));
+    vi.setSystemTime(new Date('2026-11-24T00:00:00-03:00'));
     getAsync.mockReset();
     getAsync
       .mockResolvedValueOnce({ id: 1 })
       .mockResolvedValueOnce({
-        id: 20, prazo_entrega: '2026-11-20T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
+        id: 20, prazo_entrega: '2026-11-24T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA'
       });
     runAsync.mockClear();
     const late = resposta();

@@ -458,7 +458,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
         </h3>
         <p className="text-muted text-sm mb-4">
           {isSlidesDelivery
-            ? 'Anexe os slides da apresentação em PowerPoint (.pptx) até 19/11/2026, às 23h59min59s (horário de Brasília). Esta entrega é obrigatória e não recebe nota.'
+            ? 'Anexe os slides da apresentação em PowerPoint (.pptx) até 23/11/2026, às 23h59min59s (horário de Brasília). Esta entrega é obrigatória e não recebe nota.'
             : 'Digite a solução do problema central ou anexe os arquivos da sua resposta. Você pode salvar como rascunho quantas vezes quiser antes de realizar a entrega final.'}
         </p>
 
