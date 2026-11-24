@@ -352,8 +352,19 @@ export const FormularioAvaliacaoBanca: React.FC<Props> = ({ editando, onSalvo, p
                 </option>
               ))}
             </select>
-            {grupoSelecionado?.integrantes && (
-              <p className="text-muted text-sm mt-2">Integrantes: {grupoSelecionado.integrantes}</p>
+            {grupoSelecionado && (
+              <div className="text-sm mt-2" style={{ padding: '0.65rem 0.85rem', borderRadius: '0.5rem', background: 'var(--bg-secondary, #f4f6f5)' }}>
+                <p className="font-bold mb-1">Alunos do grupo</p>
+                {grupoSelecionado.integrantes ? (
+                  <ul className="mb-0" style={{ paddingLeft: '1.1rem', listStyle: 'disc' }}>
+                    {grupoSelecionado.integrantes.split(', ').map((nome) => (
+                      <li key={nome}>{nome}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted mb-0">Nenhum aluno listado.</p>
+                )}
+              </div>
             )}
           </div>
         )}

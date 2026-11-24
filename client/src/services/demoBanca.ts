@@ -150,7 +150,7 @@ export function responderBancaDemo(endpoint: string, options: RequestInit): unkn
       registrarEvento({ evento: 'ACESSO', sessao });
       return { ok: true };
     }
-    if (pub[2] === 'grupos') return GRUPOS.map(({ integrantes, ...g }) => ({ ...g, integrantes: null }));
+    if (pub[2] === 'grupos') return GRUPOS;
     const email = String(body.avaliador_email || '').trim().toLowerCase();
     const nome = String(body.avaliador_nome || '').trim();
     if (pub[2] === 'identificacao') {

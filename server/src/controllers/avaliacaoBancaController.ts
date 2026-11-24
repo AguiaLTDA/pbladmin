@@ -48,12 +48,12 @@ const SELECT_AVALIACAO = `
     LEFT JOIN usuarios u ON u.id = ab.avaliador_id`;
 
 // Turmas e grupos participantes do PBL: grupos ativos com ao menos um aluno matriculado.
-export async function listarGruposBanca(req: AuthenticatedRequest, res: Response) {
+export async function listarGruposBanca(_req: AuthenticatedRequest, res: Response) {
   try {
     const grupos = await queryAsync(
       `SELECT g.id, g.nome, t.id AS turma_id, t.nome AS turma_nome, c.nome AS curso_nome,
               COUNT(DISTINCT m.usuario_id)::int AS alunos,
-              STRING_AGG(DISTINCT u.nome, ', ') AS integrantes
+              STRING_AGG(DISTINCT u.nome, ', ' ORDER BY u.nome) AS integrantes
          FROM grupos g
          JOIN turmas t ON t.id = g.turma_id AND t.deletado_em IS NULL
          LEFT JOIN cursos c ON c.id = t.curso_id
@@ -63,8 +63,6 @@ export async function listarGruposBanca(req: AuthenticatedRequest, res: Response
         GROUP BY g.id, t.id, c.nome
         ORDER BY t.nome, g.nome`
     );
-    // Sem login (formulário público) não expõe nomes de alunos.
-    if (!req.user) return res.json(grupos.map(({ integrantes, ...g }: any) => g));
     return res.json(grupos);
   } catch (err) {
     console.error('Erro ao listar grupos da banca:', err);
@@ -383,8 +381,8 @@ export async function listarGruposBancaPublico(req: AuthenticatedRequest, res: R
     console.error('Erro ao validar o link público da banca:', err);
     return res.status(500).json({ message: 'Erro ao carregar o formulário.' });
   }
-  // Sem req.user: a listagem sai sem os nomes dos alunos.
-  return listarGruposBanca({ ...req, user: undefined } as AuthenticatedRequest, res);
+  // Inclui os nomes dos alunos para o avaliador conferir os integrantes do grupo.
+  return listarGruposBanca(req, res);
 }
 
 // Admin: token atual do link público (para montar e copiar a URL no painel).
