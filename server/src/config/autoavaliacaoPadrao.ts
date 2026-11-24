@@ -25,6 +25,6 @@ export const AUTOAVALIACAO_JANELAS_PADRAO: JanelaAutoavaliacaoPadrao[] = [
     rodada: 2,
     titulo: 'Autoavaliação interna do grupo (2ª rodada)',
     abreEm: '2026-11-16T00:00:00-03:00',
-    fechaEm: '2026-11-22T23:59:59-03:00'
+    fechaEm: '2026-11-24T23:59:59-03:00'
   }
 ];

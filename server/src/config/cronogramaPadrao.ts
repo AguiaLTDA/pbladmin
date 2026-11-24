@@ -52,8 +52,8 @@ export const CRONOGRAMA_PBL_PADRAO: {
     {
       ordem: 6,
       titulo: 'Autoavaliação interna do grupo (2ª rodada)',
-      prazoTexto: 'de 16 a 22 de novembro',
-      fim: '2026-11-22'
+      prazoTexto: 'de 16 a 24 de novembro',
+      fim: '2026-11-24'
     },
     {
       ordem: 7,
