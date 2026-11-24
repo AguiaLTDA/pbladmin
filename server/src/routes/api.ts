@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { authenticateToken, requireRole } from '../middleware/auth';
 import * as authCtrl from '../controllers/authController';
 import * as academicCtrl from '../controllers/academicController';
@@ -36,6 +36,22 @@ const preCadastroLimiter = rateLimit({
   message: { message: 'Muitas tentativas de cadastro. Tente novamente em alguns minutos.' }
 });
 router.post('/public/pre-cadastro', preCadastroLimiter, preCadastroCtrl.criarPreCadastro);
+
+// --- FORMULÁRIO PÚBLICO DA BANCA (sem login, no padrão do formulário de julho) ---
+// Avaliadores se identificam por e-mail e nome. O limite é por IP real (Cloudflare,
+// ver ipCliente) e comporta vários professores atrás da mesma rede do campus.
+const bancaPublicaLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  keyGenerator: (req) => ipKeyGenerator(bancaCtrl.ipCliente(req as any)),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Muitos envios em pouco tempo. Aguarde alguns minutos e tente novamente.' }
+});
+// O :token (32 hex, gerado no banco) é o segredo do link; sem ele as rotas respondem 404.
+router.get('/public/banca/:token/grupos', bancaPublicaLimiter, bancaCtrl.listarGruposBancaPublico);
+router.post('/public/banca/:token/identificacao', bancaPublicaLimiter, bancaCtrl.identificarAvaliadorPublico);
+router.post('/public/banca/:token/avaliacao', bancaPublicaLimiter, bancaCtrl.salvarAvaliacaoBancaPublica);
 
 // --- VALIDAÇÃO DE E-MAIL E RECUPERAÇÃO DE SENHA (público, sem autenticação) ---
 // Limite mais apertado que o do cadastro: aqui cada requisição dispara um e-mail
@@ -248,6 +264,8 @@ router.get('/banca/grupos', authenticateToken, requireRole('ADMIN', 'PROFESSOR')
 router.get('/banca/minhas', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), bancaCtrl.listarMinhasAvaliacoesBanca);
 router.put('/banca/grupos/:grupoId/avaliacao', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), bancaCtrl.salvarAvaliacaoBanca);
 router.get('/banca/avaliacoes', authenticateToken, requireRole('ADMIN'), bancaCtrl.listarAvaliacoesBanca);
+router.get('/banca/link-publico', authenticateToken, requireRole('ADMIN'), bancaCtrl.obterLinkPublicoBanca);
+router.get('/banca/auditoria-publica', authenticateToken, requireRole('ADMIN'), bancaCtrl.listarAuditoriaBancaPublica);
 
 // --- DASHBOARD & REPORTS ---
 router.get('/dashboard', authenticateToken, dashCtrl.getDashboardData);

@@ -48,6 +48,7 @@ import { AutoavaliacaoGruposProfessorView } from './views/professor/Autoavaliaca
 import { AutoavaliacaoGruposAdminView } from './views/admin/AutoavaliacaoGruposAdmin';
 import { AvaliacaoBancaProfessorView } from './views/professor/AvaliacaoBancaProfessor';
 import { NotasBancaAdminView } from './views/admin/NotasBancaAdmin';
+import { AvaliacaoBancaPublicaView } from './views/publico/AvaliacaoBancaPublica';
 
 /**
  * Separa o caminho da query string do hash. Os links enviados por e-mail
@@ -120,6 +121,14 @@ export const App: React.FC = () => {
   // Rotas públicas (não exigem autenticação). Precisam vir ANTES do bloco de
   // login: os links de e-mail são abertos por quem ainda não entrou no portal —
   // e, no caso da validação, por quem está justamente impedido de entrar.
+  // Formulário público da banca do PBL oral (sem login, como o de julho), no
+  // caminho /<token>: 32 caracteres hexadecimais gerados no banco e conferidos
+  // pelo servidor. No GitHub Pages, o 404.html (cópia do index) abre o app aqui.
+  const tokenBancaPublica = window.location.pathname.match(/\/([0-9a-f]{32})\/?$/);
+  if (tokenBancaPublica) {
+    return <AvaliacaoBancaPublicaView token={tokenBancaPublica[1]} />;
+  }
+
   if (currentRoute === '/cadastro') {
     return <CadastroEstudanteView navigate={navigate} />;
   }

@@ -4,16 +4,32 @@ import { apiRequest } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { OUTRA_SALA, SALAS_BANCA } from '../constants/salasBanca';
 
-// Formulário de avaliação da banca do PBL oral — o mesmo das bancas de julho.
+// Perguntas do formulário da banca: as sete do formulário de julho + material de apoio.
 export const CRITERIOS_BANCA = [
   { key: 'score_clarity', label: 'Clareza e objetividade na apresentação do problema' },
   { key: 'score_mastery', label: 'Domínio do conteúdo pelos integrantes do grupo' },
   { key: 'score_solution', label: 'Qualidade da solução proposta / entregável' },
   { key: 'score_coherence', label: 'Coerência entre o problema real e a solução apresentada' },
   { key: 'score_organization', label: 'Organização e estrutura da apresentação (slides, tempo, sequência lógica)' },
+  { key: 'score_material', label: 'Qualidade do material de apoio (slides ou equivalente, no modelo institucional)' },
   { key: 'score_questions', label: 'Capacidade de responder às perguntas da banca' },
   { key: 'score_teamwork', label: 'Trabalho em equipe e distribuição das falas' }
 ] as const;
+
+// Critérios do PBL oral do Manual do Aluno (seção 6). Cada um vale a média das suas
+// perguntas / 5 × peso; a banca atribui até 1,3 dos 1,5 pontos. A presença na Expo
+// UNIVC (0,2) não é avaliada aqui. "Trabalho em equipe" não tem peso no manual:
+// fica registrado, sem entrar na nota.
+export const GRUPOS_MANUAL_BANCA = [
+  { titulo: 'Domínio do conteúdo', peso: 0.5, questoes: ['score_mastery', 'score_solution', 'score_coherence'] },
+  { titulo: 'Clareza e organização da exposição', peso: 0.3, questoes: ['score_clarity', 'score_organization'] },
+  { titulo: 'Qualidade do material de apoio', peso: 0.2, questoes: ['score_material'] },
+  { titulo: 'Resposta à arguição', peso: 0.3, questoes: ['score_questions'] }
+] as const;
+
+export const QUESTOES_SEM_PESO = ['score_teamwork'] as const;
+
+export const NOTA_MAXIMA_BANCA = 1.3;
 
 export type CriterioBanca = (typeof CRITERIOS_BANCA)[number]['key'];
 
@@ -42,9 +58,10 @@ export type AvaliacaoBanca = {
   turma_id: number;
   turma_nome: string;
   curso_nome: string | null;
-  avaliador_id: number;
+  avaliador_id: number | null;
   avaliador_nome: string;
   avaliador_email: string;
+  origem?: 'publico' | 'plataforma';
   dia: string | null;
   sala: string | null;
   pontos_fortes: string | null;
@@ -56,8 +73,18 @@ export type AvaliacaoBanca = {
   atualizado_em: string;
 } & Record<CriterioBanca, number>;
 
-export const mediaCriterios = (a: Partial<Record<CriterioBanca, number>>) =>
-  CRITERIOS_BANCA.reduce((s, c) => s + Number(a[c.key] || 0), 0) / CRITERIOS_BANCA.length;
+/** Nota da banca (0 a 1,3): por critério do manual, média das suas perguntas / 5 × peso. */
+export const notaBanca = (a: Partial<Record<CriterioBanca, number | null>>) =>
+  Number(
+    GRUPOS_MANUAL_BANCA.reduce(
+      (s, g) => s + (g.questoes.reduce((t, q) => t + Number(a[q] || 0), 0) / g.questoes.length / 5) * g.peso,
+      0
+    ).toFixed(2)
+  );
+
+const rotuloQuestao = (k: CriterioBanca) => CRITERIOS_BANCA.find((c) => c.key === k)?.label ?? k;
+
+const pesoTexto = (p: number) => p.toLocaleString('pt-BR', { minimumFractionDigits: 1 });
 
 export const formatarNota = (n: number | null | undefined) =>
   n == null ? '—' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -67,7 +94,9 @@ export const rotuloStatusBanca = (s: string) => STATUS_BANCA.find((o) => o.value
 interface Props {
   /** Avaliação existente para editar (reenvio atualiza a anterior). */
   editando?: AvaliacaoBanca | null;
-  onSalvo?: () => void;
+  onSalvo?: (resultado?: { grupoNome: string; nota: number | null }) => void;
+  /** Formulário público (link /<token>, sem login): avaliador já identificado na etapa anterior. */
+  publico?: { token: string; sessao: string; email: string; nome: string };
 }
 
 type Formulario = {
@@ -99,7 +128,32 @@ const VAZIO: Formulario = {
   status: ''
 };
 
-export const FormularioAvaliacaoBanca: React.FC<Props> = ({ editando, onSalvo }) => {
+const EscalaQuestao: React.FC<{ rotulo: string; valor?: number; onChange: (n: number) => void }> = ({
+  rotulo,
+  valor,
+  onChange
+}) => (
+  <div className="form-group">
+    <label className="form-label required">{rotulo}</label>
+    <div className="flex gap-2 flex-wrap">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          className={`btn btn-sm ${valor === n ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ minWidth: '2.75rem' }}
+          aria-pressed={valor === n}
+          onClick={() => onChange(n)}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
+export const FormularioAvaliacaoBanca: React.FC<Props> = ({ editando, onSalvo, publico }) => {
+  const [erroCarga, setErroCarga] = useState<string | null>(null);
   const { showToast } = useToast();
   const [grupos, setGrupos] = useState<GrupoBanca[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -107,9 +161,14 @@ export const FormularioAvaliacaoBanca: React.FC<Props> = ({ editando, onSalvo })
   const [form, setForm] = useState<Formulario>(VAZIO);
 
   useEffect(() => {
-    apiRequest<GrupoBanca[]>('/banca/grupos')
+    apiRequest<GrupoBanca[]>(
+      publico ? `/public/banca/${publico.token}/grupos?sessao=${encodeURIComponent(publico.sessao)}` : '/banca/grupos'
+    )
       .then((g) => setGrupos(Array.isArray(g) ? g : []))
-      .catch((err) => showToast(err.message || 'Erro ao carregar os grupos.', 'error'))
+      .catch((err) => {
+        if (publico) setErroCarga(err.message || 'Não foi possível abrir o formulário.');
+        else showToast(err.message || 'Erro ao carregar os grupos.', 'error');
+      })
       .finally(() => setCarregando(false));
     // showToast não é memoizado no contexto; carregar uma vez só.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,7 +215,7 @@ export const FormularioAvaliacaoBanca: React.FC<Props> = ({ editando, onSalvo })
   );
   const grupoSelecionado = grupos.find((g) => g.id === form.grupoId);
   const todasNotas = CRITERIOS_BANCA.every((c) => form.notas[c.key]);
-  const notaSugerida = todasNotas ? mediaCriterios(form.notas) * 0.3 : null;
+  const notaSugerida = todasNotas ? notaBanca(form.notas) : null;
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
@@ -166,14 +225,18 @@ export const FormularioAvaliacaoBanca: React.FC<Props> = ({ editando, onSalvo })
     if (!form.status) return showToast('Informe se o trabalho foi aprovado.', 'error');
     if (form.nota_final.trim()) {
       const n = Number(form.nota_final.replace(',', '.'));
-      if (!Number.isFinite(n) || n < 0 || n > 1.5) return showToast('A nota final deve ficar entre 0 e 1,5.', 'error');
+      if (!Number.isFinite(n) || n < 0 || n > NOTA_MAXIMA_BANCA) return showToast('A nota final da banca deve ficar entre 0 e 1,3.', 'error');
     }
 
     setSalvando(true);
     try {
-      await apiRequest(`/banca/grupos/${form.grupoId}/avaliacao`, {
-        method: 'PUT',
+      const corpoIdentidade = publico
+        ? { grupo_id: form.grupoId, sessao: publico.sessao, avaliador_email: publico.email, avaliador_nome: publico.nome }
+        : {};
+      await apiRequest(publico ? `/public/banca/${publico.token}/avaliacao` : `/banca/grupos/${form.grupoId}/avaliacao`, {
+        method: publico ? 'POST' : 'PUT',
         body: JSON.stringify({
+          ...corpoIdentidade,
           dia: form.dia,
           sala: form.sala === OUTRA_SALA ? null : form.sala,
           ...form.notas,
@@ -185,13 +248,13 @@ export const FormularioAvaliacaoBanca: React.FC<Props> = ({ editando, onSalvo })
         })
       });
       showToast(
-        `Avaliação do grupo ${grupoSelecionado?.nome ?? ''} registrada. Nota média: ${formatarNota(notaSugerida)} (0 a 1,5).`,
+        `Avaliação do grupo ${grupoSelecionado?.nome ?? ''} registrada. Nota da banca: ${formatarNota(notaSugerida)} (0 a 1,3).`,
         'success'
       );
       // Mantém dia, sala e turma para agilizar o próximo grupo da mesma banca.
       setForm({ ...VAZIO, dia: form.dia, sala: form.sala, turmaId: form.turmaId });
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      onSalvo?.();
+      onSalvo?.({ grupoNome: grupoSelecionado?.nome ?? '', nota: notaSugerida });
     } catch (err: any) {
       showToast(err.message || 'Não foi possível enviar a avaliação.', 'error');
     } finally {
@@ -203,6 +266,15 @@ export const FormularioAvaliacaoBanca: React.FC<Props> = ({ editando, onSalvo })
     return (
       <div className="flex items-center gap-2 text-muted" style={{ padding: '2rem' }}>
         <Loader2 size={18} className="animate-spin" /> Carregando turmas e grupos...
+      </div>
+    );
+  }
+
+  if (erroCarga) {
+    return (
+      <div className="card text-center" style={{ padding: '2rem 1.5rem' }}>
+        <h3 className="font-bold mb-2">Não foi possível abrir o formulário</h3>
+        <p className="text-muted mb-0">{erroCarga}</p>
       </div>
     );
   }
@@ -289,28 +361,33 @@ export const FormularioAvaliacaoBanca: React.FC<Props> = ({ editando, onSalvo })
 
       <div className="card mb-4">
         <h3 className="font-bold mb-1">Critérios</h3>
-        <p className="text-muted text-sm mb-3">De 1 (Insuficiente) a 5 (Excelente).</p>
-        {CRITERIOS_BANCA.map((c) => (
-          <div key={c.key} className="form-group">
-            <label className="form-label required">{c.label}</label>
-            <div className="flex gap-2 flex-wrap">
-              {[1, 2, 3, 4, 5].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  className={`btn btn-sm ${form.notas[c.key] === n ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ minWidth: '2.75rem' }}
-                  aria-pressed={form.notas[c.key] === n}
-                  onClick={() => setForm({ ...form, notas: { ...form.notas, [c.key]: n } })}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
+        <p className="text-muted text-sm mb-3">
+          Marque cada item de 1 (Insuficiente) a 5 (Excelente). As perguntas estão agrupadas nos critérios do PBL
+          oral do Manual do Aluno; cada critério vale até o peso indicado, e a banca atribui até 1,3 ponto. A
+          presença na Expo UNIVC (0,2) não é avaliada aqui.
+        </p>
+        {GRUPOS_MANUAL_BANCA.map((g) => (
+          <div key={g.titulo} className="mb-4">
+            <h4 className="font-bold mb-2" style={{ fontSize: '0.95rem' }}>
+              {g.titulo} <span className="text-muted" style={{ fontWeight: 400 }}>(até {pesoTexto(g.peso)})</span>
+            </h4>
+            {g.questoes.map((k) => (
+              <EscalaQuestao key={k} rotulo={rotuloQuestao(k)} valor={form.notas[k]}
+                onChange={(n) => setForm({ ...form, notas: { ...form.notas, [k]: n } })} />
+            ))}
           </div>
         ))}
+        <div className="mb-4">
+          <h4 className="font-bold mb-2" style={{ fontSize: '0.95rem' }}>
+            Participação <span className="text-muted" style={{ fontWeight: 400 }}>(registro, não entra na nota)</span>
+          </h4>
+          {QUESTOES_SEM_PESO.map((k) => (
+            <EscalaQuestao key={k} rotulo={rotuloQuestao(k)} valor={form.notas[k]}
+              onChange={(n) => setForm({ ...form, notas: { ...form.notas, [k]: n } })} />
+          ))}
+        </div>
         <p className="text-sm mb-0">
-          Nota média (média × 0,3): <strong>{formatarNota(notaSugerida)}</strong> <span className="text-muted">(escala 0 a 1,5)</span>
+          Nota da banca: <strong>{formatarNota(notaSugerida)}</strong> <span className="text-muted">(de 0 a 1,3)</span>
         </p>
       </div>
 
@@ -337,7 +414,7 @@ export const FormularioAvaliacaoBanca: React.FC<Props> = ({ editando, onSalvo })
       <div className="card mb-4">
         <h3 className="font-bold mb-3">Resultado</h3>
         <div className="form-group">
-          <label className="form-label">Nota final (opcional, de 0 a 1,5)</label>
+          <label className="form-label">Nota final da banca (opcional, de 0 a 1,3)</label>
           <input className="form-control" inputMode="decimal" style={{ maxWidth: '10rem' }}
             placeholder={notaSugerida == null ? 'ex.: 1,20' : formatarNota(notaSugerida)}
             value={form.nota_final} onChange={(e) => setForm({ ...form, nota_final: e.target.value })} />

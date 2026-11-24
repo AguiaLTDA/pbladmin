@@ -269,6 +269,61 @@ export async function runMigrations() {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_avaliacoes_banca_par ON avaliacoes_banca(grupo_id, avaliador_id)`
   );
 
+  // Pergunta nova do formulário (o critério "qualidade do material de apoio" do
+  // Manual do Aluno não tinha pergunta própria no formulário de julho). Nula só em
+  // linhas anteriores a ela; o servidor exige a resposta em todo envio novo.
+  await runAsync(
+    `ALTER TABLE avaliacoes_banca ADD COLUMN IF NOT EXISTS score_material SMALLINT CHECK (score_material BETWEEN 1 AND 5)`
+  );
+
+  // Formulário público da banca (sem login): o avaliador se identifica com nome e
+  // e-mail, como no formulário de julho. avaliador_id fica nulo nesses envios.
+  await runAsync(`ALTER TABLE avaliacoes_banca ALTER COLUMN avaliador_id DROP NOT NULL`);
+  await runAsync(`ALTER TABLE avaliacoes_banca ADD COLUMN IF NOT EXISTS avaliador_nome TEXT`);
+  await runAsync(`ALTER TABLE avaliacoes_banca ADD COLUMN IF NOT EXISTS avaliador_email TEXT`);
+  await runAsync(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_avaliacoes_banca_publica
+       ON avaliacoes_banca(grupo_id, LOWER(avaliador_email)) WHERE avaliador_id IS NULL`
+  );
+
+  // Token do link público da banca (#/banca/<token>): 32 caracteres hexadecimais
+  // aleatórios, gerados pelo próprio banco na primeira subida. Não fica no código
+  // (o repositório e o bundle são públicos); o admin copia o link no painel.
+  await runAsync(
+    `CREATE TABLE IF NOT EXISTS banca_formulario_publico (
+       id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+       token TEXT NOT NULL CHECK (token ~ '^[0-9a-f]{32}$'),
+       criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+     )`
+  );
+  await runAsync(
+    `INSERT INTO banca_formulario_publico (id, token)
+     VALUES (1, REPLACE(gen_random_uuid()::text, '-', ''))
+     ON CONFLICT (id) DO NOTHING`
+  );
+
+  // Auditoria própria do link público da banca: quem abriu (IP real via Cloudflare,
+  // navegador), com que e-mail se identificou e o que enviou. `sessao` liga os
+  // eventos de uma mesma visita ao formulário.
+  await runAsync(
+    `CREATE TABLE IF NOT EXISTS banca_publica_auditoria (
+       id SERIAL PRIMARY KEY,
+       evento TEXT NOT NULL CHECK (evento IN ('ACESSO', 'IDENTIFICACAO', 'ENVIO', 'ACESSO_NEGADO')),
+       sessao TEXT,
+       email TEXT,
+       nome TEXT,
+       ip TEXT,
+       user_agent TEXT,
+       grupo_id INTEGER REFERENCES grupos(id),
+       avaliacao_id INTEGER,
+       detalhes JSONB,
+       criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+     )`
+  );
+  await runAsync(
+    `CREATE INDEX IF NOT EXISTS idx_banca_publica_auditoria_data ON banca_publica_auditoria(criado_em DESC)`
+  );
+
   for (const janela of AUTOAVALIACAO_JANELAS_PADRAO) {
     await runAsync(
       `INSERT INTO autoavaliacao_janelas (rodada, titulo, abre_em, fecha_em)
