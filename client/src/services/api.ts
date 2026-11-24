@@ -1,6 +1,7 @@
 import { isDemoMode, isSupabaseConfigured } from './supabase';
 import { CRONOGRAMA_PBL_PADRAO } from '../constants/academico';
 import { supabaseService } from './supabaseService';
+import { responderBancaDemo } from './demoBanca';
 
 // Em produção (build do GitHub Pages), aponta para o backend publicado no Render,
 // injetado em tempo de build via VITE_API_BASE_URL. Em dev local, cai no padrão
@@ -50,6 +51,8 @@ export async function apiRequest<T = any>(
         if (demo !== undefined) return demo;
       }
     }
+    const banca = responderBancaDemo(endpoint, options);
+    if (banca !== undefined) return banca as T;
     const method = (options.method || 'GET').toUpperCase();
     if (method !== 'GET' && endpoint !== '/files/upload' && endpoint !== '/student/context' && endpoint !== '/autoavaliacao/meu-grupo') {
       return { message: 'Demonstração: ação simulada, sem persistência.', demo: true, persistido: false } as T;

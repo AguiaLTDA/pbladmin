@@ -16,7 +16,8 @@ import {
   LogOut,
   Award,
   Briefcase,
-  Star
+  Star,
+  ClipboardCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { BrandLogo } from './BrandLogo';
@@ -60,12 +61,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate, aberto
     { path: '/admin/relatorios', label: 'Relatórios & Exportação', icon: BarChart3 },
     { path: '/admin/cronograma', label: 'Calendário de Prazos', icon: Calendar },
     { path: '/admin/autoavaliacao-grupos', label: 'Autoavaliação dos Grupos', icon: Star },
+    { path: '/admin/notas-banca', label: 'Notas da Banca', icon: ClipboardCheck },
     { path: '/admin/auditoria', label: 'Trilha de Auditoria', icon: ShieldCheck },
     { path: '/admin/configuracoes', label: 'Configurações PBL', icon: Settings }
   ];
 
   const getProfessorItems = () => [
     { path: '/professor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/professor/avaliacao-banca', label: 'Avaliação da Banca', icon: ClipboardCheck },
     { path: '/professor/turmas', label: 'Minhas Turmas & Horário', icon: CalendarDays },
     { path: '/professor/alunos', label: 'Alunos & Grupos', icon: Briefcase },
     { path: '/professor/entregas', label: 'Acompanhamento & Entregas', icon: Award },

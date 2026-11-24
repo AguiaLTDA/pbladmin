@@ -239,6 +239,36 @@ export async function runMigrations() {
     `CREATE INDEX IF NOT EXISTS idx_autoavaliacoes_avaliado ON autoavaliacoes(janela_id, avaliado_id)`
   );
 
+  // Avaliação da banca do PBL oral: o formulário usado nas bancas de julho,
+  // agora preenchido pelo professor/admin logado, que informa dia e sala da banca. Uma avaliação por avaliador
+  // e grupo; o reenvio atualiza a anterior. Fica separada de feedbacks.nota_oral.
+  await runAsync(
+    `CREATE TABLE IF NOT EXISTS avaliacoes_banca (
+       id SERIAL PRIMARY KEY,
+       grupo_id INTEGER NOT NULL REFERENCES grupos(id),
+       avaliador_id INTEGER NOT NULL REFERENCES usuarios(id),
+       dia DATE,
+       sala TEXT,
+       score_clarity SMALLINT NOT NULL CHECK (score_clarity BETWEEN 1 AND 5),
+       score_mastery SMALLINT NOT NULL CHECK (score_mastery BETWEEN 1 AND 5),
+       score_solution SMALLINT NOT NULL CHECK (score_solution BETWEEN 1 AND 5),
+       score_coherence SMALLINT NOT NULL CHECK (score_coherence BETWEEN 1 AND 5),
+       score_organization SMALLINT NOT NULL CHECK (score_organization BETWEEN 1 AND 5),
+       score_questions SMALLINT NOT NULL CHECK (score_questions BETWEEN 1 AND 5),
+       score_teamwork SMALLINT NOT NULL CHECK (score_teamwork BETWEEN 1 AND 5),
+       pontos_fortes TEXT,
+       pontos_melhoria TEXT,
+       nao_contribuiram TEXT,
+       nota_final NUMERIC(3,2) CHECK (nota_final IS NULL OR (nota_final >= 0 AND nota_final <= 1.5)),
+       status TEXT NOT NULL CHECK (status IN ('approved', 'approved_with_notes', 'rejected')),
+       criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+       atualizado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+     )`
+  );
+  await runAsync(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_avaliacoes_banca_par ON avaliacoes_banca(grupo_id, avaliador_id)`
+  );
+
   for (const janela of AUTOAVALIACAO_JANELAS_PADRAO) {
     await runAsync(
       `INSERT INTO autoavaliacao_janelas (rodada, titulo, abre_em, fecha_em)

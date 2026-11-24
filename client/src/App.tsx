@@ -46,6 +46,8 @@ import { ContextoAlunoView } from './views/aluno/ContextoAluno';
 import { AutoavaliacaoAlunoView } from './views/aluno/AutoavaliacaoAluno';
 import { AutoavaliacaoGruposProfessorView } from './views/professor/AutoavaliacaoGruposProfessor';
 import { AutoavaliacaoGruposAdminView } from './views/admin/AutoavaliacaoGruposAdmin';
+import { AvaliacaoBancaProfessorView } from './views/professor/AvaliacaoBancaProfessor';
+import { NotasBancaAdminView } from './views/admin/NotasBancaAdmin';
 
 /**
  * Separa o caminho da query string do hash. Os links enviados por e-mail
@@ -177,6 +179,7 @@ export const App: React.FC = () => {
       if (currentRoute === '/admin/auditoria') return <AuditoriaAdminView />;
       if (currentRoute === '/admin/configuracoes') return <ConfiguracoesAdminView />;
       if (currentRoute === '/admin/autoavaliacao-grupos') return <AutoavaliacaoGruposAdminView />;
+      if (currentRoute === '/admin/notas-banca') return <NotasBancaAdminView />;
     }
 
     // PROFESSOR ROUTES
@@ -195,6 +198,7 @@ export const App: React.FC = () => {
       if (currentRoute === '/professor/calendario')
         return <CalendarioPrazosProfessorView navigate={navigate} />;
       if (currentRoute === '/professor/autoavaliacao-grupos') return <AutoavaliacaoGruposProfessorView />;
+      if (currentRoute === '/professor/avaliacao-banca') return <AvaliacaoBancaProfessorView />;
     }
 
     // ALUNO ROUTES

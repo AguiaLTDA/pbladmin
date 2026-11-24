@@ -15,6 +15,7 @@ import * as preCadastroCtrl from '../controllers/preCadastroController';
 import * as contextoCtrl from '../controllers/contextoAlunoController';
 import * as cronogramaCtrl from '../controllers/cronogramaController';
 import * as autoavaliacaoCtrl from '../controllers/autoavaliacaoController';
+import * as bancaCtrl from '../controllers/avaliacaoBancaController';
 
 const router = Router();
 
@@ -240,6 +241,13 @@ router.get('/autoavaliacao/janelas', authenticateToken, requireRole('ADMIN', 'PR
 router.get('/autoavaliacao/meu-grupo', authenticateToken, requireRole('ALUNO'), autoavaliacaoCtrl.getMeuGrupoParaAvaliar);
 router.post('/autoavaliacao/meu-grupo', authenticateToken, requireRole('ALUNO'), autoavaliacaoCtrl.salvarAvaliacoes);
 router.get('/autoavaliacao/status', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), autoavaliacaoCtrl.listarStatusAutoavaliacao);
+
+// --- AVALIAÇÃO DA BANCA (PBL oral) ---
+// Professor e admin avaliam qualquer grupo participante; só o admin vê todas as notas.
+router.get('/banca/grupos', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), bancaCtrl.listarGruposBanca);
+router.get('/banca/minhas', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), bancaCtrl.listarMinhasAvaliacoesBanca);
+router.put('/banca/grupos/:grupoId/avaliacao', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), bancaCtrl.salvarAvaliacaoBanca);
+router.get('/banca/avaliacoes', authenticateToken, requireRole('ADMIN'), bancaCtrl.listarAvaliacoesBanca);
 
 // --- DASHBOARD & REPORTS ---
 router.get('/dashboard', authenticateToken, dashCtrl.getDashboardData);
