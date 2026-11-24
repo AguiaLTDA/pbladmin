@@ -235,7 +235,7 @@ function getFallbackResponseForEndpoint<T>(endpoint: string, options: RequestIni
   }
 
   if (isDemoMode && endpoint === '/files/institutional/MANUAL_ALUNO_PBL') {
-    return { chave: 'MANUAL_ALUNO_PBL', atualizado_em: '2026-11-23T17:06:00.000Z', arquivo_id: 901, nome_original: 'MANUAL DO ALUNO PBL.pdf', tamanho_bytes: 254573, mime_type: 'application/pdf', categoria: 'PDF' } as T;
+    return { chave: 'MANUAL_ALUNO_PBL', atualizado_em: '2026-11-24T12:00:00.000Z', arquivo_id: 901, nome_original: 'MANUAL DO ALUNO PBL.pdf', tamanho_bytes: 255041, mime_type: 'application/pdf', categoria: 'PDF' } as T;
   }
 
   if (isDemoMode && endpoint === '/student/context') {
