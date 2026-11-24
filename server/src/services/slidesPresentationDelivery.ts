@@ -5,9 +5,9 @@ export const SLIDES_PRESENTATION_DEADLINE = new Date('2026-11-23T23:59:59.999-03
 export const SLIDES_PRESENTATION_NATURE = 'OBRIGATORIA_SEM_NOTA';
 /**
  * Depois do prazo, só quem já finalizou a própria entrega pode trocar os arquivos
- * (ex.: enviou o .pptx errado). Vale até o fim da semana de apresentações.
+ * (ex.: enviou o .pptx errado). Vale até 24/11/2026, às 14h (Brasília).
  */
-export const SLIDES_REPLACEMENT_DEADLINE = new Date('2026-11-27T23:59:59.999-03:00');
+export const SLIDES_REPLACEMENT_DEADLINE = new Date('2026-11-24T14:00:00.000-03:00');
 
 /** Substituição de arquivos de uma entrega de slides já finalizada pelo próprio aluno. */
 export function canReplaceSlidesFiles(entregaStatus: string | null | undefined, now = new Date()): boolean {

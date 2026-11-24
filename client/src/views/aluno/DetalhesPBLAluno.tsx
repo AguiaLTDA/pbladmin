@@ -91,7 +91,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
 
   const isFinalSubmitted = Boolean(entrega && (entrega.status === 'ENVIADO' || entrega.status === 'ATRASADO'));
   const isSlidesDelivery = atividade.natureza === 'OBRIGATORIA_SEM_NOTA';
-  // Slides finalizados: só quem enviou pode trocar os arquivos (até 27/11), sem reabrir a entrega.
+  // Slides finalizados: só quem enviou pode trocar os arquivos (até 24/11 às 14h), sem reabrir a entrega.
   const isSlidesReplacement = isSlidesDelivery && isFinalSubmitted && Boolean(podeSubstituirSlides);
   const isEditingLocked = isFinalSubmitted && (Boolean(entrega.entrega_compartilhada) || !(podeReenviar || isSlidesReplacement));
   // Atalho "enviar arquivo para grupo": material de apoio, sem entrega esperada
@@ -257,7 +257,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
             </p>
           )}
           {isSlidesReplacement && (
-            <p className="text-sm mb-2">Enviou o arquivo errado? Você pode substituir os slides até 27/11/2026, às 23h59 (Brasília). A entrega continua registrada com a data e o comprovante originais.</p>
+            <p className="text-sm mb-2">Enviou o arquivo errado? Você pode substituir os slides até hoje, 24/11/2026, às 14h (Brasília). A entrega continua registrada com a data e o comprovante originais.</p>
           )}
           {podeReenviar && (
             <p className="text-sm mb-2">Sua primeira entrega foi feita até 04/11. Você pode editar e reenviar até 15/11, às 23h59 (Brasília), sem desconto por atraso. O reenvio substitui a versão anterior; uma nova avaliação pode alterar a nota.</p>

@@ -284,7 +284,7 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
         return res.status(400).json({ message: 'O prazo para enviar os slides terminou em 23/11/2026, às 23h59 (horário de Brasília).' });
       }
       if (isSlidesReplacement && !canReplaceSlidesFiles(existingEntrega?.status, now)) {
-        return res.status(400).json({ message: 'O prazo para substituir os slides terminou em 27/11/2026, às 23h59 (horário de Brasília).' });
+        return res.status(400).json({ message: 'O prazo para substituir os slides terminou em 24/11/2026, às 14h (horário de Brasília).' });
       }
       if (submittedFileIds.length > 0) {
         const placeholders = submittedFileIds.map(() => '?').join(', ');

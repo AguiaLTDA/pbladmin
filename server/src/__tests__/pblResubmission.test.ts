@@ -194,7 +194,7 @@ describe('reenvio do PBL escrito', () => {
   }
 
   it.each(['ENVIADO', 'ATRASADO'])('após o prazo, quem já enviou (%s) substitui os slides mantendo status, data e comprovante', async (status) => {
-    vi.setSystemTime(new Date('2026-11-25T10:00:00-03:00'));
+    vi.setSystemTime(new Date('2026-11-24T13:59:59.000-03:00'));
     setupSlides({ id: 12, status });
     const res = resposta();
 
@@ -213,7 +213,7 @@ describe('reenvio do PBL escrito', () => {
   });
 
   it('após o prazo, quem nunca enviou ou só tem rascunho continua bloqueado', async () => {
-    vi.setSystemTime(new Date('2026-11-25T10:00:00-03:00'));
+    vi.setSystemTime(new Date('2026-11-24T13:59:59.000-03:00'));
     for (const existing of [undefined, { id: 12, status: 'RASCUNHO' }]) {
       getAsync.mockReset();
       runAsync.mockClear();
@@ -228,8 +228,8 @@ describe('reenvio do PBL escrito', () => {
     }
   });
 
-  it('bloqueia a substituição dos slides depois de 27/11', async () => {
-    vi.setSystemTime(new Date('2026-11-28T00:00:00-03:00'));
+  it('bloqueia a substituição dos slides depois de 24/11 às 14h', async () => {
+    vi.setSystemTime(new Date('2026-11-24T14:00:00.001-03:00'));
     setupSlides({ id: 12, status: 'ENVIADO' });
     const res = resposta();
     await submitStudentAnswer({
@@ -237,12 +237,12 @@ describe('reenvio do PBL escrito', () => {
       user: { id: 7, perfilNome: 'ALUNO' }
     } as any, res as any);
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toContain('27/11/2026');
+    expect(res.body.message).toContain('24/11/2026, às 14h');
     expect(runAsync).not.toHaveBeenCalled();
   });
 
   it('colega de grupo que não enviou não substitui a entrega compartilhada', async () => {
-    vi.setSystemTime(new Date('2026-11-25T10:00:00-03:00'));
+    vi.setSystemTime(new Date('2026-11-24T13:59:59.000-03:00'));
     getAsync
       .mockResolvedValueOnce({ id: 1 })
       .mockResolvedValueOnce({ id: 20, prazo_entrega: '2026-11-24T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA' })
