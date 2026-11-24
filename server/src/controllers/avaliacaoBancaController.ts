@@ -265,6 +265,21 @@ const validarIdentidade = (body: any): { erro: string } | { email: string; nome:
   return { email, nome };
 };
 
+// Abertura do link público: chamada pela página assim que carrega, antes da
+// identificação — registra o acesso (IP real, navegador, horário) mesmo de quem
+// desiste sem se identificar, e confere o token para a página avisar na hora.
+export async function registrarAcessoPublico(req: AuthenticatedRequest, res: Response) {
+  try {
+    const sessao = sessaoDe((req.body || {}).sessao);
+    if (!(await exigirToken(req, res, sessao))) return;
+    await registrarEventoPublico(req, 'ACESSO', { sessao });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('Erro ao registrar acesso ao link público da banca:', err);
+    return res.status(500).json({ message: 'Erro ao abrir o formulário.' });
+  }
+}
+
 // Identificação obrigatória antes de abrir o formulário público (registra e-mail e nome da visita).
 export async function identificarAvaliadorPublico(req: AuthenticatedRequest, res: Response) {
   try {
@@ -361,9 +376,9 @@ export async function listarAvaliacoesBanca(_req: AuthenticatedRequest, res: Res
 
 export async function listarGruposBancaPublico(req: AuthenticatedRequest, res: Response) {
   try {
+    // O acesso já foi registrado na abertura da página (registrarAcessoPublico).
     const sessao = sessaoDe(req.query.sessao);
     if (!(await exigirToken(req, res, sessao))) return;
-    await registrarEventoPublico(req, 'ACESSO', { sessao });
   } catch (err) {
     console.error('Erro ao validar o link público da banca:', err);
     return res.status(500).json({ message: 'Erro ao carregar o formulário.' });

@@ -49,6 +49,7 @@ const bancaPublicaLimiter = rateLimit({
   message: { message: 'Muitos envios em pouco tempo. Aguarde alguns minutos e tente novamente.' }
 });
 // O :token (32 hex, gerado no banco) é o segredo do link; sem ele as rotas respondem 404.
+router.post('/public/banca/:token/acesso', bancaPublicaLimiter, bancaCtrl.registrarAcessoPublico);
 router.get('/public/banca/:token/grupos', bancaPublicaLimiter, bancaCtrl.listarGruposBancaPublico);
 router.post('/public/banca/:token/identificacao', bancaPublicaLimiter, bancaCtrl.identificarAvaliadorPublico);
 router.post('/public/banca/:token/avaliacao', bancaPublicaLimiter, bancaCtrl.salvarAvaliacaoBancaPublica);

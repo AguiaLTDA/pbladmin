@@ -138,7 +138,7 @@ export function responderBancaDemo(endpoint: string, options: RequestInit): unkn
   const metodo = (options.method || 'GET').toUpperCase();
   const [caminho, query = ''] = endpoint.split('?');
   // Formulário público: token conferido, sem nomes de alunos e com auditoria do link.
-  const pub = caminho.match(/^\/public\/banca\/([0-9a-f]{32})\/(grupos|identificacao|avaliacao)$/);
+  const pub = caminho.match(/^\/public\/banca\/([0-9a-f]{32})\/(acesso|grupos|identificacao|avaliacao)$/);
   if (pub) {
     const body = metodo === 'POST' ? JSON.parse(String(options.body || '{}')) : {};
     const sessao = body.sessao ?? new URLSearchParams(query).get('sessao');
@@ -146,10 +146,11 @@ export function responderBancaDemo(endpoint: string, options: RequestInit): unkn
       registrarEvento({ evento: 'ACESSO_NEGADO', sessao, detalhes: { tokenInicio: pub[1].slice(0, 6) } });
       throw new Error('Link do formulário inválido. Peça o link atualizado à coordenação.');
     }
-    if (pub[2] === 'grupos') {
+    if (pub[2] === 'acesso') {
       registrarEvento({ evento: 'ACESSO', sessao });
-      return GRUPOS.map(({ integrantes, ...g }) => ({ ...g, integrantes: null }));
+      return { ok: true };
     }
+    if (pub[2] === 'grupos') return GRUPOS.map(({ integrantes, ...g }) => ({ ...g, integrantes: null }));
     const email = String(body.avaliador_email || '').trim().toLowerCase();
     const nome = String(body.avaliador_nome || '').trim();
     if (pub[2] === 'identificacao') {

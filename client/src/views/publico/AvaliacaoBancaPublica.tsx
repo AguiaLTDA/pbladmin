@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, CheckCircle2, Loader2, UserCheck } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
 import { FormularioAvaliacaoBanca, formatarNota } from '../../components/FormularioAvaliacaoBanca';
@@ -39,6 +39,18 @@ export const AvaliacaoBancaPublicaView: React.FC<{ token: string }> = ({ token }
   const [enviado, setEnviado] = useState<{ grupoNome: string; nota: number | null } | null>(null);
   // Remonta o formulário a cada "Enviar outra resposta".
   const [rodada, setRodada] = useState(0);
+  const [linkInvalido, setLinkInvalido] = useState<string | null>(null);
+  const acessoRegistrado = useRef(false);
+
+  // Registra a abertura do link na auditoria assim que a página carrega (antes da
+  // identificação) e já confere o token. O ref evita o registro duplo do StrictMode.
+  useEffect(() => {
+    if (acessoRegistrado.current) return;
+    acessoRegistrado.current = true;
+    apiRequest(`/public/banca/${token}/acesso`, { method: 'POST', body: JSON.stringify({ sessao }) }).catch((err) =>
+      setLinkInvalido(err.message || 'Não foi possível abrir o formulário.')
+    );
+  }, [token, sessao]);
 
   async function identificar(e: React.FormEvent) {
     e.preventDefault();
@@ -80,7 +92,12 @@ export const AvaliacaoBancaPublicaView: React.FC<{ token: string }> = ({ token }
           </p>
         </header>
 
-        {!identificado ? (
+        {linkInvalido ? (
+          <div className="card text-center" style={{ padding: '2rem 1.5rem' }}>
+            <h3 className="font-bold mb-2">Não foi possível abrir o formulário</h3>
+            <p className="text-muted mb-0">{linkInvalido}</p>
+          </div>
+        ) : !identificado ? (
           <form className="card" onSubmit={identificar} noValidate>
             <h3 className="font-bold mb-1">Identificação</h3>
             <p className="text-muted text-sm mb-3">
