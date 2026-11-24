@@ -180,4 +180,79 @@ describe('reenvio do PBL escrito', () => {
     expect(late.statusCode).toBe(400);
     expect(runAsync).not.toHaveBeenCalled();
   });
+
+  const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  function setupSlides(existing?: { id: number; status: string }) {
+    getAsync
+      .mockResolvedValueOnce({ id: 1 })
+      .mockResolvedValueOnce({ id: 20, prazo_entrega: '2026-11-24T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA' })
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(existing ? { ...existing, primeira_entrega_final_em: '2026-11-22T10:00:00-03:00' } : undefined);
+    queryAsync.mockImplementation(async (sql: string) => sql.includes('FROM arquivos_entregas')
+      ? [{ arquivo_id: 31 }]
+      : [{ id: 34, enviado_por: 7, nome_original: 'certo.pptx', mime_type: PPTX }]);
+  }
+
+  it.each(['ENVIADO', 'ATRASADO'])('após o prazo, quem já enviou (%s) substitui os slides mantendo status, data e comprovante', async (status) => {
+    vi.setSystemTime(new Date('2026-11-25T10:00:00-03:00'));
+    setupSlides({ id: 12, status });
+    const res = resposta();
+
+    await submitStudentAnswer({
+      params: { atividadeId: '20' }, body: { arquivoIds: [34], finalSubmit: true },
+      user: { id: 7, perfilNome: 'ALUNO' }
+    } as any, res as any);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.status).toBe(status);
+    const sqls = runAsync.mock.calls.map((c) => c[0] as string);
+    expect(sqls.some((q) => /status\s*=|data_envio|comprovante_hash/.test(q))).toBe(false);
+    expect(runAsync).toHaveBeenCalledWith('INSERT INTO arquivos_entregas (entrega_id, arquivo_id) VALUES (?, ?)', [12, 34]);
+    expect(logAudit).toHaveBeenCalledWith(7, 'SUBSTITUIR_ARQUIVOS_SLIDES', 'entregas', 12,
+      { arquivosAnteriores: [31], arquivosNovos: [34] });
+  });
+
+  it('após o prazo, quem nunca enviou ou só tem rascunho continua bloqueado', async () => {
+    vi.setSystemTime(new Date('2026-11-25T10:00:00-03:00'));
+    for (const existing of [undefined, { id: 12, status: 'RASCUNHO' }]) {
+      getAsync.mockReset();
+      runAsync.mockClear();
+      setupSlides(existing);
+      const res = resposta();
+      await submitStudentAnswer({
+        params: { atividadeId: '20' }, body: { arquivoIds: [34], finalSubmit: true },
+        user: { id: 7, perfilNome: 'ALUNO' }
+      } as any, res as any);
+      expect(res.statusCode).toBe(400);
+      expect(runAsync).not.toHaveBeenCalled();
+    }
+  });
+
+  it('bloqueia a substituição dos slides depois de 27/11', async () => {
+    vi.setSystemTime(new Date('2026-11-28T00:00:00-03:00'));
+    setupSlides({ id: 12, status: 'ENVIADO' });
+    const res = resposta();
+    await submitStudentAnswer({
+      params: { atividadeId: '20' }, body: { arquivoIds: [34], finalSubmit: true },
+      user: { id: 7, perfilNome: 'ALUNO' }
+    } as any, res as any);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toContain('27/11/2026');
+    expect(runAsync).not.toHaveBeenCalled();
+  });
+
+  it('colega de grupo que não enviou não substitui a entrega compartilhada', async () => {
+    vi.setSystemTime(new Date('2026-11-25T10:00:00-03:00'));
+    getAsync
+      .mockResolvedValueOnce({ id: 1 })
+      .mockResolvedValueOnce({ id: 20, prazo_entrega: '2026-11-24T02:59:59.999Z', natureza: 'OBRIGATORIA_SEM_NOTA' })
+      .mockResolvedValueOnce({ id: 12 });
+    const res = resposta();
+    await submitStudentAnswer({
+      params: { atividadeId: '20' }, body: { arquivoIds: [34], finalSubmit: true },
+      user: { id: 9, perfilNome: 'ALUNO' }
+    } as any, res as any);
+    expect(res.statusCode).toBe(409);
+    expect(runAsync).not.toHaveBeenCalled();
+  });
 });

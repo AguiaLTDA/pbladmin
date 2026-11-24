@@ -78,7 +78,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
     return <div className="p-4 text-center text-muted">Carregando detalhes da atividade PBL...</div>;
   }
 
-  const { atividade, versao, etapas, arquivos, entrega, feedback, turmaId, grupoId, podeReenviar } = data;
+  const { atividade, versao, etapas, arquivos, entrega, feedback, turmaId, grupoId, podeReenviar, podeSubstituirSlides } = data;
 
   // O atalho "enviar para grupo" cria a atividade so com o PDF: cenario, problema
   // central, objetivos, etapas e criterios ficam vazios. Renderizar os titulos
@@ -90,8 +90,10 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
   );
 
   const isFinalSubmitted = Boolean(entrega && (entrega.status === 'ENVIADO' || entrega.status === 'ATRASADO'));
-  const isEditingLocked = isFinalSubmitted && (Boolean(entrega.entrega_compartilhada) || !podeReenviar);
   const isSlidesDelivery = atividade.natureza === 'OBRIGATORIA_SEM_NOTA';
+  // Slides finalizados: só quem enviou pode trocar os arquivos (até 27/11), sem reabrir a entrega.
+  const isSlidesReplacement = isSlidesDelivery && isFinalSubmitted && Boolean(podeSubstituirSlides);
+  const isEditingLocked = isFinalSubmitted && (Boolean(entrega.entrega_compartilhada) || !(podeReenviar || isSlidesReplacement));
   // Atalho "enviar arquivo para grupo": material de apoio, sem entrega esperada
   // (a menos que o aluno já tenha respondido mesmo assim — aí mantém a entrega visível).
   const isInformativa = atividade.natureza === 'INFORMATIVA' && !entrega;
@@ -148,7 +150,10 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
       return;
     }
 
-    if (finalSubmit && !window.confirm('Tem certeza que deseja realizar a entrega final? O comprovante com hash de entrega será gerado.')) {
+    const confirmacao = isSlidesReplacement
+      ? 'Substituir os arquivos dos slides já enviados? A data e o comprovante do envio original serão mantidos.'
+      : 'Tem certeza que deseja realizar a entrega final? O comprovante com hash de entrega será gerado.';
+    if (finalSubmit && !window.confirm(confirmacao)) {
       return;
     }
 
@@ -250,6 +255,9 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
               Enviada por <strong>{entrega.enviado_por_nome}</strong>
               {entrega.entrega_compartilhada && ' · Entrega do grupo'}
             </p>
+          )}
+          {isSlidesReplacement && (
+            <p className="text-sm mb-2">Enviou o arquivo errado? Você pode substituir os slides até 27/11/2026, às 23h59 (Brasília). A entrega continua registrada com a data e o comprovante originais.</p>
           )}
           {podeReenviar && (
             <p className="text-sm mb-2">Sua primeira entrega foi feita até 04/11. Você pode editar e reenviar até 15/11, às 23h59 (Brasília), sem desconto por atraso. O reenvio substitui a versão anterior; uma nova avaliação pode alterar a nota.</p>
@@ -524,7 +532,7 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
               className="btn btn-success"
               style={{ padding: '0.75rem 1.5rem', fontSize: '1rem' }}
             >
-              <Send size={18} /> {submitting ? 'Enviando...' : isFinalSubmitted ? 'Reenviar Entrega Final' : 'Realizar Entrega Final'}
+              <Send size={18} /> {submitting ? 'Enviando...' : isSlidesReplacement ? 'Substituir Arquivos dos Slides' : isFinalSubmitted ? 'Reenviar Entrega Final' : 'Realizar Entrega Final'}
             </button>
           </div>
         ) : (

@@ -5,7 +5,7 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import { logAudit } from '../services/audit';
 import { professorAlcancaAtividade } from '../services/horarioImport';
 import { calculatePblWrittenPenalty, canResubmitEarlyPblWrittenSubmission, PBL_WRITTEN_RESUBMISSION_END } from '../services/pblWrittenPenalty';
-import { SLIDES_PRESENTATION_DEADLINE, SLIDES_PRESENTATION_NATURE } from '../services/slidesPresentationDelivery';
+import { canReplaceSlidesFiles, SLIDES_PRESENTATION_DEADLINE, SLIDES_PRESENTATION_NATURE } from '../services/slidesPresentationDelivery';
 import { studentDeliveryCte } from '../services/studentGroupDelivery';
 
 // --- STUDENT PORTAL ENDPOINTS ---
@@ -195,6 +195,11 @@ export async function getStudentActivityDetails(req: AuthenticatedRequest, res: 
         act.periodo_nome === '2026/2' &&
         canResubmitEarlyPblWrittenSubmission(entrega.primeira_entrega_final_em)
       ),
+      // Só quem enviou a entrega de slides troca os arquivos; colegas de grupo veem a entrega compartilhada.
+      podeSubstituirSlides: Boolean(
+        entrega && !entrega.entrega_compartilhada && act.natureza === SLIDES_PRESENTATION_NATURE &&
+        canReplaceSlidesFiles(entrega.status)
+      ),
       arquivosEntrega,
       feedback,
       turmaId: matricula?.turma_id ?? null,
@@ -254,6 +259,16 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
     const now = new Date();
     const isSlidesDelivery = pub.natureza === SLIDES_PRESENTATION_NATURE;
     const submittedFileIds = Array.isArray(arquivoIds) ? arquivoIds : [];
+
+    // Entrega excluída pela coordenadoria não conta: o aluno recomeça numa entrega nova.
+    const existingEntrega = await getAsync<{ id: number; status: string; primeira_entrega_final_em: string | null }>(
+      'SELECT id, status, primeira_entrega_final_em FROM entregas WHERE publicacao_id = ? AND aluno_id = ? AND deletado_em IS NULL',
+      [pub.id, studentId]
+    );
+    // Troca de arquivos de slides já finalizados: mantém status, data e comprovante originais.
+    const isSlidesReplacement = isSlidesDelivery && Boolean(finalSubmit) &&
+      ['ENVIADO', 'ATRASADO'].includes(existingEntrega?.status ?? '');
+
     if (isSlidesDelivery) {
       if (typeof conteudoResposta === 'string' && conteudoResposta.trim()) {
         return res.status(400).json({ message: 'Esta entrega aceita somente arquivos PowerPoint (.pptx), sem resposta em texto.' });
@@ -265,8 +280,11 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
       if (finalSubmit && submittedFileIds.length === 0) {
         return res.status(400).json({ message: 'Anexe ao menos um arquivo PowerPoint (.pptx) para finalizar a entrega.' });
       }
-      if (finalSubmit && now > SLIDES_PRESENTATION_DEADLINE) {
+      if (finalSubmit && now > SLIDES_PRESENTATION_DEADLINE && !isSlidesReplacement) {
         return res.status(400).json({ message: 'O prazo para enviar os slides terminou em 23/11/2026, às 23h59 (horário de Brasília).' });
+      }
+      if (isSlidesReplacement && !canReplaceSlidesFiles(existingEntrega?.status, now)) {
+        return res.status(400).json({ message: 'O prazo para substituir os slides terminou em 27/11/2026, às 23h59 (horário de Brasília).' });
       }
       if (submittedFileIds.length > 0) {
         const placeholders = submittedFileIds.map(() => '?').join(', ');
@@ -294,11 +312,25 @@ export async function submitStudentAnswer(req: AuthenticatedRequest, res: Respon
       receiptHash = `PBL-REC-${studentId}-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     }
 
-    // Entrega excluída pela coordenadoria não conta: o aluno recomeça numa entrega nova.
-    const existingEntrega = await getAsync<{ id: number; status: string; primeira_entrega_final_em: string | null }>(
-      'SELECT id, status, primeira_entrega_final_em FROM entregas WHERE publicacao_id = ? AND aluno_id = ? AND deletado_em IS NULL',
-      [pub.id, studentId]
-    );
+    if (isSlidesReplacement && existingEntrega) {
+      const anteriores = await queryAsync<{ arquivo_id: number }>(
+        'SELECT arquivo_id FROM arquivos_entregas WHERE entrega_id = ?', [existingEntrega.id]
+      );
+      await runAsync('UPDATE entregas SET atualizado_em = CURRENT_TIMESTAMP WHERE id = ?', [existingEntrega.id]);
+      await runAsync('DELETE FROM arquivos_entregas WHERE entrega_id = ?', [existingEntrega.id]);
+      for (const fId of submittedFileIds) {
+        await runAsync('INSERT INTO arquivos_entregas (entrega_id, arquivo_id) VALUES (?, ?)', [existingEntrega.id, fId]);
+      }
+      await logAudit(studentId, 'SUBSTITUIR_ARQUIVOS_SLIDES', 'entregas', existingEntrega.id, {
+        arquivosAnteriores: anteriores.map((a) => a.arquivo_id),
+        arquivosNovos: submittedFileIds
+      });
+      return res.json({
+        message: 'Arquivos dos slides substituídos com sucesso. A data e o comprovante do envio original foram mantidos.',
+        entregaId: existingEntrega.id,
+        status: existingEntrega.status
+      });
+    }
 
     if (finalSubmit && existingEntrega && ['ENVIADO', 'ATRASADO'].includes(existingEntrega.status) &&
       pub.pbl_1 && pub.periodo_nome === '2026/2' && now.getTime() > PBL_WRITTEN_RESUBMISSION_END) {
