@@ -68,7 +68,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentRoute, navigate, aberto
 
   const getProfessorItems = () => [
     { path: '/professor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/professor/avaliacao-banca', label: 'Avaliação da Banca', icon: ClipboardCheck },
     { path: '/professor/turmas', label: 'Minhas Turmas & Horário', icon: CalendarDays },
     { path: '/professor/alunos', label: 'Alunos & Grupos', icon: Briefcase },
     { path: '/professor/entregas', label: 'Acompanhamento & Entregas', icon: Award },

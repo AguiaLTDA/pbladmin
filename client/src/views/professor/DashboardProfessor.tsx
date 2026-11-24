@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { CronogramaPBL } from '../../components/CronogramaPBL';
 import { ManualAlunoPBLButton } from '../../components/ManualAlunoPBLButton';
-import { Send, Users, Award, ArrowRight, AlertTriangle, GraduationCap, Layers, Star, ClipboardCheck } from 'lucide-react';
-import { SALAS_BANCA } from '../../constants/salasBanca';
+import { Send, Users, Award, ArrowRight, AlertTriangle, GraduationCap, Layers, Star } from 'lucide-react';
 
 interface ProfessorDashboardData {
   kpis: {
@@ -43,59 +42,6 @@ export const DashboardProfessorView: React.FC<Props> = ({ navigate }) => {
           Acompanhe as entregas e os casos PBL dos grupos das turmas em que você leciona.
         </p>
       </div>
-
-      {/* Destaque das bancas do PBL oral: some sozinho depois do último dia de banca. */}
-      {(() => {
-        const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-        const ultimo = SALAS_BANCA[SALAS_BANCA.length - 1]?.data;
-        if (!ultimo || hoje > ultimo) return null;
-        const diaDeHoje = SALAS_BANCA.find((d) => d.data === hoje);
-        return (
-          <div
-            className="card mb-4"
-            style={{
-              background: 'linear-gradient(135deg, var(--primary, #092f1e) 0%, #166534 100%)',
-              color: '#fff',
-              border: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '1rem',
-              flexWrap: 'wrap'
-            }}
-          >
-            <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  background: 'rgba(255,255,255,0.18)',
-                  borderRadius: '12px',
-                  padding: '0.75rem',
-                  display: 'flex'
-                }}
-              >
-                <ClipboardCheck size={28} />
-              </div>
-              <div>
-                <h3 className="font-bold" style={{ fontSize: '1.15rem', color: '#fff', margin: 0 }}>
-                  Bancas do PBL oral — 24 a 27/11
-                </h3>
-                <p style={{ margin: '0.25rem 0 0', opacity: 0.9, fontSize: '0.9rem' }}>
-                  {diaDeHoje
-                    ? `Hoje (${diaDeHoje.rotulo}) há bancas em ${diaDeHoje.salas.length} ${diaDeHoje.salas.length === 1 ? 'sala' : 'salas'}. Escolha o dia e a sala e avalie cada grupo pelo formulário.`
-                    : 'Escolha o dia e a sala da sua banca e avalie cada grupo pelo formulário.'}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => navigate('/professor/avaliacao-banca')}
-              className="btn"
-              style={{ background: '#fff', color: 'var(--primary, #092f1e)', fontWeight: 700 }}
-            >
-              Avaliar grupos agora <ArrowRight size={16} />
-            </button>
-          </div>
-        );
-      })()}
 
       {/* Grid de KPIs */}
       <div className="grid-kpi">

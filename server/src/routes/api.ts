@@ -261,9 +261,9 @@ router.get('/autoavaliacao/status', authenticateToken, requireRole('ADMIN', 'PRO
 
 // --- AVALIAÇÃO DA BANCA (PBL oral) ---
 // Professor e admin avaliam qualquer grupo participante; só o admin vê todas as notas.
-router.get('/banca/grupos', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), bancaCtrl.listarGruposBanca);
-router.get('/banca/minhas', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), bancaCtrl.listarMinhasAvaliacoesBanca);
-router.put('/banca/grupos/:grupoId/avaliacao', authenticateToken, requireRole('ADMIN', 'PROFESSOR'), bancaCtrl.salvarAvaliacaoBanca);
+router.get('/banca/grupos', authenticateToken, requireRole('ADMIN'), bancaCtrl.listarGruposBanca);
+router.get('/banca/minhas', authenticateToken, requireRole('ADMIN'), bancaCtrl.listarMinhasAvaliacoesBanca);
+router.put('/banca/grupos/:grupoId/avaliacao', authenticateToken, requireRole('ADMIN'), bancaCtrl.salvarAvaliacaoBanca);
 router.get('/banca/avaliacoes', authenticateToken, requireRole('ADMIN'), bancaCtrl.listarAvaliacoesBanca);
 router.get('/banca/link-publico', authenticateToken, requireRole('ADMIN'), bancaCtrl.obterLinkPublicoBanca);
 router.get('/banca/auditoria-publica', authenticateToken, requireRole('ADMIN'), bancaCtrl.listarAuditoriaBancaPublica);
