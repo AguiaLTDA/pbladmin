@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { apiRequest } from '../../services/api';
+import { apiRequest, baixarRelatorioAutenticado } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { BarChart3, Download, Search, Filter, FileSpreadsheet, Archive, ArchiveRestore } from 'lucide-react';
 
@@ -26,24 +26,9 @@ export const RelatoriosAdminView: React.FC = () => {
   }, [statusFilter]);
 
   const handleExportCSV = (tipo: 'ATIVIDADES' | 'ENTREGAS') => {
-    const url = `http://localhost:4000/api/reports/export/csv?tipo=${tipo}`;
-    const token = localStorage.getItem('pbl_auth_token');
-
-    fetch(url, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then((res) => res.blob())
-      .then((blob) => {
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = `relatorio_${tipo.toLowerCase()}_pbl.csv`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        showToast(`Relatório em CSV exportado com sucesso!`, 'success');
-      })
-      .catch((err) => showToast('Erro ao exportar CSV.', 'error'));
+    baixarRelatorioAutenticado(`/reports/export/csv?tipo=${tipo}`, `relatorio_${tipo.toLowerCase()}_pbl.csv`)
+      .then(() => showToast(`Relatório em CSV exportado com sucesso!`, 'success'))
+      .catch((err: Error) => showToast(err.message || 'Erro ao exportar CSV.', 'error'));
   };
 
   const handleAlterarStatus = async (id: number, novoStatus: 'ARQUIVADO' | 'ENCERRADO', confirmar?: string) => {
