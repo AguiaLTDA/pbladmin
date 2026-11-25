@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, Save } from 'lucide-react';
 import { apiRequest } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { OUTRA_SALA, SALAS_BANCA } from '../constants/salasBanca';
+import { filtrarGruposDaSala, OUTRA_SALA, SALAS_BANCA } from '../constants/salasBanca';
 
 // Perguntas do formulário da banca: as sete do formulário de julho + material de apoio.
 export const CRITERIOS_BANCA = [
@@ -198,7 +198,8 @@ export const FormularioAvaliacaoBanca: React.FC<Props> = ({ editando, onSalvo, p
   }, [editando]);
 
   const salasDoDia = SALAS_BANCA.find((d) => d.data === form.dia)?.salas ?? [];
-  const turmasDaSala = salasDoDia.find((x) => x.sala === form.sala)?.turmas;
+  const salaEscolhida = salasDoDia.find((x) => x.sala === form.sala);
+  const turmasDaSala = salaEscolhida?.turmas;
 
   // Turmas da sala escolhida (dia + sala); "Outra sala" libera todas as participantes.
   const turmas = useMemo(() => {
@@ -209,10 +210,15 @@ export const FormularioAvaliacaoBanca: React.FC<Props> = ({ editando, onSalvo, p
     return Array.from(mapa.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   }, [grupos, form.sala, turmasDaSala]);
 
-  const gruposDaTurma = useMemo(
-    () => grupos.filter((g) => g.turma_id === form.turmaId),
-    [grupos, form.turmaId]
-  );
+  // Turma dividida entre salas: mostra só os grupos desta sala ("Outra sala" mostra todos).
+  // Na edição, o grupo já avaliado continua na lista.
+  const gruposDaTurma = useMemo(() => {
+    const daTurma = grupos.filter((g) => g.turma_id === form.turmaId);
+    if (form.sala === OUTRA_SALA) return daTurma;
+    const daSala = filtrarGruposDaSala(daTurma, salaEscolhida, daTurma[0]?.turma_nome);
+    const selecionado = daTurma.find((g) => g.id === form.grupoId);
+    return selecionado && !daSala.includes(selecionado) ? [...daSala, selecionado] : daSala;
+  }, [grupos, form.turmaId, form.sala, form.grupoId, salaEscolhida]);
   const grupoSelecionado = grupos.find((g) => g.id === form.grupoId);
   const todasNotas = CRITERIOS_BANCA.every((c) => form.notas[c.key]);
   const notaSugerida = todasNotas ? notaBanca(form.notas) : null;
