@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { queryAsync } from '../config/db';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { entregaGrupoTurmaJoins } from '../services/studentGroupDelivery';
 
 export async function getGeneralReport(req: AuthenticatedRequest, res: Response) {
   try {
@@ -54,20 +55,22 @@ export async function exportReportCSV(req: AuthenticatedRequest, res: Response) 
     if (tipo === 'ENTREGAS') {
       const rows = await queryAsync<any>(
         `SELECT a.codigo_unico, a.titulo, u.nome as aluno_nome, u.email as aluno_email,
+                g.nome as grupo_nome, t.nome as turma_nome,
                 e.status as status_entrega, e.data_envio, e.comprovante_hash,
                 fb.nota_escrita, fb.nota_oral, fb.nota_total
          FROM entregas e
          JOIN publicacoes pub ON e.publicacao_id = pub.id
          JOIN atividades_pbl a ON pub.atividade_id = a.id
          JOIN usuarios u ON e.aluno_id = u.id
+         ${entregaGrupoTurmaJoins}
          LEFT JOIN feedbacks fb ON e.id = fb.entrega_id
          WHERE e.deletado_em IS NULL AND a.deletado_em IS NULL
          ORDER BY e.data_envio DESC`
       );
 
-      let csv = 'Codigo PBL;Titulo Atividade;Aluno;Email;Status Entrega;Data Envio;Comprovante Hash;Nota Escrita;Nota Oral;Nota Total\n';
+      let csv = 'Codigo PBL;Titulo Atividade;Aluno;Email;Grupo;Turma;Status Entrega;Data Envio;Comprovante Hash;Nota Escrita;Nota Oral;Nota Total\n';
       rows.forEach((r) => {
-        csv += `"${r.codigo_unico}";"${r.titulo}";"${r.aluno_nome}";"${r.aluno_email}";"${r.status_entrega}";"${r.data_envio || ''}";"${r.comprovante_hash || ''}";"${r.nota_escrita || 0}";"${r.nota_oral || 0}";"${r.nota_total || 0}"\n`;
+        csv += `"${r.codigo_unico}";"${r.titulo}";"${r.aluno_nome}";"${r.aluno_email}";"${r.grupo_nome || 'Individual'}";"${r.turma_nome || ''}";"${r.status_entrega}";"${r.data_envio || ''}";"${r.comprovante_hash || ''}";"${r.nota_escrita || 0}";"${r.nota_oral || 0}";"${r.nota_total || 0}"\n`;
       });
 
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');

@@ -6,7 +6,7 @@ import { logAudit } from '../services/audit';
 import { professorAlcancaAtividade } from '../services/horarioImport';
 import { calculatePblWrittenPenalty, canResubmitEarlyPblWrittenSubmission, PBL_WRITTEN_RESUBMISSION_END } from '../services/pblWrittenPenalty';
 import { SLIDES_PRESENTATION_DEADLINE, SLIDES_PRESENTATION_NATURE } from '../services/slidesPresentationDelivery';
-import { studentDeliveryCte } from '../services/studentGroupDelivery';
+import { entregaGrupoTurmaJoins, studentDeliveryCte } from '../services/studentGroupDelivery';
 
 // --- STUDENT PORTAL ENDPOINTS ---
 
@@ -474,9 +474,8 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
       params.push(pub.id);
     }
 
-    // Um aluno pode ter mais de uma matrícula ativa, então o LEFT JOIN em matriculas/turmas
-    // pode multiplicar linhas por entrega; DISTINCT ON (e.id) mantém uma linha por entrega,
-    // igual ao efeito do GROUP BY e.id "relaxado" que o SQLite permitia.
+    // Grupo e turma seguem a matrícula de quem enviou (entregaGrupoTurmaJoins), que já
+    // devolve uma linha por entrega; DISTINCT ON (e.id) protege contra feedbacks duplicados.
     let sql = `
       SELECT DISTINCT ON (e.id)
              e.*, u.nome as aluno_nome, u.email as aluno_email,
@@ -497,9 +496,7 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
       JOIN periodos_letivos pl ON pl.id = a.periodo_letivo_id
       JOIN usuarios u ON e.aluno_id = u.id
       LEFT JOIN contexto_aluno ca ON ca.usuario_id = e.aluno_id
-      LEFT JOIN grupos g ON e.grupo_id = g.id
-      LEFT JOIN matriculas m ON m.usuario_id = e.aluno_id AND m.deletado_em IS NULL
-      LEFT JOIN turmas t ON m.turma_id = t.id
+      ${entregaGrupoTurmaJoins}
       LEFT JOIN feedbacks fb ON e.id = fb.entrega_id
       WHERE ${filtroAtividade} AND e.deletado_em IS NULL
     `;
@@ -692,7 +689,7 @@ export async function listDeletedSubmissions(req: AuthenticatedRequest, res: Res
        JOIN usuarios u ON e.aluno_id = u.id
        JOIN publicacoes p ON e.publicacao_id = p.id
        JOIN atividades_pbl a ON p.atividade_id = a.id
-       LEFT JOIN grupos g ON e.grupo_id = g.id
+       ${entregaGrupoTurmaJoins}
        WHERE e.deletado_em IS NOT NULL
        ORDER BY e.deletado_em DESC`
     );

@@ -180,16 +180,15 @@ export const EntregasProfessorView: React.FC = () => {
       const atividade = activities.find((a) => a.id === sub.atividade_id);
       if (selectedActivityId && sub.atividade_id !== Number(selectedActivityId)) return [];
       if (selectedGroup && String(sub.grupo_id ?? 'individual') !== selectedGroup) return [];
-      const arquivos = sub.arquivos?.length ? sub.arquivos : [null];
-      return arquivos.flatMap((arquivo) => {
-        if (termo && ![
-          arquivo?.nome_original,
-          sub.grupo_nome,
-          sub.atividade_titulo,
-          sub.codigo_unico
-        ].some((campo) => normalizarBusca(campo || '').includes(termo))) return [];
-        return [{ sub, arquivo, atividade }];
-      });
+      // Uma linha por entrega: os arquivos do mesmo envio ficam juntos e há um único "Avaliar".
+      if (termo && ![
+        ...(sub.arquivos || []).map((arquivo) => arquivo.nome_original),
+        sub.aluno_nome,
+        sub.grupo_nome,
+        sub.atividade_titulo,
+        sub.codigo_unico
+      ].some((campo) => normalizarBusca(campo || '').includes(termo))) return [];
+      return [{ sub, atividade }];
     });
   }, [activities, search, selectedActivityId, selectedGroup, submissions]);
   const activeFilters = Boolean(selectedActivityId || selectedGroup || search.trim());
@@ -377,9 +376,9 @@ export const EntregasProfessorView: React.FC = () => {
       ) : linhas.length === 0 ? (
         <div className="card text-center py-8">
           <Award size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
-          <h3 className="font-bold">{submissions.length === 0 ? 'Nenhuma entrega recebida ainda' : 'Nenhum arquivo corresponde aos filtros'}</h3>
+          <h3 className="font-bold">{submissions.length === 0 ? 'Nenhuma entrega recebida ainda' : 'Nenhuma entrega corresponde aos filtros'}</h3>
           <p className="text-muted text-sm">
-            {submissions.length === 0 ? 'As entregas enviadas pelas turmas aparecerão nesta lista.' : 'Altere a busca ou os filtros para ver outros arquivos.'}
+            {submissions.length === 0 ? 'As entregas enviadas pelas turmas aparecerão nesta lista.' : 'Altere a busca ou os filtros para ver outras entregas.'}
           </p>
           {activeFilters && <button type="button" onClick={clearFilters} className="btn btn-secondary btn-sm">Limpar filtros</button>}
         </div>
@@ -388,7 +387,7 @@ export const EntregasProfessorView: React.FC = () => {
                   <table className="table">
                     <thead>
                       <tr>
-                        <th>Arquivo</th>
+                        <th>Arquivos</th>
                         <th>Grupo</th>
                         <th>Turma</th>
                         <th>Atividade</th>
@@ -397,15 +396,12 @@ export const EntregasProfessorView: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {linhas.map(({ sub, arquivo, atividade }) => {
+                      {linhas.map(({ sub, atividade }) => {
                         const semNota = sub.natureza === 'OBRIGATORIA_SEM_NOTA' || atividade?.natureza === 'OBRIGATORIA_SEM_NOTA';
-                        return <tr key={`${sub.id}-${arquivo?.id ?? 'sem-arquivo'}`}>
+                        return <tr key={sub.id}>
                           <td>
-                            {arquivo ? <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setArquivoEmFoco({ id: arquivo.id, nome: arquivo.nome_original, mimeType: arquivo.mime_type, descricao: `Entrega de ${sub.aluno_nome || 'aluno'}` })}><FileText size={13} /> {arquivo.nome_original}</button>
-                              <button className="btn btn-outline btn-sm" onClick={() => baixarArquivo(arquivo)} aria-label={`Baixar ${arquivo.nome_original}`}><Download size={13} /> {/\.pptx$/i.test(arquivo.nome_original) ? 'Baixar PPTX' : 'Baixar'}</button>
-                            </div> : <span className="text-muted text-sm">Nenhum arquivo anexado</span>}
-                            <div className="text-muted text-sm">{sub.aluno_nome} <MedalhaContexto completo={sub.contexto_completo} tamanho={13} /> · {sub.aluno_email}</div>
+                            {renderArquivos(sub.arquivos, `Entrega de ${sub.grupo_nome || sub.aluno_nome || 'aluno'}`)}
+                            <div className="text-muted text-sm">Enviado por {sub.aluno_nome} <MedalhaContexto completo={sub.contexto_completo} tamanho={13} /> · {sub.aluno_email}</div>
                           </td>
                           <td>
                             {sub.grupo_nome || 'Entrega individual'}
@@ -504,13 +500,20 @@ export const EntregasProfessorView: React.FC = () => {
             <div className="modal-header">
               <h3 className="font-bold flex items-center gap-2">
                 <Award size={20} color="var(--primary)" />
-                Avaliação de Entrega — {selectedSubmission.aluno_nome}
+                Avaliação de Entrega — {selectedSubmission.grupo_nome || selectedSubmission.aluno_nome}
               </h3>
               <button onClick={() => setShowModal(false)} className="btn btn-sm btn-secondary">X</button>
             </div>
 
             <form onSubmit={handleEvaluate}>
               <div className="modal-body">
+                <p className="text-muted text-sm mb-4">
+                  {!selectedSubmission.grupo_nome
+                    ? `Entrega individual de ${selectedSubmission.aluno_nome}.`
+                    : ['ENVIADO', 'ATRASADO'].includes(selectedSubmission.status)
+                      ? `Entrega do grupo ${selectedSubmission.grupo_nome}, enviada por ${selectedSubmission.aluno_nome}. A nota vale para todos os integrantes do grupo.`
+                      : `Rascunho do grupo ${selectedSubmission.grupo_nome}, salvo por ${selectedSubmission.aluno_nome}. Os colegas só veem a nota depois do envio final.`}
+                </p>
                 <div className="card mb-4" style={{ background: 'var(--bg-main)', padding: '0.85rem' }}>
                   <span className="font-bold text-sm block mb-1">Conteúdo da Resposta Enviada:</span>
                   <p style={{ whiteSpace: 'pre-line', fontSize: '0.85rem' }}>
