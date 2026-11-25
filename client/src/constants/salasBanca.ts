@@ -1,6 +1,7 @@
 // Salas das bancas do PBL oral (24 a 27/11/2026) e as turmas que se apresentam em cada uma.
 // Fontes da verdade:
-// - terça e quarta: "Bancas_PBL_24_e_25_11_2026.xlsx" (abas "PBL Terça 24-11" e "PBL Quarta 25-11");
+// - terça: "Bancas_PBL_24_e_25_11_2026.xlsx" (aba "PBL Terça 24-11");
+// - quarta: versão revisada de "Bancas_PBL_24_e_25_11_2026.xlsx" recebida em 25/11/2026 (aba "PBL Quarta 25-11");
 // - quinta e sexta: "Programacao_PBL_Reorganizada_Salas_24_a_27_Nov_2026.xlsx".
 // O professor escolhe dia e sala livremente; a sala só filtra as turmas oferecidas.
 // Os nomes das turmas são os do banco do PBL (ex.: "4º ADS" = "4º Análise e Desenv. de Sistemas").
@@ -26,13 +27,17 @@ export const SALAS_BANCA: DiaBanca[] = [
     data: '2026-11-25',
     rotulo: 'Quarta-feira — 25/11',
     salas: [
-      { sala: 'Miniauditório 2', turmas: ['2º Análise e Desenv. de Sistemas'] },
+      { sala: 'Prédio C, Sala 004', turmas: ['2º Análise e Desenv. de Sistemas'] },
       { sala: 'Prédio B, Sala 005', turmas: ['2º Agronomia'] },
       { sala: 'Prédio B, Sala 009', turmas: ['8º Agronomia', '2º Agronomia'] },
-      { sala: 'Prédio B, Sala 011', turmas: ['4º Comunicação Social', '4º Ciências Contábeis'] },
       {
-        sala: 'Bloco C, Sala 004',
-        turmas: ['8º Engenharia Mecânica', '4º Engenharia Mecânica', '2º Análise e Desenv. de Sistemas']
+        sala: 'Prédio B, Sala 011',
+        turmas: [
+          '8º Engenharia Mecânica',
+          '4º Engenharia Mecânica',
+          '2º Análise e Desenv. de Sistemas',
+          '4º Ciências Contábeis'
+        ]
       }
     ]
   },
