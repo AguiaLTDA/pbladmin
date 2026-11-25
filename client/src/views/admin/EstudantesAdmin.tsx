@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useToast } from '../../context/ToastContext';
 import { FormularioEstudante } from '../../components/FormularioEstudante';
-import { apiRequest } from '../../services/api';
+import { apiRequest, baixarBlob } from '../../services/api';
 import { StudentRegistration, StudentRegistrationInput } from '../../types';
 import { CURSOS_DISPONIVEIS } from '../../constants/academico';
 import {
@@ -254,11 +254,7 @@ export const EstudantesAdminView: React.FC = () => {
       type: 'text/csv;charset=utf-8;'
     });
 
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `pre-cadastros-pbl-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    baixarBlob(blob, `pre-cadastros-pbl-${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
   const pendentesCount = estudantes.filter((e) => e.status === 'PENDENTE').length;

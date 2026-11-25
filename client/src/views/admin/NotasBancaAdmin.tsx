@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ClipboardList, Download, Filter, Link2, Loader2, ShieldCheck, Star } from 'lucide-react';
-import { apiRequest } from '../../services/api';
+import { apiRequest, baixarBlob } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import {
   AvaliacaoBanca,
@@ -59,12 +59,10 @@ function exportarCsv(linhas: AvaliacaoBanca[]) {
     ];
   });
   const csv = '﻿' + [header, ...dados].map((r) => r.map(escape).join(',')).join('\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `notas-banca-pbl-${new Date().toISOString().slice(0, 10)}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  baixarBlob(
+    new Blob([csv], { type: 'text/csv;charset=utf-8' }),
+    `notas-banca-pbl-${new Date().toISOString().slice(0, 10)}.csv`
+  );
 }
 
 const NotasBanca: React.FC = () => {
