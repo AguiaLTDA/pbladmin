@@ -46,7 +46,7 @@ export async function prorrogarPblEscritoNovembro2026(): Promise<void> {
   // inclusive às avaliações existentes. Repetir a migração não acumula desconto.
   await runAsync(
     `UPDATE feedbacks fb SET nota_escrita = fb.nota_escrita_original,
-       nota_total = fb.nota_escrita_original + fb.nota_oral, nota_escrita_original = NULL
+       nota_total = fb.nota_escrita_original + COALESCE(fb.nota_oral, 0), nota_escrita_original = NULL
      FROM entregas e
      JOIN publicacoes pub ON pub.id = e.publicacao_id
      JOIN atividades_pbl a ON a.id = pub.atividade_id
@@ -69,7 +69,7 @@ export async function prorrogarPblEscritoNovembro2026(): Promise<void> {
   await runAsync(
     `UPDATE feedbacks fb SET nota_escrita_original = fb.nota_escrita,
        nota_escrita = ROUND((fb.nota_escrita * 0.8)::numeric, 2)::double precision,
-       nota_total = ROUND((fb.nota_escrita * 0.8)::numeric, 2)::double precision + fb.nota_oral
+       nota_total = ROUND((fb.nota_escrita * 0.8)::numeric, 2)::double precision + COALESCE(fb.nota_oral, 0)
      FROM entregas e
      JOIN publicacoes pub ON pub.id = e.publicacao_id
      JOIN atividades_pbl a ON a.id = pub.atividade_id

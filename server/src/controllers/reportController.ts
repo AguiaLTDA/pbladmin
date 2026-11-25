@@ -70,7 +70,7 @@ export async function exportReportCSV(req: AuthenticatedRequest, res: Response) 
 
       let csv = 'Codigo PBL;Titulo Atividade;Aluno;Email;Grupo;Turma;Status Entrega;Data Envio;Comprovante Hash;Nota Escrita;Nota Oral;Nota Total\n';
       rows.forEach((r) => {
-        csv += `"${r.codigo_unico}";"${r.titulo}";"${r.aluno_nome}";"${r.aluno_email}";"${r.grupo_nome || 'Individual'}";"${r.turma_nome || ''}";"${r.status_entrega}";"${r.data_envio || ''}";"${r.comprovante_hash || ''}";"${r.nota_escrita || 0}";"${r.nota_oral || 0}";"${r.nota_total || 0}"\n`;
+        csv += `"${r.codigo_unico}";"${r.titulo}";"${r.aluno_nome}";"${r.aluno_email}";"${r.grupo_nome || 'Individual'}";"${r.turma_nome || ''}";"${r.status_entrega}";"${r.data_envio || ''}";"${r.comprovante_hash || ''}";"${r.nota_escrita || 0}";"${r.nota_oral ?? ''}";"${r.nota_total || 0}"\n`;
       });
 
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');

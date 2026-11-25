@@ -180,7 +180,8 @@ export interface StudentSubmission {
   pbl_1?: boolean;
   comprovante_hash?: string;
   nota_escrita?: number;
-  nota_oral?: number;
+  /** null: oral ainda não lançada. */
+  nota_oral?: number | null;
   nota_total?: number;
   observacoes?: string;
   liberado_aluno?: number;
@@ -529,7 +530,8 @@ export interface RevisaoPBLGrupo {
   id: number;
   texto?: string | null;
   nota_escrita?: number;
-  nota_oral?: number;
+  /** null: oral ainda não lançada. */
+  nota_oral?: number | null;
   nota_total?: number;
   liberado_aluno?: number;
   criado_em: string;

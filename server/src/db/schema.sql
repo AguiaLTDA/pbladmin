@@ -445,10 +445,11 @@ CREATE TABLE IF NOT EXISTS feedbacks (
   avaliador_id INTEGER NOT NULL,
   nota_escrita DOUBLE PRECISION DEFAULT 0,
   nota_escrita_original DOUBLE PRECISION DEFAULT NULL,
-  nota_oral DOUBLE PRECISION DEFAULT 0,
+  nota_oral DOUBLE PRECISION DEFAULT NULL, -- NULL: oral ainda não lançada
   nota_total DOUBLE PRECISION DEFAULT 0,
   observacoes TEXT,
   liberado_aluno INTEGER DEFAULT 0,
+  versao INTEGER NOT NULL DEFAULT 0, -- trava contra sobrescrita entre avaliadores
   criado_em TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (entrega_id) REFERENCES entregas(id),
   FOREIGN KEY (avaliador_id) REFERENCES usuarios(id)

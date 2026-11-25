@@ -21,6 +21,7 @@ interface ArquivoEmFoco {
 
 type EntregaComDesconto = StudentSubmission & {
   nota_escrita_original?: number | null;
+  versao?: number | null;
   pbl_1?: boolean;
   periodo_nome?: string;
   primeira_entrega_final_em?: string | null;
@@ -34,6 +35,14 @@ function formatarTamanho(bytes: number): string {
 
 function normalizarBusca(texto: string): string {
   return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+}
+
+/** Escala do Manual do Aluno de 2026/2 para o PBL escrito; períodos anteriores tinham outra. */
+const NOTA_MAXIMA_ESCRITA_PBL = 1.0;
+const NOTA_MAXIMA_ORAL_PBL = 1.5;
+function usaEscalaPbl(sub: StudentSubmission): boolean {
+  const entrega = sub as EntregaComDesconto;
+  return Boolean(entrega.pbl_1) && (entrega.periodo_nome || '') >= '2026/2';
 }
 
 function descontoEscrito(sub: StudentSubmission): number {
@@ -72,8 +81,10 @@ export const EntregasProfessorView: React.FC = () => {
   // Avaliação
   const [showModal, setShowModal] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState<StudentSubmission | null>(null);
-  const [notaEscrita, setNotaEscrita] = useState<number>(0);
-  const [notaOral, setNotaOral] = useState<number>(0);
+  // Texto, para o campo vazio não virar 0 e o `required` do formulário valer.
+  const [notaEscrita, setNotaEscrita] = useState<string>('');
+  // Texto vazio = oral ainda não lançada (o aluno vê "aguardando apresentação").
+  const [notaOral, setNotaOral] = useState<string>('');
   const [observacoes, setObservacoes] = useState('');
   const [liberadoAluno, setLiberadoAluno] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -196,10 +207,12 @@ export const EntregasProfessorView: React.FC = () => {
 
   const openEvaluationModal = (sub: StudentSubmission) => {
     setSelectedSubmission(sub);
-    setNotaEscrita((sub as EntregaComDesconto).nota_escrita_original ?? sub.nota_escrita ?? 0);
-    setNotaOral(sub.nota_oral || 0);
+    const escritaSalva = (sub as EntregaComDesconto).nota_escrita_original ?? sub.nota_escrita;
+    setNotaEscrita(escritaSalva == null ? '' : String(escritaSalva));
+    setNotaOral(sub.nota_oral == null ? '' : String(sub.nota_oral));
     setObservacoes(sub.observacoes || '');
-    setLiberadoAluno(sub.liberado_aluno !== 0);
+    // Só vem marcado se a nota já estava liberada; a primeira avaliação começa oculta ao aluno.
+    setLiberadoAluno(sub.liberado_aluno === 1);
     setShowModal(true);
   };
 
@@ -211,7 +224,13 @@ export const EntregasProfessorView: React.FC = () => {
     try {
       await apiRequest(`/submissions/${selectedSubmission.id}/evaluate`, {
         method: 'POST',
-        body: JSON.stringify({ notaEscrita, notaOral, observacoes, liberadoAluno })
+        body: JSON.stringify({
+          notaEscrita: Number(notaEscrita.replace(',', '.')),
+          notaOral: notaOral.trim() === '' ? null : Number(notaOral.replace(',', '.')),
+          observacoes,
+          liberadoAluno,
+          versao: (selectedSubmission as EntregaComDesconto).versao ?? null
+        })
       });
 
       showToast('Avaliação e feedback registrados com sucesso!', 'success');
@@ -219,6 +238,11 @@ export const EntregasProfessorView: React.FC = () => {
       carregarSubmissoes();
     } catch (err: any) {
       showToast(err.message || 'Erro ao registrar avaliação.', 'error');
+      // Outro avaliador salvou antes: fecha e recarrega para a pessoa ver as notas atuais.
+      if (err.status === 409) {
+        setShowModal(false);
+        carregarSubmissoes();
+      }
     } finally {
       setSubmitting(false);
     }
@@ -414,6 +438,7 @@ export const EntregasProfessorView: React.FC = () => {
                               {semNota ? <span className="text-muted text-sm">Sem nota</span> : <><strong>{(sub.nota_total || 0).toFixed(2)} pts</strong><button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm"><Award size={14} /> Avaliar</button></>}
                               {isAdmin && <button onClick={() => handleExcluir(sub)} className="btn btn-secondary btn-sm" title="Excluir esta entrega (recuperável)"><Trash2 size={14} /> Excluir</button>}
                             </div>
+                            {!semNota && sub.nota_escrita != null && sub.nota_oral == null && <small className="block text-muted">Oral pendente</small>}
                             {!semNota && (sub as EntregaComDesconto).nota_escrita_original != null && <small className="block text-muted">Escrita original: {(sub as EntregaComDesconto).nota_escrita_original!.toFixed(2)}</small>}
                           </td>
                         </tr>;
@@ -531,33 +556,45 @@ export const EntregasProfessorView: React.FC = () => {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }} className="mb-4">
                   <div className="form-group">
-                    <label className="form-label required">
-                      {descontoEscrito(selectedSubmission) > 0 ? 'Nota Escrita antes do desconto / Trabalho' : 'Nota Escrita / Trabalho'}
+                    <label className="form-label required" htmlFor="nota-escrita">
+                      {descontoEscrito(selectedSubmission) > 0 ? 'Nota do PBL escrito antes do desconto' : 'Nota do PBL escrito'}
+                      {usaEscalaPbl(selectedSubmission) && ' (0 a 1,0)'}
                     </label>
                     <input
+                      id="nota-escrita"
                       type="number"
                       step="0.01"
+                      min={0}
+                      max={usaEscalaPbl(selectedSubmission) ? NOTA_MAXIMA_ESCRITA_PBL : undefined}
+                      required
                       className="form-control"
                       value={notaEscrita}
-                      onChange={(e) => setNotaEscrita(Number(e.target.value))}
+                      onChange={(e) => setNotaEscrita(e.target.value)}
                     />
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label required">Nota Oral / Pitch</label>
+                    <label className="form-label" htmlFor="nota-oral">
+                      Nota do PBL oral{usaEscalaPbl(selectedSubmission) && ' (0 a 1,5)'}, opcional
+                    </label>
                     <input
+                      id="nota-oral"
                       type="number"
                       step="0.01"
+                      min={0}
+                      max={usaEscalaPbl(selectedSubmission) ? NOTA_MAXIMA_ORAL_PBL : undefined}
                       className="form-control"
+                      placeholder="Após a apresentação"
                       value={notaOral}
-                      onChange={(e) => setNotaOral(Number(e.target.value))}
+                      onChange={(e) => setNotaOral(e.target.value)}
                     />
+                    <small className="text-muted">Deixe em branco até a apresentação. O aluno verá "aguardando apresentação", e não zero. Use 0 só para ausência.</small>
                   </div>
                 </div>
 
                 {descontoEscrito(selectedSubmission) > 0 && (
                   <p className="text-muted text-sm mb-4">
-                    Desconto automático de 20% na nota escrita por envio após o prazo. Nota escrita resultante: {(Math.round(notaEscrita * 0.8 * 100) / 100).toFixed(2)} pts. A nota oral não recebe desconto.
+                    Desconto automático de 20% na nota escrita por envio após o prazo. Nota escrita resultante: {(Math.round(Number(notaEscrita.replace(',', '.')) * 0.8 * 100) / 100).toFixed(2)} pts. A nota oral não recebe desconto.
                   </p>
                 )}
 

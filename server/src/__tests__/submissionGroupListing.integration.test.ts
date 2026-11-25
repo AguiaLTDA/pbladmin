@@ -47,7 +47,7 @@ describe.skipIf(process.env.PBL_MIGRATION_TEST !== 'true')('grupo e turma das en
       CREATE TABLE arquivos_atividades (versao_atividade_id int, arquivo_id int);
       CREATE TABLE arquivos_entregas (entrega_id int, arquivo_id int);
       CREATE TABLE entregas (id int PRIMARY KEY, publicacao_id int, aluno_id int, grupo_id int, status text, data_envio timestamptz, comprovante_hash text, deletado_em timestamptz);
-      CREATE TABLE feedbacks (id serial PRIMARY KEY, entrega_id int, avaliador_id int, criado_em timestamptz DEFAULT now(), nota_escrita float, nota_escrita_original float, nota_oral float, nota_total float, observacoes text, liberado_aluno int);
+      CREATE TABLE feedbacks (id serial PRIMARY KEY, entrega_id int, avaliador_id int, criado_em timestamptz DEFAULT now(), nota_escrita float, nota_escrita_original float, nota_oral float, nota_total float, observacoes text, liberado_aluno int, versao int NOT NULL DEFAULT 0);
 
       INSERT INTO periodos_letivos VALUES (1, '2026/2'), (2, '2026/1');
       INSERT INTO usuarios VALUES (1, 'Ana', 'ana@x'), (2, 'Bia', 'bia@x'), (3, 'Caio', 'caio@x'), (4, 'Duda', 'duda@x'), (5, 'Eva', 'eva@x'), (6, 'Fabi', 'fabi@x'), (50, 'Prof. Jussara', 'jussara@x');

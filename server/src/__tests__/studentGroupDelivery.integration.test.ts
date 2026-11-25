@@ -37,7 +37,7 @@ describe.skipIf(process.env.PBL_MIGRATION_TEST !== 'true')('visibilidade de entr
       CREATE TABLE segmentacao_regras (segmentacao_id int, entidade_tipo text, entidade_id int, acao text);
       CREATE TABLE matriculas (id serial PRIMARY KEY, usuario_id int, turma_id int, grupo_id int, ativo int, deletado_em timestamptz);
       CREATE TABLE entregas (id int PRIMARY KEY, publicacao_id int, aluno_id int, grupo_id int, status text, primeira_entrega_final_em timestamptz, data_envio timestamptz, comprovante_hash text, criado_em timestamptz, deletado_em timestamptz);
-      CREATE TABLE feedbacks (id int PRIMARY KEY, entrega_id int, avaliador_id int, nota_total numeric, liberado_aluno int, observacoes text);
+      CREATE TABLE feedbacks (id int PRIMARY KEY, entrega_id int, avaliador_id int, nota_total numeric, liberado_aluno int, observacoes text, nota_oral numeric);
       CREATE TABLE etapas_pbl (id int PRIMARY KEY, versao_atividade_id int, ordem int);
       CREATE TABLE arquivos (id int PRIMARY KEY, nome_original text, tamanho_bytes int, mime_type text, categoria text, tipo_documento text, deletado_em timestamptz, caminho_armazenado text, enviado_por int);
       CREATE TABLE arquivos_atividades (id serial PRIMARY KEY, versao_atividade_id int, arquivo_id int, aprovado_pelo_admin int);
