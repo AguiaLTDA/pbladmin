@@ -224,16 +224,19 @@ export const EntregasProfessorView: React.FC = () => {
     try {
       await apiRequest(`/submissions/${selectedSubmission.id}/evaluate`, {
         method: 'POST',
+        // O professor envia só o comentário de revisão; as notas ficam com a coordenação.
         body: JSON.stringify({
-          notaEscrita: Number(notaEscrita.replace(',', '.')),
-          notaOral: notaOral.trim() === '' ? null : Number(notaOral.replace(',', '.')),
+          ...(isAdmin && {
+            notaEscrita: Number(notaEscrita.replace(',', '.')),
+            notaOral: notaOral.trim() === '' ? null : Number(notaOral.replace(',', '.'))
+          }),
           observacoes,
           liberadoAluno,
           versao: (selectedSubmission as EntregaComDesconto).versao ?? null
         })
       });
 
-      showToast('Avaliação e feedback registrados com sucesso!', 'success');
+      showToast(isAdmin ? 'Avaliação e feedback registrados com sucesso!' : 'Comentário de revisão registrado com sucesso!', 'success');
       setShowModal(false);
       carregarSubmissoes();
     } catch (err: any) {
@@ -292,7 +295,7 @@ export const EntregasProfessorView: React.FC = () => {
     <div>
       <div className="mb-4">
         <h2 style={{ fontSize: '1.4rem' }}>
-          {isAdmin ? 'Entregas & Relatórios PBL' : 'Acompanhamento de Entregas & Lançamento de Notas'}
+          {isAdmin ? 'Entregas & Relatórios PBL' : 'Acompanhamento de Entregas & Revisão do PBL Escrito'}
         </h2>
         <p className="text-muted text-sm">
           {isAdmin
@@ -435,11 +438,11 @@ export const EntregasProfessorView: React.FC = () => {
                           <td>{sub.data_envio ? new Date(sub.data_envio).toLocaleString('pt-BR') : '-'}<div className="text-muted text-sm">{sub.status} · {sub.comprovante_hash ? `Comprovante ${sub.comprovante_hash}` : 'Sem comprovante'}</div></td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="flex gap-2 justify-end" style={{ flexWrap: 'wrap' }}>
-                              {semNota ? <span className="text-muted text-sm">Sem nota</span> : <><strong>{(sub.nota_total || 0).toFixed(2)} pts</strong><button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm"><Award size={14} /> Avaliar</button></>}
+                              {semNota ? <span className="text-muted text-sm">Sem nota</span> : isAdmin ? <><strong>{(sub.nota_total || 0).toFixed(2)} pts</strong><button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm"><Award size={14} /> Avaliar</button></> : <button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm"><Award size={14} /> {sub.observacoes ? 'Editar revisão' : 'Revisar'}</button>}
                               {isAdmin && <button onClick={() => handleExcluir(sub)} className="btn btn-secondary btn-sm" title="Excluir esta entrega (recuperável)"><Trash2 size={14} /> Excluir</button>}
                             </div>
-                            {!semNota && sub.nota_escrita != null && sub.nota_oral == null && <small className="block text-muted">Oral pendente</small>}
-                            {!semNota && (sub as EntregaComDesconto).nota_escrita_original != null && <small className="block text-muted">Escrita original: {(sub as EntregaComDesconto).nota_escrita_original!.toFixed(2)}</small>}
+                            {isAdmin && !semNota && sub.nota_escrita != null && sub.nota_oral == null && <small className="block text-muted">Oral pendente</small>}
+                            {isAdmin && !semNota && (sub as EntregaComDesconto).nota_escrita_original != null && <small className="block text-muted">Escrita original: {(sub as EntregaComDesconto).nota_escrita_original!.toFixed(2)}</small>}
                           </td>
                         </tr>;
                       })}
@@ -525,7 +528,7 @@ export const EntregasProfessorView: React.FC = () => {
             <div className="modal-header">
               <h3 className="font-bold flex items-center gap-2">
                 <Award size={20} color="var(--primary)" />
-                Avaliação de Entrega — {selectedSubmission.grupo_nome || selectedSubmission.aluno_nome}
+                {isAdmin ? 'Avaliação de Entrega' : 'Revisão do PBL Escrito'} — {selectedSubmission.grupo_nome || selectedSubmission.aluno_nome}
               </h3>
               <button onClick={() => setShowModal(false)} className="btn btn-sm btn-secondary">X</button>
             </div>
@@ -536,8 +539,8 @@ export const EntregasProfessorView: React.FC = () => {
                   {!selectedSubmission.grupo_nome
                     ? `Entrega individual de ${selectedSubmission.aluno_nome}.`
                     : ['ENVIADO', 'ATRASADO'].includes(selectedSubmission.status)
-                      ? `Entrega do grupo ${selectedSubmission.grupo_nome}, enviada por ${selectedSubmission.aluno_nome}. A nota vale para todos os integrantes do grupo.`
-                      : `Rascunho do grupo ${selectedSubmission.grupo_nome}, salvo por ${selectedSubmission.aluno_nome}. Os colegas só veem a nota depois do envio final.`}
+                      ? `Entrega do grupo ${selectedSubmission.grupo_nome}, enviada por ${selectedSubmission.aluno_nome}. ${isAdmin ? 'A nota vale' : 'O comentário vale'} para todos os integrantes do grupo.`
+                      : `Rascunho do grupo ${selectedSubmission.grupo_nome}, salvo por ${selectedSubmission.aluno_nome}. Os colegas só veem ${isAdmin ? 'a nota' : 'o comentário'} depois do envio final.`}
                 </p>
                 <div className="card mb-4" style={{ background: 'var(--bg-main)', padding: '0.85rem' }}>
                   <span className="font-bold text-sm block mb-1">Conteúdo da Resposta Enviada:</span>
@@ -554,6 +557,13 @@ export const EntregasProfessorView: React.FC = () => {
                   )}
                 </div>
 
+                {!isAdmin ? (
+                  <div className="card mb-4" style={{ background: 'var(--bg-main)', padding: '0.85rem' }}>
+                    <span className="font-bold text-sm block">Nota PBL oral</span>
+                    <small className="text-muted">Será apresentada pelo app de avaliações orais.</small>
+                  </div>
+                ) : (
+                <>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }} className="mb-4">
                   <div className="form-group">
                     <label className="form-label required" htmlFor="nota-escrita">
@@ -598,8 +608,11 @@ export const EntregasProfessorView: React.FC = () => {
                   </p>
                 )}
 
+                </>
+                )}
+
                 <div className="form-group mb-4">
-                  <label className="form-label">Observações e Feedback Qualitativo</label>
+                  <label className="form-label">{isAdmin ? 'Observações e Feedback Qualitativo' : 'Comentário de revisão do PBL escrito'}</label>
                   <textarea
                     className="form-control"
                     style={{ minHeight: '100px' }}
@@ -616,7 +629,7 @@ export const EntregasProfessorView: React.FC = () => {
                       checked={liberadoAluno}
                       onChange={(e) => setLiberadoAluno(e.target.checked)}
                     />
-                    Liberar nota e feedback para visualização no Portal do Aluno
+                    {isAdmin ? 'Liberar nota e feedback para visualização no Portal do Aluno' : 'Liberar comentário de revisão para visualização no Portal do Aluno'}
                   </label>
                 </div>
               </div>
@@ -626,7 +639,7 @@ export const EntregasProfessorView: React.FC = () => {
                   Cancelar
                 </button>
                 <button type="submit" disabled={submitting} className="btn btn-primary">
-                  {submitting ? 'Salvando...' : 'Salvar Avaliação'}
+                  {submitting ? 'Salvando...' : isAdmin ? 'Salvar Avaliação' : 'Salvar Revisão'}
                 </button>
               </div>
             </form>
