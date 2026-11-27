@@ -414,18 +414,27 @@ export const EntregasProfessorView: React.FC = () => {
                   <table className="table">
                     <thead>
                       <tr>
+                        {/* Para o professor, a revisão é a ação principal: fica logo na primeira coluna. */}
+                        {!isAdmin && <th>Revisão</th>}
                         <th>Arquivos</th>
                         <th>Grupo</th>
                         <th>Turma</th>
                         <th>Atividade</th>
                         <th>Envio</th>
-                        <th style={{ textAlign: 'right' }}>Ações</th>
+                        {isAdmin && <th style={{ textAlign: 'right' }}>Ações</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {linhas.map(({ sub, atividade }) => {
                         const semNota = sub.natureza === 'OBRIGATORIA_SEM_NOTA' || atividade?.natureza === 'OBRIGATORIA_SEM_NOTA';
                         return <tr key={sub.id}>
+                          {!isAdmin && (
+                            <td>
+                              {semNota
+                                ? <span className="text-muted text-sm">Sem revisão</span>
+                                : <button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm"><Award size={14} /> {sub.observacoes ? 'Editar revisão' : 'Revisar'}</button>}
+                            </td>
+                          )}
                           <td>
                             {renderArquivos(sub.arquivos, `Entrega de ${sub.grupo_nome || sub.aluno_nome || 'aluno'}`)}
                             <div className="text-muted text-sm">Enviado por {sub.aluno_nome} <MedalhaContexto completo={sub.contexto_completo} tamanho={13} /> · {sub.aluno_email}</div>
@@ -436,14 +445,16 @@ export const EntregasProfessorView: React.FC = () => {
                           <td>{sub.turma_nome || '-'}</td>
                           <td><div className="font-bold">{sub.atividade_titulo}</div><div className="text-muted text-sm">{sub.codigo_unico}</div></td>
                           <td>{sub.data_envio ? new Date(sub.data_envio).toLocaleString('pt-BR') : '-'}<div className="text-muted text-sm">{sub.status} · {sub.comprovante_hash ? `Comprovante ${sub.comprovante_hash}` : 'Sem comprovante'}</div></td>
+                          {isAdmin && (
                           <td style={{ textAlign: 'right' }}>
                             <div className="flex gap-2 justify-end" style={{ flexWrap: 'wrap' }}>
-                              {semNota ? <span className="text-muted text-sm">Sem nota</span> : isAdmin ? <><strong>{(sub.nota_total || 0).toFixed(2)} pts</strong><button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm"><Award size={14} /> Avaliar</button></> : <button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm"><Award size={14} /> {sub.observacoes ? 'Editar revisão' : 'Revisar'}</button>}
-                              {isAdmin && <button onClick={() => handleExcluir(sub)} className="btn btn-secondary btn-sm" title="Excluir esta entrega (recuperável)"><Trash2 size={14} /> Excluir</button>}
+                              {semNota ? <span className="text-muted text-sm">Sem nota</span> : <><strong>{(sub.nota_total || 0).toFixed(2)} pts</strong><button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm"><Award size={14} /> Avaliar</button></>}
+                              <button onClick={() => handleExcluir(sub)} className="btn btn-secondary btn-sm" title="Excluir esta entrega (recuperável)"><Trash2 size={14} /> Excluir</button>
                             </div>
-                            {isAdmin && !semNota && sub.nota_escrita != null && sub.nota_oral == null && <small className="block text-muted">Oral pendente</small>}
-                            {isAdmin && !semNota && (sub as EntregaComDesconto).nota_escrita_original != null && <small className="block text-muted">Escrita original: {(sub as EntregaComDesconto).nota_escrita_original!.toFixed(2)}</small>}
+                            {!semNota && sub.nota_escrita != null && sub.nota_oral == null && <small className="block text-muted">Oral pendente</small>}
+                            {!semNota && (sub as EntregaComDesconto).nota_escrita_original != null && <small className="block text-muted">Escrita original: {(sub as EntregaComDesconto).nota_escrita_original!.toFixed(2)}</small>}
                           </td>
+                          )}
                         </tr>;
                       })}
                     </tbody>
