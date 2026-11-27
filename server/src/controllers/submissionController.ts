@@ -601,6 +601,12 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
       }
     }
 
+    // O professor só registra o comentário de revisão do PBL escrito: as notas são
+    // lançadas pela coordenação e a nota oral vem do app de avaliações orais.
+    if (req.user?.perfilNome === 'PROFESSOR') {
+      return salvarComentarioRevisao(res, Number(entregaId), entrega.aluno_id, evaluatorId, observacoes, liberadoAluno, versao);
+    }
+
     // A nota oral em branco fica NULL: "ainda não lançada", diferente de zero (ausência).
     const notaOriginal = Number(notaEscrita);
     const oralVazia = notaOral === undefined || notaOral === null || String(notaOral).trim() === '';
@@ -677,6 +683,59 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
   } catch (err) {
     return res.status(500).json({ message: 'Erro ao avaliar entrega.' });
   }
+}
+
+/**
+ * PROFESSOR: grava só o comentário de revisão do PBL escrito (e se ele fica visível
+ * ao aluno), sem tocar nas notas já lançadas. Na primeira revisão as notas ficam
+ * NULL ("ainda não lançadas"), e não zero.
+ */
+async function salvarComentarioRevisao(
+  res: Response, entregaId: number, alunoId: number, avaliadorId: number,
+  observacoes: unknown, liberadoAluno: unknown, versao: unknown
+) {
+  const conflito = { message: 'Outro avaliador alterou esta avaliação enquanto ela estava aberta. Recarregue a lista antes de salvar.' };
+  const conferirVersao = versao !== undefined;
+  if (conferirVersao && versao !== null && !Number.isInteger(Number(versao))) {
+    return res.status(400).json({ message: 'Versão da avaliação inválida. Recarregue a lista.' });
+  }
+  const texto = typeof observacoes === 'string' ? observacoes : '';
+  const liberado = liberadoAluno ? 1 : 0;
+  const existingFb = await getAsync<{ id: number }>('SELECT id FROM feedbacks WHERE entrega_id = ?', [entregaId]);
+
+  if (existingFb) {
+    if (conferirVersao && versao === null) return res.status(409).json(conflito);
+    const atualizado = await runAsync(
+      `UPDATE feedbacks SET observacoes = ?, liberado_aluno = ?, avaliador_id = ?, versao = versao + 1
+       WHERE id = ?${conferirVersao ? ' AND versao = ?' : ''}`,
+      [texto, liberado, avaliadorId, existingFb.id, ...(conferirVersao ? [Number(versao)] : [])]
+    );
+    if (atualizado.changes === 0) return res.status(409).json(conflito);
+  } else {
+    let inserido: { changes: number };
+    try {
+      inserido = await runAsync(
+        `INSERT INTO feedbacks (entrega_id, avaliador_id, nota_escrita, nota_escrita_original, nota_oral, nota_total, observacoes, liberado_aluno)
+         SELECT ?, ?, NULL, NULL, NULL, NULL, ?, ?
+         WHERE NOT EXISTS (SELECT 1 FROM feedbacks WHERE entrega_id = ?)`,
+        [entregaId, avaliadorId, texto, liberado, entregaId]
+      );
+    } catch (err: any) {
+      if (err?.code === '23505') return res.status(409).json(conflito);
+      throw err;
+    }
+    if (inserido.changes === 0) return res.status(409).json(conflito);
+  }
+
+  if (liberado) {
+    await runAsync(
+      `INSERT INTO notificacoes (usuario_id, titulo, mensagem, link) VALUES (?, ?, ?, ?)`,
+      [alunoId, 'Comentário de revisão liberado', 'Seu professor liberou o comentário de revisão do PBL escrito.', `/aluno/atividades`]
+    );
+  }
+
+  await logAudit(avaliadorId, 'COMENTAR_REVISAO_PBL_ESCRITO', 'feedbacks', String(entregaId), { liberadoAluno: Boolean(liberado) });
+  return res.json({ message: 'Comentário de revisão registrado com sucesso.' });
 }
 
 /**

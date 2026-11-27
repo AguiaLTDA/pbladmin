@@ -211,8 +211,10 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem' }} className="mb-3">
             <div style={{ background: 'white', padding: '0.75rem', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
               <div className="text-xs text-muted font-bold">NOTA ESCRITA</div>
-              <div className="font-bold text-lg" style={{ color: '#15803d' }}>{feedback.nota_escrita.toFixed(2)} pts</div>
-              {feedback.nota_escrita_original != null && feedback.nota_escrita_original > feedback.nota_escrita && (
+              {feedback.nota_escrita == null
+                ? <div className="font-bold" style={{ color: '#64748b' }}>Aguardando lançamento</div>
+                : <div className="font-bold text-lg" style={{ color: '#15803d' }}>{feedback.nota_escrita.toFixed(2)} pts</div>}
+              {feedback.nota_escrita_original != null && feedback.nota_escrita != null && feedback.nota_escrita_original > feedback.nota_escrita && (
                 <p className="text-xs text-muted">Desconto de 20% por envio após 04/11. Nota antes do desconto: {feedback.nota_escrita_original.toFixed(2)} pts.</p>
               )}
             </div>
@@ -226,7 +228,9 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
 
             <div style={{ background: 'white', padding: '0.75rem', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
               <div className="text-xs text-muted font-bold">{feedback.nota_oral == null ? 'NOTA PARCIAL (SÓ ESCRITA)' : 'NOTA TOTAL CONSOLIDADA'}</div>
-              <div className="font-bold text-xl" style={{ color: '#15803d' }}>{feedback.nota_total.toFixed(2)} pts</div>
+              {feedback.nota_total == null
+                ? <div className="font-bold" style={{ color: '#64748b' }}>Aguardando lançamento</div>
+                : <div className="font-bold text-xl" style={{ color: '#15803d' }}>{feedback.nota_total.toFixed(2)} pts</div>}
             </div>
           </div>
 
