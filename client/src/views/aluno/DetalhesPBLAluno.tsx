@@ -219,11 +219,13 @@ export const DetalhesPBLAlunoView: React.FC<Props> = ({ activityId, navigate }) 
 
             <div style={{ background: 'white', padding: '0.75rem', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
               <div className="text-xs text-muted font-bold">NOTA ORAL</div>
-              <div className="font-bold text-lg" style={{ color: '#15803d' }}>{feedback.nota_oral.toFixed(2)} pts</div>
+              {feedback.nota_oral == null
+                ? <div className="font-bold" style={{ color: '#64748b' }}>Aguardando apresentação</div>
+                : <div className="font-bold text-lg" style={{ color: '#15803d' }}>{feedback.nota_oral.toFixed(2)} pts</div>}
             </div>
 
             <div style={{ background: 'white', padding: '0.75rem', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
-              <div className="text-xs text-muted font-bold">NOTA TOTAL CONSOLIDADA</div>
+              <div className="text-xs text-muted font-bold">{feedback.nota_oral == null ? 'NOTA PARCIAL (SÓ ESCRITA)' : 'NOTA TOTAL CONSOLIDADA'}</div>
               <div className="font-bold text-xl" style={{ color: '#15803d' }}>{feedback.nota_total.toFixed(2)} pts</div>
             </div>
           </div>

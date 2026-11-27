@@ -5,7 +5,7 @@ import {
   AvaliacaoBanca,
   FormularioAvaliacaoBanca,
   formatarNota,
-  mediaCriterios,
+  notaBanca,
   rotuloStatusBanca
 } from '../../components/FormularioAvaliacaoBanca';
 
@@ -60,7 +60,7 @@ export const AvaliacaoBancaPainel: React.FC<{ mostrarCabecalho?: boolean }> = ({
                 <tr>
                   <th>Grupo</th>
                   <th>Turma</th>
-                  <th>Nota média</th>
+                  <th>Nota da banca</th>
                   <th>Nota final</th>
                   <th>Status</th>
                   <th></th>
@@ -71,7 +71,7 @@ export const AvaliacaoBancaPainel: React.FC<{ mostrarCabecalho?: boolean }> = ({
                   <tr key={a.id}>
                     <td>{a.grupo_nome}</td>
                     <td>{a.turma_nome}</td>
-                    <td>{formatarNota(mediaCriterios(a) * 0.3)}</td>
+                    <td>{formatarNota(notaBanca(a))}</td>
                     <td>{formatarNota(a.nota_final)}</td>
                     <td>{rotuloStatusBanca(a.status)}</td>
                     <td>

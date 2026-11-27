@@ -126,7 +126,7 @@ export const MinhasAtividadesAlunoView: React.FC<Props> = ({ navigate }) => {
 
                   {act.nota_total !== undefined && act.liberado_aluno === 1 && (
                     <div className="p-2 mb-3" style={{ background: '#dcfce7', borderRadius: '6px', color: '#15803d', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                      Nota Final Liberada: {act.nota_total.toFixed(2)} pts
+                      {act.nota_oral == null ? 'Nota parcial liberada (só escrita, oral após a apresentação)' : 'Nota Final Liberada'}: {act.nota_total.toFixed(2)} pts
                     </div>
                   )}
 

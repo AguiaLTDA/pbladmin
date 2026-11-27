@@ -11,7 +11,7 @@ import {
   Search,
   Users
 } from 'lucide-react';
-import { apiRequest } from '../services/api';
+import { apiRequest, baixarBlob } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { ContextoAlunoResumo, PanoramaContextos } from '../types';
 import { MedalhaContexto } from './MedalhaContexto';
@@ -234,12 +234,7 @@ export const PanoramaContextosAlunos: React.FC<PanoramaContextosProps> = ({
     const blob = new Blob(['﻿' + [cabecalho.map(escapar).join(';'), ...linhas].join('\r\n')], {
       type: 'text/csv;charset=utf-8;'
     });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `contextos-alunos-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    baixarBlob(blob, `contextos-alunos-${new Date().toISOString().slice(0, 10)}.csv`);
     showToast(`${filtrados.length} contexto(s) exportado(s).`, 'success');
   };
 

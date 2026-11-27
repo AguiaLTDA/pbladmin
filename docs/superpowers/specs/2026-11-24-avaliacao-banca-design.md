@@ -18,10 +18,17 @@ vêm do banco do PBL.
   partir das planilhas da coordenação). Depois escolhem turma → grupo, entre os
   grupos ativos com alunos matriculados. A opção "Outra sala" libera todas as turmas.
   Não há escala por professor.
-- O formulário é igual ao de julho: 7 critérios de 1 a 5, pontos fortes, pontos
-  de melhoria, integrantes que não contribuíram, nota final opcional (0 a 1,5) e
-  status (aprovado / aprovado com ressalvas / não aprovado). A nota sugerida é a
-  média dos critérios × 0,3.
+- O formulário traz as 7 perguntas de julho e mais "qualidade do material de apoio", de 1 a 5,
+  agrupadas nos critérios do PBL oral do Manual do Aluno. Cada critério vale a média das suas
+  perguntas / 5 × peso:
+  - domínio do conteúdo (0,5): domínio, solução, coerência;
+  - clareza e organização (0,3): clareza, organização;
+  - material de apoio (0,2): material;
+  - arguição (0,3): respostas à banca.
+
+  A nota da banca vai até 1,3. A presença na Expo (0,2) fica fora do formulário, e "trabalho em
+  equipe" é registrado sem peso. Também há pontos fortes, pontos de melhoria, integrantes que não
+  contribuíram, nota final opcional (0 a 1,3) e status.
 - Uma avaliação por avaliador e grupo. O reenvio atualiza a anterior.
 - Uma aba só do admin, "Notas da Banca", lista as notas por banca (dia · sala) e
   filtra por dia, sala, turma e grupo. Mostra a média do grupo e exporta CSV.

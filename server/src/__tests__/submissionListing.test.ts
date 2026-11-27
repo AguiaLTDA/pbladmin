@@ -7,7 +7,7 @@ vi.mock('../config/db', () => ({ getAsync, queryAsync, runAsync: vi.fn() }));
 vi.mock('../services/audit', () => ({ logAudit: vi.fn() }));
 vi.mock('../services/horarioImport', () => ({ professorAlcancaAtividade }));
 
-import { listSubmissionsForActivity, listPendingGroups } from '../controllers/submissionController';
+import { getStudentActivities, listSubmissionsForActivity, listPendingGroups } from '../controllers/submissionController';
 
 function resposta() {
   return { statusCode: 200, body: undefined as any, status(code: number) { this.statusCode = code; return this; }, json(body: any) { this.body = body; return this; } };
@@ -108,5 +108,12 @@ describe('listagem geral de entregas', () => {
     expect(res.statusCode).toBe(200);
     expect(queryAsync.mock.calls[0][0]).toContain('e.publicacao_id = ?');
     expect(queryAsync.mock.calls[0][1]).toEqual([50]);
+  });
+
+  it('traz a nota oral na lista do aluno para distinguir nota parcial de final', async () => {
+    queryAsync.mockResolvedValue([]);
+    const res = resposta();
+    await getStudentActivities({ query: {}, user: { id: 7, perfilNome: 'ALUNO' } } as any, res as any);
+    expect(queryAsync.mock.calls[0][0]).toContain('fb.nota_oral');
   });
 });

@@ -547,7 +547,24 @@ export function getDownloadUrl(fileId: number): string {
  * blob já recebido.
  */
 export async function baixarArquivoAutenticado(fileId: number, nomeArquivo: string): Promise<void> {
-  const url = await fetchFileObjectUrl(fileId);
+  dispararDownload(await fetchFileObjectUrl(fileId), nomeArquivo);
+}
+
+/**
+ * Salva um conteúdo já gerado no navegador (ex.: CSV montado na tela).
+ */
+export function baixarBlob(blob: Blob, nomeArquivo: string): void {
+  dispararDownload(URL.createObjectURL(blob), nomeArquivo);
+}
+
+/**
+ * Dispara o download de uma object URL e a libera depois.
+ *
+ * O link precisa estar no documento e a URL precisa sobreviver ao clique:
+ * Firefox e Safari iniciam o download de forma assíncrona, então revogar logo
+ * após `click()` pode cancelar o arquivo — só o Chrome tolera com segurança.
+ */
+function dispararDownload(url: string, nomeArquivo: string): void {
   try {
     const link = document.createElement('a');
     link.href = url;
@@ -559,6 +576,36 @@ export async function baixarArquivoAutenticado(fileId: number, nomeArquivo: stri
     // Sem isto o blob fica retido na memória da aba até o usuário sair da página.
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
+}
+
+/**
+ * Baixa um relatório gerado pela API (ex.: `/reports/export/csv?tipo=ENTREGAS`).
+ *
+ * A URL precisa sair de `API_BASE_URL`: montada à mão com `localhost:4000`, ela
+ * funcionava só na máquina de quem desenvolve — em produção o navegador tentava
+ * o próprio localhost e a exportação falhava. E a resposta só vira arquivo com
+ * status 2xx; antes, um 403/500 era salvo como se fosse a planilha.
+ */
+export async function baixarRelatorioAutenticado(endpoint: string, nomeArquivo: string): Promise<void> {
+  if (isDemoMode) throw new Error('Exportação indisponível no modo de demonstração.');
+  const token = localStorage.getItem('pbl_auth_token');
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
+
+  if (!response.ok) {
+    let mensagem = 'Não foi possível exportar o relatório.';
+    try {
+      const erro = await response.json();
+      mensagem = erro.message || mensagem;
+    } catch {
+      /* resposta sem corpo JSON */
+    }
+    throw new Error(mensagem);
+  }
+
+  baixarBlob(await response.blob(), nomeArquivo);
 }
 
 export async function fetchFileObjectUrl(fileId: number): Promise<string> {

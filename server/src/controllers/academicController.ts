@@ -7,6 +7,7 @@ import { logAudit } from '../services/audit';
 import { importarHorarioAcademico } from '../services/horarioImport';
 import { CADASTRO_GRUPOS_ABERTO, MENSAGEM_GRUPOS_ENCERRADO } from '../config/fases';
 import { ressincronizarAudienciaDosGrupos } from '../services/segmentation';
+import { entregaGrupoTurmaJoins } from '../services/studentGroupDelivery';
 
 // --- USUÁRIOS ---
 export async function listUsers(req: AuthenticatedRequest, res: Response) {
@@ -1212,8 +1213,8 @@ export async function listOrientadorReviews(req: AuthenticatedRequest, res: Resp
  *    docente já registra ao avaliar cada entrega — aqui ele é apenas trazido
  *    para o admin, agrupável por turma, disciplina e grupo.
  *
- * A turma do feedback vem da matrícula do aluno na turma que o docente leciona
- * (o mesmo critério de alcance usado para ele ver a entrega).
+ * Grupo e turma do feedback seguem a matrícula de quem enviou a entrega, pela
+ * mesma regra da listagem de entregas (entregaGrupoTurmaJoins).
  */
 export async function listRevisaoDocente(req: AuthenticatedRequest, res: Response) {
   try {
@@ -1253,9 +1254,7 @@ export async function listRevisaoDocente(req: AuthenticatedRequest, res: Respons
        JOIN usuarios al ON e.aluno_id = al.id
        JOIN disciplinas d ON a.disciplina_id = d.id
        JOIN cursos c ON a.curso_id = c.id
-       LEFT JOIN grupos g ON e.grupo_id = g.id
-       LEFT JOIN matriculas m ON m.usuario_id = e.aluno_id AND m.deletado_em IS NULL
-       LEFT JOIN turmas t ON m.turma_id = t.id
+       ${entregaGrupoTurmaJoins}
        ORDER BY fb.id DESC`
     );
 

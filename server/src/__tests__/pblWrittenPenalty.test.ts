@@ -77,7 +77,7 @@ describe('desconto da nota escrita do PBL 1', () => {
       : undefined);
     const res = resposta();
     await evaluateSubmission({ params: { entregaId: '5' }, body: { notaEscrita: 10, notaOral: 3, liberadoAluno: false }, user: { id: 4, perfilNome: 'ADMIN' } } as any, res as any);
-    expect(runAsync.mock.calls[0][1]).toEqual(['5', 4, 10, null, 3, 13, '', 0]);
+    expect(runAsync.mock.calls[0][1]).toEqual(['5', 4, 10, null, 3, 13, '', 0, '5']);
   });
 
   it('não aplica a exceção de 2026/2 a uma atividade de outro período', async () => {
@@ -88,7 +88,7 @@ describe('desconto da nota escrita do PBL 1', () => {
 
     await evaluateSubmission({ params: { entregaId: '5' }, body: { notaEscrita: 10, notaOral: 3, liberadoAluno: false }, user: { id: 4, perfilNome: 'ADMIN' } } as any, res as any);
 
-    expect(runAsync.mock.calls[0][1]).toEqual(['5', 4, 10, null, 3, 13, '', 0]);
+    expect(runAsync.mock.calls[0][1]).toEqual(['5', 4, 10, null, 3, 13, '', 0, '5']);
   });
 
   it('bloqueia avaliação e notificações em entregas obrigatórias sem nota', async () => {

@@ -37,6 +37,9 @@ jobs:
         run: |
           cd client
           npm run build
+          # GitHub Pages serve o 404.html para caminhos desconhecidos: com ele o app
+          # abre em /<token> (formulário público da banca) em vez da página 404.
+          cp dist/index.html dist/404.html
 
       - name: Deploy no GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4

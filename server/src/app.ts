@@ -7,6 +7,7 @@ import { initAndSeedDb } from './db/seed';
 import { runMigrations } from './db/migrate';
 import { APP_URL, emailConfigurado, motivoEmailIndisponivel } from './services/email';
 import { importarHorarioAcademico } from './services/horarioImport';
+import { healthStatus } from './services/health';
 
 dotenv.config();
 
@@ -26,7 +27,7 @@ app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
 // Root Endpoint Status
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', system: 'Plataforma PBL Backend API', timestamp: new Date() });
+  res.json(healthStatus());
 });
 
 // Global Error Handler

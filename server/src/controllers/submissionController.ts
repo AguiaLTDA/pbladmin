@@ -6,7 +6,8 @@ import { logAudit } from '../services/audit';
 import { professorAlcancaAtividade } from '../services/horarioImport';
 import { calculatePblWrittenPenalty, canResubmitEarlyPblWrittenSubmission, PBL_WRITTEN_RESUBMISSION_END } from '../services/pblWrittenPenalty';
 import { SLIDES_PRESENTATION_DEADLINE, SLIDES_PRESENTATION_NATURE } from '../services/slidesPresentationDelivery';
-import { studentDeliveryCte } from '../services/studentGroupDelivery';
+import { entregaGrupoTurmaJoins, studentDeliveryCte } from '../services/studentGroupDelivery';
+import { aplicaEscalaPbl, NOTA_MAXIMA_ESCRITA_PBL, NOTA_MAXIMA_ORAL_PBL } from '../config/escalaNotasPbl';
 
 // --- STUDENT PORTAL ENDPOINTS ---
 
@@ -25,7 +26,7 @@ export async function getStudentActivities(req: AuthenticatedRequest, res: Respo
              pub.prazo_entrega, pub.status_publicacao,
              ent.id as entrega_id, ent.status as entrega_status, ent.data_envio, ent.comprovante_hash,
              ent.entrega_compartilhada, ent.enviado_por_nome,
-             fb.nota_total, fb.liberado_aluno
+             fb.nota_total, fb.nota_oral, fb.liberado_aluno
       FROM alunos_segmentados als
       JOIN atividades_pbl a ON als.atividade_id = a.id
       JOIN publicacoes pub ON a.id = pub.atividade_id
@@ -474,15 +475,14 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
       params.push(pub.id);
     }
 
-    // Um aluno pode ter mais de uma matrícula ativa, então o LEFT JOIN em matriculas/turmas
-    // pode multiplicar linhas por entrega; DISTINCT ON (e.id) mantém uma linha por entrega,
-    // igual ao efeito do GROUP BY e.id "relaxado" que o SQLite permitia.
+    // Grupo e turma seguem a matrícula de quem enviou (entregaGrupoTurmaJoins), que já
+    // devolve uma linha por entrega; DISTINCT ON (e.id) protege contra feedbacks duplicados.
     let sql = `
       SELECT DISTINCT ON (e.id)
              e.*, u.nome as aluno_nome, u.email as aluno_email,
              g.id as grupo_id, g.nome as grupo_nome,
              t.id as turma_id, t.nome as turma_nome, t.codigo as turma_codigo,
-             fb.nota_escrita, fb.nota_escrita_original, fb.nota_oral, fb.nota_total, fb.observacoes, fb.liberado_aluno,
+             fb.nota_escrita, fb.nota_escrita_original, fb.nota_oral, fb.nota_total, fb.observacoes, fb.liberado_aluno, fb.versao,
              pl.nome as periodo_nome, a.natureza,
              a.id as atividade_id, a.titulo as atividade_titulo, a.codigo_unico,
              EXISTS (SELECT 1 FROM versoes_atividades va JOIN arquivos_atividades aa ON aa.versao_atividade_id = va.id
@@ -497,9 +497,7 @@ export async function listSubmissionsForActivity(req: AuthenticatedRequest, res:
       JOIN periodos_letivos pl ON pl.id = a.periodo_letivo_id
       JOIN usuarios u ON e.aluno_id = u.id
       LEFT JOIN contexto_aluno ca ON ca.usuario_id = e.aluno_id
-      LEFT JOIN grupos g ON e.grupo_id = g.id
-      LEFT JOIN matriculas m ON m.usuario_id = e.aluno_id AND m.deletado_em IS NULL
-      LEFT JOIN turmas t ON m.turma_id = t.id
+      ${entregaGrupoTurmaJoins}
       LEFT JOIN feedbacks fb ON e.id = fb.entrega_id
       WHERE ${filtroAtividade} AND e.deletado_em IS NULL
     `;
@@ -566,7 +564,7 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
   try {
     const { entregaId } = req.params;
     const evaluatorId = req.user?.id;
-    const { notaEscrita, notaOral, observacoes, liberadoAluno } = req.body;
+    const { notaEscrita, notaOral, observacoes, liberadoAluno, versao } = req.body;
 
     if (!evaluatorId) return res.status(401).json({ message: 'Não autenticado.' });
 
@@ -603,42 +601,74 @@ export async function evaluateSubmission(req: AuthenticatedRequest, res: Respons
       }
     }
 
-    const notaOriginal = Number(notaEscrita || 0);
+    // A nota oral em branco fica NULL: "ainda não lançada", diferente de zero (ausência).
+    const notaOriginal = Number(notaEscrita);
+    const oralVazia = notaOral === undefined || notaOral === null || String(notaOral).trim() === '';
+    const nOral = oralVazia ? null : Number(notaOral);
+    if (notaEscrita === undefined || notaEscrita === null || String(notaEscrita).trim() === ''
+      || !Number.isFinite(notaOriginal) || notaOriginal < 0 || (nOral !== null && (!Number.isFinite(nOral) || nOral < 0))) {
+      return res.status(400).json({ message: 'Informe notas numéricas, sem valores negativos.' });
+    }
+    if (aplicaEscalaPbl(Boolean(entrega.pbl_1), entrega.periodo_nome)) {
+      if (notaOriginal > NOTA_MAXIMA_ESCRITA_PBL) {
+        return res.status(400).json({ message: 'A nota do PBL escrito vai de 0 a 1,0.' });
+      }
+      if (nOral !== null && nOral > NOTA_MAXIMA_ORAL_PBL) {
+        return res.status(400).json({ message: 'A nota do PBL oral vai de 0 a 1,5.' });
+      }
+    }
+
     const penalidade = calculatePblWrittenPenalty(
       notaOriginal, Boolean(entrega.pbl_1) && entrega.periodo_nome === '2026/2',
       entrega.data_envio, entrega.primeira_entrega_final_em
     );
     const nEscrita = penalidade.penaltyPercent ? Math.round(penalidade.written * 100) / 100 : notaOriginal;
-    const nOral = Number(notaOral || 0);
-    const nTotal = nEscrita + nOral;
+    const nTotal = nEscrita + (nOral ?? 0);
 
-    const existingFb = await getAsync<{ id: number }>('SELECT id FROM feedbacks WHERE entrega_id = ?', [entregaId]);
+    // Trava de versão: quem abriu o modal antes de outro professor salvar recebe 409
+    // em vez de apagar a nota alheia. Clientes antigos, sem `versao`, não são travados.
+    const conflito = { message: 'Outro avaliador alterou esta avaliação enquanto ela estava aberta. Recarregue a lista e confira as notas antes de salvar.' };
+    const conferirVersao = versao !== undefined;
+    if (conferirVersao && versao !== null && !Number.isInteger(Number(versao))) {
+      return res.status(400).json({ message: 'Versão da avaliação inválida. Recarregue a lista.' });
+    }
+    const existingFb = await getAsync<{ id: number; versao: number }>('SELECT id, versao FROM feedbacks WHERE entrega_id = ?', [entregaId]);
 
     if (existingFb) {
-      await runAsync(
-        `UPDATE feedbacks SET 
+      if (conferirVersao && versao === null) return res.status(409).json(conflito);
+      const atualizado = await runAsync(
+        `UPDATE feedbacks SET
           nota_escrita = ?, nota_escrita_original = ?, nota_oral = ?, nota_total = ?, observacoes = ?, liberado_aluno = ?,
-          avaliador_id = ?
-         WHERE id = ?`,
-        [nEscrita, penalidade.penaltyPercent ? notaOriginal : null, nOral, nTotal, observacoes || '', liberadoAluno ? 1 : 0, evaluatorId, existingFb.id]
+          avaliador_id = ?, versao = versao + 1
+         WHERE id = ?${conferirVersao ? ' AND versao = ?' : ''}`,
+        [nEscrita, penalidade.penaltyPercent ? notaOriginal : null, nOral, nTotal, observacoes || '', liberadoAluno ? 1 : 0,
+          evaluatorId, existingFb.id, ...(conferirVersao ? [Number(versao)] : [])]
       );
+      if (atualizado.changes === 0) return res.status(409).json(conflito);
     } else {
-      await runAsync(
-        `INSERT INTO feedbacks (entrega_id, avaliador_id, nota_escrita, nota_escrita_original, nota_oral, nota_total, observacoes, liberado_aluno)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [entregaId, evaluatorId, nEscrita, penalidade.penaltyPercent ? notaOriginal : null, nOral, nTotal, observacoes || '', liberadoAluno ? 1 : 0]
-      );
+      let inserido: { changes: number };
+      try {
+        inserido = await runAsync(
+          `INSERT INTO feedbacks (entrega_id, avaliador_id, nota_escrita, nota_escrita_original, nota_oral, nota_total, observacoes, liberado_aluno)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?
+           WHERE NOT EXISTS (SELECT 1 FROM feedbacks WHERE entrega_id = ?)`,
+          [entregaId, evaluatorId, nEscrita, penalidade.penaltyPercent ? notaOriginal : null, nOral, nTotal, observacoes || '', liberadoAluno ? 1 : 0, entregaId]
+        );
+      } catch (err: any) {
+        // feedbacks_entrega_id_unico: outro avaliador criou a avaliação no mesmo instante.
+        if (err?.code === '23505') return res.status(409).json(conflito);
+        throw err;
+      }
+      if (inserido.changes === 0) return res.status(409).json(conflito);
     }
 
     if (liberadoAluno) {
+      const mensagem = nOral === null
+        ? `Seu professor liberou a avaliação e feedback da sua atividade PBL. Nota escrita: ${nEscrita.toFixed(2)}. A nota oral será lançada após a apresentação.`
+        : `Seu professor liberou a avaliação e feedback da sua atividade PBL. Nota Total: ${nTotal.toFixed(2)}`;
       await runAsync(
         `INSERT INTO notificacoes (usuario_id, titulo, mensagem, link) VALUES (?, ?, ?, ?)`,
-        [
-          entrega.aluno_id,
-          'Feedback e Nota Liberados',
-          `Seu professor liberou a avaliação e feedback da sua atividade PBL. Nota Total: ${nTotal.toFixed(2)}`,
-          `/aluno/atividades`
-        ]
+        [entrega.aluno_id, 'Feedback e Nota Liberados', mensagem, `/aluno/atividades`]
       );
     }
 
@@ -692,7 +722,7 @@ export async function listDeletedSubmissions(req: AuthenticatedRequest, res: Res
        JOIN usuarios u ON e.aluno_id = u.id
        JOIN publicacoes p ON e.publicacao_id = p.id
        JOIN atividades_pbl a ON p.atividade_id = a.id
-       LEFT JOIN grupos g ON e.grupo_id = g.id
+       ${entregaGrupoTurmaJoins}
        WHERE e.deletado_em IS NOT NULL
        ORDER BY e.deletado_em DESC`
     );

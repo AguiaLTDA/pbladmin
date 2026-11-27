@@ -21,6 +21,7 @@ interface ArquivoEmFoco {
 
 type EntregaComDesconto = StudentSubmission & {
   nota_escrita_original?: number | null;
+  versao?: number | null;
   pbl_1?: boolean;
   periodo_nome?: string;
   primeira_entrega_final_em?: string | null;
@@ -34,6 +35,14 @@ function formatarTamanho(bytes: number): string {
 
 function normalizarBusca(texto: string): string {
   return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+}
+
+/** Escala do Manual do Aluno de 2026/2 para o PBL escrito; períodos anteriores tinham outra. */
+const NOTA_MAXIMA_ESCRITA_PBL = 1.0;
+const NOTA_MAXIMA_ORAL_PBL = 1.5;
+function usaEscalaPbl(sub: StudentSubmission): boolean {
+  const entrega = sub as EntregaComDesconto;
+  return Boolean(entrega.pbl_1) && (entrega.periodo_nome || '') >= '2026/2';
 }
 
 function descontoEscrito(sub: StudentSubmission): number {
@@ -72,8 +81,10 @@ export const EntregasProfessorView: React.FC = () => {
   // Avaliação
   const [showModal, setShowModal] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState<StudentSubmission | null>(null);
-  const [notaEscrita, setNotaEscrita] = useState<number>(0);
-  const [notaOral, setNotaOral] = useState<number>(0);
+  // Texto, para o campo vazio não virar 0 e o `required` do formulário valer.
+  const [notaEscrita, setNotaEscrita] = useState<string>('');
+  // Texto vazio = oral ainda não lançada (o aluno vê "aguardando apresentação").
+  const [notaOral, setNotaOral] = useState<string>('');
   const [observacoes, setObservacoes] = useState('');
   const [liberadoAluno, setLiberadoAluno] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -180,16 +191,15 @@ export const EntregasProfessorView: React.FC = () => {
       const atividade = activities.find((a) => a.id === sub.atividade_id);
       if (selectedActivityId && sub.atividade_id !== Number(selectedActivityId)) return [];
       if (selectedGroup && String(sub.grupo_id ?? 'individual') !== selectedGroup) return [];
-      const arquivos = sub.arquivos?.length ? sub.arquivos : [null];
-      return arquivos.flatMap((arquivo) => {
-        if (termo && ![
-          arquivo?.nome_original,
-          sub.grupo_nome,
-          sub.atividade_titulo,
-          sub.codigo_unico
-        ].some((campo) => normalizarBusca(campo || '').includes(termo))) return [];
-        return [{ sub, arquivo, atividade }];
-      });
+      // Uma linha por entrega: os arquivos do mesmo envio ficam juntos e há um único "Avaliar".
+      if (termo && ![
+        ...(sub.arquivos || []).map((arquivo) => arquivo.nome_original),
+        sub.aluno_nome,
+        sub.grupo_nome,
+        sub.atividade_titulo,
+        sub.codigo_unico
+      ].some((campo) => normalizarBusca(campo || '').includes(termo))) return [];
+      return [{ sub, atividade }];
     });
   }, [activities, search, selectedActivityId, selectedGroup, submissions]);
   const activeFilters = Boolean(selectedActivityId || selectedGroup || search.trim());
@@ -197,10 +207,12 @@ export const EntregasProfessorView: React.FC = () => {
 
   const openEvaluationModal = (sub: StudentSubmission) => {
     setSelectedSubmission(sub);
-    setNotaEscrita((sub as EntregaComDesconto).nota_escrita_original ?? sub.nota_escrita ?? 0);
-    setNotaOral(sub.nota_oral || 0);
+    const escritaSalva = (sub as EntregaComDesconto).nota_escrita_original ?? sub.nota_escrita;
+    setNotaEscrita(escritaSalva == null ? '' : String(escritaSalva));
+    setNotaOral(sub.nota_oral == null ? '' : String(sub.nota_oral));
     setObservacoes(sub.observacoes || '');
-    setLiberadoAluno(sub.liberado_aluno !== 0);
+    // Só vem marcado se a nota já estava liberada; a primeira avaliação começa oculta ao aluno.
+    setLiberadoAluno(sub.liberado_aluno === 1);
     setShowModal(true);
   };
 
@@ -212,7 +224,13 @@ export const EntregasProfessorView: React.FC = () => {
     try {
       await apiRequest(`/submissions/${selectedSubmission.id}/evaluate`, {
         method: 'POST',
-        body: JSON.stringify({ notaEscrita, notaOral, observacoes, liberadoAluno })
+        body: JSON.stringify({
+          notaEscrita: Number(notaEscrita.replace(',', '.')),
+          notaOral: notaOral.trim() === '' ? null : Number(notaOral.replace(',', '.')),
+          observacoes,
+          liberadoAluno,
+          versao: (selectedSubmission as EntregaComDesconto).versao ?? null
+        })
       });
 
       showToast('Avaliação e feedback registrados com sucesso!', 'success');
@@ -220,6 +238,11 @@ export const EntregasProfessorView: React.FC = () => {
       carregarSubmissoes();
     } catch (err: any) {
       showToast(err.message || 'Erro ao registrar avaliação.', 'error');
+      // Outro avaliador salvou antes: fecha e recarrega para a pessoa ver as notas atuais.
+      if (err.status === 409) {
+        setShowModal(false);
+        carregarSubmissoes();
+      }
     } finally {
       setSubmitting(false);
     }
@@ -377,9 +400,9 @@ export const EntregasProfessorView: React.FC = () => {
       ) : linhas.length === 0 ? (
         <div className="card text-center py-8">
           <Award size={36} className="text-muted mb-2" style={{ margin: '0 auto' }} />
-          <h3 className="font-bold">{submissions.length === 0 ? 'Nenhuma entrega recebida ainda' : 'Nenhum arquivo corresponde aos filtros'}</h3>
+          <h3 className="font-bold">{submissions.length === 0 ? 'Nenhuma entrega recebida ainda' : 'Nenhuma entrega corresponde aos filtros'}</h3>
           <p className="text-muted text-sm">
-            {submissions.length === 0 ? 'As entregas enviadas pelas turmas aparecerão nesta lista.' : 'Altere a busca ou os filtros para ver outros arquivos.'}
+            {submissions.length === 0 ? 'As entregas enviadas pelas turmas aparecerão nesta lista.' : 'Altere a busca ou os filtros para ver outras entregas.'}
           </p>
           {activeFilters && <button type="button" onClick={clearFilters} className="btn btn-secondary btn-sm">Limpar filtros</button>}
         </div>
@@ -388,7 +411,7 @@ export const EntregasProfessorView: React.FC = () => {
                   <table className="table">
                     <thead>
                       <tr>
-                        <th>Arquivo</th>
+                        <th>Arquivos</th>
                         <th>Grupo</th>
                         <th>Turma</th>
                         <th>Atividade</th>
@@ -397,15 +420,12 @@ export const EntregasProfessorView: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {linhas.map(({ sub, arquivo, atividade }) => {
+                      {linhas.map(({ sub, atividade }) => {
                         const semNota = sub.natureza === 'OBRIGATORIA_SEM_NOTA' || atividade?.natureza === 'OBRIGATORIA_SEM_NOTA';
-                        return <tr key={`${sub.id}-${arquivo?.id ?? 'sem-arquivo'}`}>
+                        return <tr key={sub.id}>
                           <td>
-                            {arquivo ? <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setArquivoEmFoco({ id: arquivo.id, nome: arquivo.nome_original, mimeType: arquivo.mime_type, descricao: `Entrega de ${sub.aluno_nome || 'aluno'}` })}><FileText size={13} /> {arquivo.nome_original}</button>
-                              <button className="btn btn-outline btn-sm" onClick={() => baixarArquivo(arquivo)} aria-label={`Baixar ${arquivo.nome_original}`}><Download size={13} /> {/\.pptx$/i.test(arquivo.nome_original) ? 'Baixar PPTX' : 'Baixar'}</button>
-                            </div> : <span className="text-muted text-sm">Nenhum arquivo anexado</span>}
-                            <div className="text-muted text-sm">{sub.aluno_nome} <MedalhaContexto completo={sub.contexto_completo} tamanho={13} /> · {sub.aluno_email}</div>
+                            {renderArquivos(sub.arquivos, `Entrega de ${sub.grupo_nome || sub.aluno_nome || 'aluno'}`)}
+                            <div className="text-muted text-sm">Enviado por {sub.aluno_nome} <MedalhaContexto completo={sub.contexto_completo} tamanho={13} /> · {sub.aluno_email}</div>
                           </td>
                           <td>
                             {sub.grupo_nome || 'Entrega individual'}
@@ -418,6 +438,7 @@ export const EntregasProfessorView: React.FC = () => {
                               {semNota ? <span className="text-muted text-sm">Sem nota</span> : <><strong>{(sub.nota_total || 0).toFixed(2)} pts</strong><button onClick={() => openEvaluationModal(sub)} className="btn btn-primary btn-sm"><Award size={14} /> Avaliar</button></>}
                               {isAdmin && <button onClick={() => handleExcluir(sub)} className="btn btn-secondary btn-sm" title="Excluir esta entrega (recuperável)"><Trash2 size={14} /> Excluir</button>}
                             </div>
+                            {!semNota && sub.nota_escrita != null && sub.nota_oral == null && <small className="block text-muted">Oral pendente</small>}
                             {!semNota && (sub as EntregaComDesconto).nota_escrita_original != null && <small className="block text-muted">Escrita original: {(sub as EntregaComDesconto).nota_escrita_original!.toFixed(2)}</small>}
                           </td>
                         </tr>;
@@ -504,13 +525,20 @@ export const EntregasProfessorView: React.FC = () => {
             <div className="modal-header">
               <h3 className="font-bold flex items-center gap-2">
                 <Award size={20} color="var(--primary)" />
-                Avaliação de Entrega — {selectedSubmission.aluno_nome}
+                Avaliação de Entrega — {selectedSubmission.grupo_nome || selectedSubmission.aluno_nome}
               </h3>
               <button onClick={() => setShowModal(false)} className="btn btn-sm btn-secondary">X</button>
             </div>
 
             <form onSubmit={handleEvaluate}>
               <div className="modal-body">
+                <p className="text-muted text-sm mb-4">
+                  {!selectedSubmission.grupo_nome
+                    ? `Entrega individual de ${selectedSubmission.aluno_nome}.`
+                    : ['ENVIADO', 'ATRASADO'].includes(selectedSubmission.status)
+                      ? `Entrega do grupo ${selectedSubmission.grupo_nome}, enviada por ${selectedSubmission.aluno_nome}. A nota vale para todos os integrantes do grupo.`
+                      : `Rascunho do grupo ${selectedSubmission.grupo_nome}, salvo por ${selectedSubmission.aluno_nome}. Os colegas só veem a nota depois do envio final.`}
+                </p>
                 <div className="card mb-4" style={{ background: 'var(--bg-main)', padding: '0.85rem' }}>
                   <span className="font-bold text-sm block mb-1">Conteúdo da Resposta Enviada:</span>
                   <p style={{ whiteSpace: 'pre-line', fontSize: '0.85rem' }}>
@@ -528,33 +556,45 @@ export const EntregasProfessorView: React.FC = () => {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }} className="mb-4">
                   <div className="form-group">
-                    <label className="form-label required">
-                      {descontoEscrito(selectedSubmission) > 0 ? 'Nota Escrita antes do desconto / Trabalho' : 'Nota Escrita / Trabalho'}
+                    <label className="form-label required" htmlFor="nota-escrita">
+                      {descontoEscrito(selectedSubmission) > 0 ? 'Nota do PBL escrito antes do desconto' : 'Nota do PBL escrito'}
+                      {usaEscalaPbl(selectedSubmission) && ' (0 a 1,0)'}
                     </label>
                     <input
+                      id="nota-escrita"
                       type="number"
                       step="0.01"
+                      min={0}
+                      max={usaEscalaPbl(selectedSubmission) ? NOTA_MAXIMA_ESCRITA_PBL : undefined}
+                      required
                       className="form-control"
                       value={notaEscrita}
-                      onChange={(e) => setNotaEscrita(Number(e.target.value))}
+                      onChange={(e) => setNotaEscrita(e.target.value)}
                     />
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label required">Nota Oral / Pitch</label>
+                    <label className="form-label" htmlFor="nota-oral">
+                      Nota do PBL oral{usaEscalaPbl(selectedSubmission) && ' (0 a 1,5)'}, opcional
+                    </label>
                     <input
+                      id="nota-oral"
                       type="number"
                       step="0.01"
+                      min={0}
+                      max={usaEscalaPbl(selectedSubmission) ? NOTA_MAXIMA_ORAL_PBL : undefined}
                       className="form-control"
+                      placeholder="Após a apresentação"
                       value={notaOral}
-                      onChange={(e) => setNotaOral(Number(e.target.value))}
+                      onChange={(e) => setNotaOral(e.target.value)}
                     />
+                    <small className="text-muted">Deixe em branco até a apresentação. O aluno verá "aguardando apresentação", e não zero. Use 0 só para ausência.</small>
                   </div>
                 </div>
 
                 {descontoEscrito(selectedSubmission) > 0 && (
                   <p className="text-muted text-sm mb-4">
-                    Desconto automático de 20% na nota escrita por envio após o prazo. Nota escrita resultante: {(Math.round(notaEscrita * 0.8 * 100) / 100).toFixed(2)} pts. A nota oral não recebe desconto.
+                    Desconto automático de 20% na nota escrita por envio após o prazo. Nota escrita resultante: {(Math.round(Number(notaEscrita.replace(',', '.')) * 0.8 * 100) / 100).toFixed(2)} pts. A nota oral não recebe desconto.
                   </p>
                 )}
 
